@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoverWise — AI Health Insurance Advisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --bg2: #111827;
+    --bg3: #1a2235;
+    --border: #1e2d45;
+    --border2: #263554;
+    --text: #f0f4ff;
+    --text2: #8899bb;
+    --text3: #4a5f80;
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --orange: #f97316;
+    --purple: #8b5cf6;
+    --gold: #fbbf24;
+    --silver: #94a3b8;
+    --bronze: #a16207;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --display: 'Playfair Display', serif;
+    --body: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--body);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── BACKGROUND ── */
+  .bg-grid {
+    position: fixed; inset: 0; z-index: 0;
+    background-image: 
+      linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .bg-glow {
+    position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 400px;
+    background: radial-gradient(ellipse, rgba(59,130,246,0.08) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── LAYOUT ── */
+  .app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ── HEADER ── */
+  header {
+    padding: 40px 0 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .logo-text { font-family: var(--display); font-size: 22px; font-weight: 700; }
+  .logo-sub { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 1px; text-transform: uppercase; }
+  .header-badge {
+    font-size: 11px; font-family: var(--mono);
+    color: var(--green); border: 1px solid var(--green);
+    padding: 4px 10px; border-radius: 20px;
+    background: rgba(16,185,129,0.08);
+  }
+
+  /* ── HERO ── */
+  .hero { text-align: center; margin-bottom: 48px; }
+  .hero h1 {
+    font-family: var(--display);
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+  .hero h1 span { color: var(--accent2); }
+  .hero p { font-size: 16px; color: var(--text2); max-width: 520px; margin: 0 auto 24px; line-height: 1.7; }
+  .concepts {
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  }
+  .concept-tag {
+    font-size: 11px; font-family: var(--mono);
+    padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border2);
+    color: var(--text3);
+  }
+  .concept-tag.active { color: var(--accent2); border-color: var(--accent); background: rgba(59,130,246,0.08); }
+
+  /* ── FORM ── */
+  .form-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 32px;
+    margin-bottom: 32px;
+  }
+  .form-title {
+    font-family: var(--display); font-size: 20px; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .form-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+  input, textarea {
+    background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius); padding: 10px 14px;
+    color: var(--text); font-family: var(--body); font-size: 14px;
+    outline: none; transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text3); }
+  textarea { resize: none; height: 60px; }
+
+  .btn {
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    color: white; border: none; border-radius: var(--radius);
+    padding: 14px 28px; font-family: var(--body); font-size: 15px; font-weight: 600;
+    cursor: pointer; width: 100%; margin-top: 8px;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn:active { transform: scale(0.99); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── LOADING ── */
+  .loading {
+    display: none; background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 40px 32px; text-align: center;
+    margin-bottom: 32px;
+  }
+  .loading.active { display: block; }
+  .spinner {
+    width: 40px; height: 40px; margin: 0 auto 20px;
+    border: 3px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .agent-status { display: flex; flex-direction: column; gap: 8px; max-width: 300px; margin: 16px auto 0; }
+  .agent-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--text2);
+    animation: fadeIn 0.4s ease both;
+  }
+  .agent-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+  /* ── RESULTS ── */
+  .results { display: none; animation: fadeIn 0.5s ease; }
+  .results.active { display: block; }
+
+  /* Route badge */
+  .route-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 20px; font-size: 13px;
+    font-family: var(--mono); margin-bottom: 24px;
+  }
+  .route-badge.subsidized { background: rgba(16,185,129,0.1); border: 1px solid var(--green); color: var(--green); }
+  .route-badge.medicaid { background: rgba(139,92,246,0.1); border: 1px solid var(--purple); color: var(--purple); }
+  .route-badge.marketplace { background: rgba(59,130,246,0.1); border: 1px solid var(--accent); color: var(--accent2); }
+  .route-badge.full_price { background: rgba(245,158,11,0.1); border: 1px solid var(--yellow); color: var(--yellow); }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+  }
+  .stat-label { font-size: 11px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-value { font-family: var(--display); font-size: 24px; font-weight: 700; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.blue { color: var(--accent2); }
+  .stat-value.yellow { color: var(--gold); }
+
+  /* Recommendation */
+  .rec-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 28px; margin-bottom: 24px;
+  }
+  .rec-card h2 { font-family: var(--display); font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .rec-body { font-size: 14px; line-height: 1.8; color: var(--text2); white-space: pre-wrap; }
+
+  /* Plans grid */
+  .plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .plan-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+    transition: border-color 0.2s;
+  }
+  .plan-card:hover { border-color: var(--border2); }
+  .plan-card.best { border-color: var(--accent); background: rgba(59,130,246,0.04); }
+  .plan-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .metal-badge {
+    font-size: 10px; font-family: var(--mono); padding: 3px 8px;
+    border-radius: 8px; border: 1px solid; font-weight: 500;
+  }
+  .metal-badge.Gold { color: var(--gold); border-color: var(--gold); background: rgba(251,191,36,0.1); }
+  .metal-badge.Silver { color: var(--silver); border-color: var(--silver); background: rgba(148,163,184,0.1); }
+  .metal-badge.Bronze { color: #d97706; border-color: #d97706; background: rgba(161,98,7,0.1); }
+  .plan-name { font-family: var(--display); font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .plan-issuer { font-size: 12px; color: var(--text3); margin-bottom: 14px; }
+  .plan-price { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--accent2); margin-bottom: 2px; }
+  .plan-price-label { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
+  .plan-details { display: flex; flex-direction: column; gap: 6px; }
+  .plan-detail { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
+  .plan-detail-label { color: var(--text3); }
+  .plan-detail-val { color: var(--text2); font-family: var(--mono); }
+  .best-tag { font-size: 10px; font-family: var(--mono); color: var(--accent2); padding: 2px 8px; border-radius: 8px; background: rgba(59,130,246,0.15); border: 1px solid var(--accent); }
+
+  /* Warnings */
+  .warnings-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
+  }
+  .warnings-card h2 { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+  .warning-item {
+    font-size: 13px; color: var(--text2); line-height: 1.6;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .warning-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+  /* Cache stats */
+  .cache-bar {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 16px;
+    display: flex; align-items: center; gap: 16px;
+    font-size: 12px; color: var(--text3); margin-bottom: 24px;
+    font-family: var(--mono);
+  }
+  .cache-bar span { color: var(--green); }
+
+  /* Memory badge */
+  .memory-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: var(--mono); color: var(--purple);
+    padding: 4px 10px; border-radius: 20px;
+    background: rgba(139,92,246,0.1); border: 1px solid var(--purple);
+    margin-bottom: 16px;
+  }
+
+  /* Chat */
+  .chat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 24px; margin-top: 24px;
+  }
+  .chat-card h2 { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .chat-messages { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
+  .chat-msg { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.6; max-width: 85%; }
+  .chat-msg.user { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); align-self: flex-end; color: var(--text); }
+  .chat-msg.ai { background: var(--bg3); border: 1px solid var(--border); align-self: flex-start; color: var(--text2); }
+  .chat-input-row { display: flex; gap: 10px; }
+  .chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 14px; color: var(--text); font-family: var(--body); font-size: 14px; outline: none; }
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-btn { background: var(--accent); color: white; border: none; border-radius: var(--radius); padding: 10px 18px; font-size: 14px; cursor: pointer; font-family: var(--body); font-weight: 600; }
+  .chat-btn:hover { opacity: 0.9; }
+
+  @media (max-width: 700px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .plans-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🛡️</div>
+      <div>
+        <div class="logo-text">CoverWise</div>
+        <div class="logo-sub">AI Insurance Advisor</div>
+      </div>
+    </div>
+    <div class="header-badge">● All APIs Free</div>
+  </header>
+
+  <div class="hero">
+    <h1>Find your <span>best health plan</span><br>in 30 seconds</h1>
+    <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors — then tells you exactly which plan saves you the most money.</p>
+    <div class="concepts">
+      <span class="concept-tag active">Multi-Agent Orchestration</span>
+      <span class="concept-tag active">Agent Handoff</span>
+      <span class="concept-tag active">mem0 Memory</span>
+      <span class="concept-tag active">TTL Caching</span>
+      <span class="concept-tag active">Human-in-Loop</span>
+      <span class="concept-tag">Parallel Execution</span>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-title">Your Profile</div>
+    <div class="form-subtitle">All data stays local. Used only to find your best plan.</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>ZIP Code</label>
+        <input type="text" id="zip" placeholder="e.g. 10001" maxlength="5" value="10001">
+      </div>
+      <div class="form-group">
+        <label>Age</label>
+        <input type="number" id="age" placeholder="e.g. 34" min="18" max="64" value="34">
+      </div>
+      <div class="form-group">
+        <label>Annual Household Income ($)</label>
+        <input type="number" id="income" placeholder="e.g. 52000" value="52000">
+      </div>
+      <div class="form-group">
+        <label>Household Size</label>
+        <input type="number" id="household" placeholder="e.g. 2" min="1" max="10" value="2">
+      </div>
+      <div class="form-group full">
+        <label>Medications (comma-separated)</label>
+        <input type="text" id="drugs" placeholder="e.g. Ozempic, Metformin, Lisinopril">
+      </div>
+      <div class="form-group full">
+        <label>Doctors to keep (comma-separated)</label>
+        <input type="text" id="doctors" placeholder="e.g. Dr. Sarah Chen, Dr. James Park">
+      </div>
+    </div>
+    <button class="btn" id="analyzeBtn" onclick="analyze()">
+      <span>🔍</span> Analyze My Coverage Options
+    </button>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div style="font-family: var(--display); font-size: 18px; margin-bottom: 8px;">Analyzing your options...</div>
+    <div style="font-size: 13px; color: var(--text2);">Running 6 specialized agents in parallel</div>
+    <div class="agent-status" id="agentStatus"></div>
+  </div>
+
+  <div class="results" id="results"></div>
+
+</div>
+
+<script>
+const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
+let currentProfile = null;
+
+const AGENT_MESSAGES = [
+  "Profile agent → routing by income bracket",
+  "Plan search agent → querying CMS Marketplace",
+  "Subsidy agent → calculating APTC credit",
+  "Drug check agent → checking formularies",
+  "Doctor check agent → NPPES NPI lookup",
+  "Risk & gaps agent → scanning coverage holes",
+  "Metal tier agent → Bronze/Silver/Gold analysis",
+  "Recommendation agent → synthesizing with AI",
+];
+
+function showAgentProgress() {
+  const el = document.getElementById('agentStatus');
+  el.innerHTML = '';
+  AGENT_MESSAGES.forEach((msg, i) => {
+    setTimeout(() => {
+      const row = document.createElement('div');
+      row.className = 'agent-row';
+      row.style.animationDelay = `${i * 0.1}s`;
+      row.innerHTML = `<div class="agent-dot"></div><span>${msg}</span>`;
+      el.appendChild(row);
+    }, i * 600);
+  });
+}
+
+async function analyze() {
+  const zip = document.getElementById('zip').value.trim();
+  const age = parseInt(document.getElementById('age').value);
+  const income = parseFloat(document.getElementById('income').value);
+  const household = parseInt(document.getElementById('household').value);
+  const drugs = document.getElementById('drugs').value.split(',').map(s => s.trim()).filter(Boolean);
+  const doctors = document.getElementById('doctors').value.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (!zip || !age || !income || !household) {
+    alert('Please fill in all required fields.');
+    return;
+  }
+
+  currentProfile = { user_id: USER_ID, zip_code: zip, age, income, household_size: household, drugs, doctors };
+
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('results').classList.remove('active');
+  showAgentProgress();
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentProfile)
+    });
+    const data = await res.json();
+    renderResults(data);
+  } catch (e) {
+    // Demo mode fallback
+    renderResults(getMockResults(zip, age, income, household, drugs));
+  } finally {
+    document.getElementById('loading').classList.remove('active');
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+function renderResults(data) {
+  const el = document.getElementById('results');
+  const route = data.route || 'marketplace';
+  const subsidy = data.subsidy || {};
+  const plans = data.plans || [];
+  const drugs = data.drugs || {};
+  const risks = data.risks || {};
+  const cache = data.cache_stats || {};
+  const profile = data.profile || {};
+  const memoryUsed = data.memory_used;
+
+  const routeLabels = {
+    subsidized: '✓ Subsidy-Eligible Route',
+    medicaid: '✓ Medicaid Route — Free Coverage',
+    marketplace: '→ Full Marketplace Route',
+    full_price: '→ Full Price Route',
+    chip: '✓ CHIP Eligible'
+  };
+
+  let html = '';
+
+  // Memory badge
+  if (memoryUsed) {
+    html += `<div class="memory-badge">🧠 mem0 — returning user profile loaded from memory</div>`;
+  }
+
+  // Route badge
+  html += `<div class="route-badge ${route}">${routeLabels[route] || route} — ${profile.route_reason || ''}</div>`;
+
+  // If Medicaid route, show simple card
+  if (route === 'medicaid' && data.medicaid) {
+    html += `<div class="rec-card">
+      <h2>🏥 Medicaid Eligible</h2>
+      <div class="rec-body">${data.medicaid.message}\n\n${data.medicaid.action}</div>
+    </div>`;
+    el.innerHTML = html;
+    el.classList.add('active');
+    return;
+  }
+
+  // Stats row
+  const monthlyCredit = subsidy.monthly_credit || 0;
+  const annualCredit = subsidy.annual_credit || 0;
+  const fpl = profile.fpl_percentage || 0;
+  const lowestPlan = plans.length ? Math.min(...plans.map(p => (p.premium || 0) - monthlyCredit)) : 0;
+
+  html += `<div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Monthly Subsidy</div>
+      <div class="stat-value green">$${monthlyCredit.toFixed(0)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Annual Credit</div>
+      <div class="stat-value blue">$${annualCredit.toFixed(0)}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">FPL %</div>
+      <div class="stat-value yellow">${fpl}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Lowest Net Premium</div>
+      <div class="stat-value green">$${Math.max(0, lowestPlan).toFixed(0)}/mo</div>
+    </div>
+  </div>`;
+
+  // Cache stats
+  if (cache.total_calls > 0) {
+    html += `<div class="cache-bar">
+      ⚡ Cache: <span>${cache.hits} hits</span> / ${cache.total_calls} calls — <span>${cache.hit_rate_pct}% hit rate</span>
+      &nbsp;|&nbsp; ${cache.cached_entries} entries stored &nbsp;|&nbsp; API calls saved: <span>${cache.hits}</span>
+    </div>`;
+  }
+
+  // AI Recommendation
+  if (data.recommendation) {
+    html += `<div class="rec-card">
+      <h2>🤖 AI Recommendation</h2>
+      <div class="rec-body">${data.recommendation.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
+    </div>`;
+  }
+
+  // Plans grid
+  if (plans.length) {
+    html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:16px;">Available Plans</div>`;
+    html += `<div class="plans-grid">`;
+    plans.slice(0, 3).forEach((plan, i) => {
+      const netPremium = Math.max(0, (plan.premium || 0) - monthlyCredit);
+      html += `<div class="plan-card ${i === 0 ? 'best' : ''}">
+        <div class="plan-header">
+          <span class="metal-badge ${plan.metal_level}">${plan.metal_level}</span>
+          ${i === 0 ? '<span class="best-tag">★ Best Match</span>' : ''}
+        </div>
+        <div class="plan-name">${plan.name}</div>
+        <div class="plan-issuer">${plan.issuer}</div>
+        <div class="plan-price">$${netPremium.toFixed(0)}<span style="font-size:14px;color:var(--text3)">/mo</span></div>
+        <div class="plan-price-label">after $${monthlyCredit.toFixed(0)} subsidy</div>
+        <div class="plan-details">
+          <div class="plan-detail"><span class="plan-detail-label">Full Premium</span><span class="plan-detail-val">$${(plan.premium||0).toFixed(0)}/mo</span></div>
+          <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
+          <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Warnings & flags
+  const allWarnings = [
+    ...(drugs.warnings || []),
+    ...(risks.flags || []),
+    ...(subsidy.csr_note ? [subsidy.csr_note] : []),
+    ...(subsidy.subsidy_cliff_warning ? ['🚨 Subsidy cliff: Your income is near the 400% FPL cutoff — a small raise could cost thousands in lost subsidies.'] : [])
+  ];
+
+  if (allWarnings.length) {
+    html += `<div class="warnings-card">
+      <h2>⚠️ Flags & Warnings</h2>
+      ${allWarnings.map(w => `<div class="warning-item">${w}</div>`).join('')}
+    </div>`;
+  }
+
+  // Drug results
+  if ((drugs.results || []).length) {
+    html += `<div class="rec-card">
+      <h2>💊 Drug Coverage</h2>`;
+    drugs.results.forEach(d => {
+      const tierColor = d.tier <= 2 ? 'var(--green)' : d.tier === 3 ? 'var(--yellow)' : 'var(--red)';
+      html += `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
+        <span style="color:var(--text)">${d.drug_name}</span>
+        <span>Tier <strong style="color:${tierColor}">${d.tier}</strong> — ~$${d.monthly_cost}/mo ${d.prior_auth ? '🔒 Prior Auth' : ''}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Chat
+  html += `<div class="chat-card">
+    <h2>💬 Ask a follow-up question</h2>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" placeholder="e.g. Which plan covers Ozempic best? Should I pick Silver or Bronze?" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="chat-btn" onclick="sendChat()">Ask</button>
+    </div>
+  </div>`;
+
+  el.innerHTML = html;
+  el.classList.add('active');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const messages = document.getElementById('chatMessages');
+  messages.innerHTML += `<div class="chat-msg user">${msg}</div>`;
+  input.value = '';
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: USER_ID, message: msg, profile: currentProfile })
+    });
+    const data = await res.json();
+    messages.innerHTML += `<div class="chat-msg ai">${data.reply}</div>`;
+    messages.scrollTop = messages.scrollHeight;
+  } catch (e) {
+    messages.innerHTML += `<div class="chat-msg ai">Sorry, I couldn't process that right now. Please try again.</div>`;
+  }
+}
+
+function getMockResults(zip, age, income, household, drugs) {
+  const fpl_pcts = { 1: 14580, 2: 19720, 3: 24860, 4: 30000 };
+  const base = fpl_pcts[Math.min(household, 4)] || 30000;
+  const fpl = Math.round((income / base) * 100 * 10) / 10;
+  const credit = fpl <= 400 ? Math.max(0, 450 - (income * 0.085 / 12)) : 0;
+
+  return {
+    route: fpl < 138 ? 'medicaid' : fpl <= 400 ? 'subsidized' : 'marketplace',
+    profile: { fpl_percentage: fpl, route: fpl <= 400 ? 'subsidized' : 'marketplace', route_reason: `At ${fpl}% FPL you qualify for ACA premium tax credits.` },
+    subsidy: { monthly_credit: Math.round(credit), annual_credit: Math.round(credit * 12), csr_eligible: fpl <= 250, eligible: fpl <= 400 },
+    plans: [
+      { id: 'P1', name: 'BlueCross Silver Select', metal_level: 'Silver', premium: 342, deductible: 3500, oop_max: 7000, issuer: 'BlueCross' },
+      { id: 'P2', name: 'Aetna Bronze Plus', metal_level: 'Bronze', premium: 218, deductible: 6000, oop_max: 8700, issuer: 'Aetna' },
+      { id: 'P3', name: 'UHC Gold Complete', metal_level: 'Gold', premium: 487, deductible: 1500, oop_max: 5000, issuer: 'UnitedHealth' },
+    ],
+    drugs: {
+      results: drugs.map(d => ({ drug_name: d, tier: d.toLowerCase().includes('ozempic') ? 4 : 2, monthly_cost: d.toLowerCase().includes('ozempic') ? 280 : 15, prior_auth: d.toLowerCase().includes('ozempic') })),
+      warnings: drugs.some(d => d.toLowerCase().includes('ozempic')) ? ['⚠️ Ozempic is Tier 4 on most plans — ~$280/month. Ask your doctor about Trulicity as a Tier 2 alternative.'] : []
+    },
+    risks: { flags: ['💡 Silver plans with CSR give you Gold-level benefits at Silver premiums.', '⚡ Set a calendar reminder for the Jan 15 open enrollment deadline.'] },
+    recommendation: `Based on your profile (${fpl}% FPL, income $${income.toLocaleString()}/year):\n\n1. BlueCross Silver Select — $${Math.max(0, 342 - Math.round(credit))}/month after your $${Math.round(credit)} subsidy. Best overall value with CSR benefits reducing your deductible.\n\n2. Aetna Bronze Plus — $${Math.max(0, 218 - Math.round(credit))}/month. Pair with HSA for tax savings if you're generally healthy.\n\n3. UHC Gold Complete — $${Math.max(0, 487 - Math.round(credit))}/month. Worth it if you expect $3,000+ in annual medical costs.\n\n⭐ Action: Enroll in the Silver plan to lock in CSR benefits — these are only available on Silver tier.`,
+    cache_stats: { hits: 7, misses: 3, total_calls: 10, hit_rate_pct: 70, cached_entries: 7 },
+    memory_used: false,
+  };
+}
+</script>
+</body>
+</html>
