@@ -64,14 +64,19 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
     age = profile.get("age", 35)
     household_size = profile.get("household_size", 1)
     tobacco_use = profile.get("tobacco_use", False)
+    is_premium = profile.get("is_premium", False)
     drugs = profile.get("drugs", [])
     doctors = profile.get("doctors", [])
+
+    # Enforce Limits
+    if not is_premium:
+        drugs = drugs[:1]
+        doctors = doctors[:1]
 
     if not zip_code:
         return {"error": "ZIP code missing in profile state."}
 
     try:
-        print(f"DEBUG: run_full_analysis_parallel called for ZIP {zip_code}")
         # Wave 0: Location
         loc = get_location_info(zip_code)
         state = loc["state"]
@@ -82,7 +87,9 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
             asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
             asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use)
         )
-        plan_ids = [p["id"] for p in plans[:10]] if plans else []
+        # Premium shows 10, Free shows 3
+        plan_limit = 10 if is_premium else 3
+        plan_ids = [p["id"] for p in plans[:plan_limit]] if plans else []
 
         # Wave 2: Detailed Checks
         meds, docs, risks = await asyncio.gather(
@@ -91,12 +98,12 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
             asyncio.to_thread(get_market_risks, zip_code, state)
         )
 
-        # Calculate True Annual Cost for UI
+        # Calculate True Annual Cost & Premium Features
         monthly_credit = subsidy.get("monthly_aptc", 0)
         oop_weight = {"rarely": 0.1, "sometimes": 0.25, "frequently": 0.5, "chronic": 0.8}
         oop_factor = oop_weight.get(profile.get("utilization", "sometimes"), 0.25)
         
-        # Build plan-drug coverage map for easier cost calculation
+        # Build plan-drug coverage map
         drug_coverage_map = {}
         for c in meds.get("coverage_details", []):
             pid = c.get("plan_id")
@@ -104,13 +111,15 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
             if pid not in drug_coverage_map: drug_coverage_map[pid] = {}
             drug_coverage_map[pid][rxcui] = c
 
-        for p in plans:
+        processed_plans = []
+        for p in plans[:plan_limit]:
             pid = p.get("id")
             net_monthly = max(0, p.get("premium", 0) - monthly_credit)
             annual_premiums = net_monthly * 12
             
             # Estimate drug costs
             est_drugs = 0
+            pa_required = False
             for d in meds.get("resolved_drugs", []):
                 rxcui = str(d.get("rxcui", ""))
                 c = drug_coverage_map.get(pid, {}).get(rxcui, {})
@@ -118,6 +127,7 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
                     tier = c.get("drug_tier", "Tier 1")
                     copay = 10 if "1" in tier else 30 if "2" in tier else 60
                     est_drugs += copay * 12
+                    if c.get("prior_authorization"): pa_required = True
                 elif c.get("coverage") == "NotCovered":
                     est_drugs += 500 * 12
             
@@ -125,16 +135,27 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
             p["premium_w_credit"] = round(net_monthly, 2)
             p["true_annual_cost"] = round(annual_premiums + est_oop + est_drugs, 2)
             p["est_annual_drug_cost"] = round(est_drugs, 2)
+            p["pa_warning"] = pa_required
+
+            # HSA Tax Savings (Premium)
+            if is_premium and p.get("hsa_eligible"):
+                tax_rate = 0.22 if income > 45000 else 0.12
+                annual_tax_save = 4150 * tax_rate # Individual limit
+                p["hsa_tax_savings"] = round(annual_tax_save, 2)
+                p["hsa_5yr_growth"] = round(4150 * 5 * 1.07, 2) # Simple 7% growth
+
+            processed_plans.append(p)
 
         # Consolidate
         analysis_data = {
             "location": loc,
             "subsidy": subsidy,
-            "plans": sorted(plans, key=lambda x: x.get("true_annual_cost", 999999)),
+            "plans": sorted(processed_plans, key=lambda x: x.get("true_annual_cost", 999999)),
             "medication_coverage": meds,
             "doctor_verification": docs,
             "market_risks": risks,
-            "cache_stats": get_cache_stats()
+            "cache_stats": get_cache_stats(),
+            "is_premium": is_premium
         }
         
         # Update state directly

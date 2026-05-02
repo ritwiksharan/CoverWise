@@ -53,6 +53,20 @@
     border:1px solid var(--border2); color:var(--text3); }
   .concept-tag.active { color:var(--accent2); border-color:var(--accent); background:rgba(59,130,246,.08); }
 
+  /* ── LANDING ── */
+  .landing-flow { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:40px; }
+  .landing-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:32px; text-align:center; cursor:pointer;
+    transition:transform .2s,border-color .2s; position:relative; overflow:hidden; }
+  .landing-card:hover { transform:translateY(-4px); border-color:var(--accent); }
+  .landing-card h3 { font-family:var(--display); font-size:24px; font-weight:700; margin-bottom:8px; }
+  .landing-card p { font-size:14px; color:var(--text2); margin-bottom:0; }
+  .landing-card .badge { position:absolute; top:12px; right:12px; font-size:10px;
+    font-family:var(--mono); padding:2px 8px; border-radius:10px; }
+  .badge-free { background:rgba(255,255,255,0.05); color:var(--text3); border:1px solid var(--border); }
+  .badge-premium { background:rgba(59,130,246,0.1); color:var(--accent2); border:1px solid var(--accent); }
+  .landing-icon { font-size:32px; margin-bottom:16px; display:block; }
+
   /* ── MODE TABS ── */
   .mode-tabs { display:flex; gap:0; margin-bottom:24px; border:1px solid var(--border);
     border-radius:var(--radius-lg); overflow:hidden; }
@@ -295,16 +309,28 @@
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
 <!-- Login Screen -->
-<div id="loginScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:var(--bg2);color:var(--text);gap:24px;">
-  <h1 style="font-family:var(--display);font-size:32px;color:var(--accent2);margin:0;">CoverWise</h1>
-  <p style="font-size:16px;max-width:400px;text-align:center;">Your year‑round insurance advisor. Choose your plan:</p>
-  <div style="display:flex;gap:16px;">
-    <button class="btn" id="freeBtn" style="background:linear-gradient(135deg,var(--green),#059669);">Find my plan — Free</button>
-    <button class="btn" id="premiumBtn" style="background:linear-gradient(135deg,var(--accent),var(--purple));">Year‑round advisor — $19/mo</button>
+<div id="loginScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:var(--bg);color:var(--text);padding:24px;">
+  <div class="logo" style="margin-bottom:48px;">
+    <div class="logo-icon">🛡️</div>
+    <div class="logo-text" style="font-size:32px;">CoverWise</div>
+  </div>
+  
+  <div class="landing-flow" style="width:100%; max-width:800px;">
+    <div class="landing-card" onclick="startFlow(false)">
+      <span class="badge badge-free">No Credit Card</span>
+      <span class="landing-icon">🔍</span>
+      <h3>Find my plan — Free</h3>
+      <p style="color:var(--text3); font-size:12px; margin-top:8px;">One-time plan recommendation.<br>Basic drug & doctor check.</p>
+    </div>
+    <div class="landing-card" onclick="startFlow(true)" style="border-color:var(--accent2); background:rgba(59,130,246,0.05);">
+      <span class="badge badge-premium">Unlimited Access</span>
+      <span class="landing-icon">🪄</span>
+      <h3>Year-round advisor — $19/mo</h3>
+      <p style="color:var(--text3); font-size:12px; margin-top:8px;">Unlimited checks, saved profile,<br>and HSA/CSR deep analysis.</p>
+    </div>
   </div>
 </div>
 
-<!-- Main Application (hidden until login) -->
 <div class="app" id="mainApp" style="display:none;">
 
 
@@ -427,6 +453,14 @@
     </div>
   </div>
 
+    <div id="main-content" style="display:none">
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="setMode('auto')">🪄 Agentic Analysis</button>
+        <button class="mode-tab" onclick="setMode('manual')">⚡ Quick Estimate</button>
+      </div>
+      
+      <!-- Existing form-card and intake-card will be here -->
+
   <!-- ── LOADING ── -->
   <div class="loading" id="loading">
     <div class="spinner"></div>
@@ -444,7 +478,19 @@
 const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
 const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9);
 let currentProfile = null;
-let pendingProfile = null;  // profile awaiting confirmation
+let pendingProfile = null;
+let isPremium = false;
+
+function startFlow(premium) {
+  isPremium = premium;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  if (isPremium) {
+    document.querySelector('.header-badge').textContent = '● Premium Advisor';
+    document.querySelector('.header-badge').style.color = 'var(--accent2)';
+    document.querySelector('.header-badge').style.borderColor = 'var(--accent2)';
+  }
+}
 
 const AGENT_MESSAGES = [
   "Profile agent → routing by income & FPL",
@@ -601,11 +647,11 @@ function editProfile() {
   }
 }
 
-function runAnalysis() {
+async function runAnalysis() {
   const profile = pendingProfile || currentProfile;
   if (!profile) return;
   document.getElementById('confirmCard').style.display = 'none';
-  currentProfile = { ...profile, user_id: USER_ID };
+  currentProfile = { ...profile, user_id: USER_ID, is_premium: isPremium };
   startLoading();
   doAnalyze(currentProfile);
 }
@@ -813,7 +859,20 @@ function renderResults(data) {
       <button class="chat-btn" onclick="sendChat()">Ask</button>
     </div></div>`;
 
-  if (window.isPremium) {
+  // Premium Upsell Moment
+  if (!isPremium) {
+    html += `
+    <div class="rec-card" style="border: 2px dashed var(--accent); background: rgba(59,130,246,0.05); margin-top: 24px;">
+      <h2 style="color:var(--accent2)">🪄 Unlock Year-Round Advisor</h2>
+      <p style="font-size:14px; color:var(--text2); margin-bottom:16px;">
+        I found ${data.plans.length} plans, but I only checked <strong>1 medication</strong> and <strong>1 doctor</strong> due to the Free tier limit. 
+        Upgrade to Premium to check all your providers, unlock the 5-year HSA tax calculator, and get year-round access.
+      </p>
+      <button class="btn" onclick="location.reload()">Upgrade to Premium — $19/mo</button>
+    </div>`;
+  }
+
+  if (isPremium) {
     html += `<div class="rec-card" style="margin-top:24px;text-align:center;background:var(--bg3)">
         <h3>📄 Premium Export</h3>
         <p style="font-size:13px;margin-bottom:16px;color:var(--text2)">Generate a clean PDF report of these recommendations.</p>
