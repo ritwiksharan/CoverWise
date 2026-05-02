@@ -79,6 +79,7 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
         return {"error": "ZIP code missing in profile state."}
 
     try:
+        print(f"DEBUG: run_full_analysis_parallel called for ZIP {zip_code}")
         # Wave 0: Location
         loc = get_location_info(zip_code)
         state = loc["state"]
@@ -186,7 +187,11 @@ class ADKOrchestrator:
             session.state["profile"] = profile
 
         memory_context = build_memory_context(user_id) or ""
-        prompt_text = f"Analyze my health insurance options. Context: {memory_context}"
+        prompt_text = (
+            f"Mandatory: Call 'run_full_analysis_parallel' to retrieve the current insurance data. "
+            f"After receiving the data, generate the recommendation report using the required structure. "
+            f"User Profile: {profile}. Context: {memory_context}"
+        )
         msg = Content(role="user", parts=[Part(text=prompt_text)])
         
         reply = ""
@@ -195,8 +200,7 @@ class ADKOrchestrator:
                 if hasattr(event, "content") and event.content:
                     for part in event.content.parts:
                         if hasattr(part, "text") and part.text:
-                            reply = part.text
-                            break
+                            reply += part.text
         
         # Get the consolidated data from state
         session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
@@ -243,7 +247,6 @@ class ADKOrchestrator:
                 if hasattr(event, "content") and event.content:
                     for part in event.content.parts:
                         if hasattr(part, "text") and part.text:
-                            reply = part.text
-                            break
+                            reply += part.text
         
         return {"reply": reply, "memory_used": bool(memory_context)}
