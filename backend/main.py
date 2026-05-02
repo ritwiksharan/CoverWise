@@ -40,6 +40,7 @@ class UserProfile(BaseModel):
     doctors: list[str] = []
     utilization: str = "sometimes"   # rarely / sometimes / frequently / chronic
     tobacco_use: bool = False
+    is_premium: bool = False
     message: Optional[str] = None
 
 

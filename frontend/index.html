@@ -490,6 +490,7 @@ function startFlow(premium) {
     document.querySelector('.header-badge').style.color = 'var(--accent2)';
     document.querySelector('.header-badge').style.borderColor = 'var(--accent2)';
   }
+  initIntake();
 }
 
 const AGENT_MESSAGES = [
@@ -611,13 +612,15 @@ function disableIntakeInput() {
 
 // ── PROFILE CONFIRMATION GATE ─────────────────────────────────────────────────
 function showConfirmation(profile) {
+  profile = { ...profile, is_premium: isPremium };
   const table = document.getElementById('confirmTable');
   const labels = {
     zip_code: 'ZIP Code', age: 'Age', household_size: 'Household Size',
     income: 'Annual Income', drugs: 'Medications', doctors: 'Doctors',
-    utilization: 'Healthcare Use', tobacco_use: 'Tobacco User'
+    utilization: 'Healthcare Use', tobacco_use: 'Tobacco User', is_premium: 'Service Tier'
   };
   const fmt = (k, v) => {
+    if (k === 'is_premium') return v ? '💎 Premium' : '🔍 Free';
     if (k === 'income') return '$' + Number(v).toLocaleString();
     if (k === 'tobacco_use') return v ? 'Yes' : 'No';
     if (Array.isArray(v)) return v.length ? v.join(', ') : 'None';
@@ -933,18 +936,7 @@ function getMockResults(profile) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-function startApp(premium) {
-  window.isPremium = premium;
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = '';
-  initIntake();
-}
-
-document.getElementById('freeBtn').addEventListener('click', () => startApp(false));
-document.getElementById('premiumBtn').addEventListener('click', () => {
-  alert('Premium unlocked: Detailed drug/doctor checks & PDF export enabled.');
-  startApp(true);
-});
+// Flow started via startFlow in landing cards
 </script>
 </body>
 </html>
