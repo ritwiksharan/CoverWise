@@ -37,6 +37,8 @@ def store_user_profile(user_id: str, profile: dict) -> None:
         facts.append("User takes: " + ", ".join(profile["drugs"]))
     if profile.get("doctors"):
         facts.append("User doctors: " + ", ".join(profile["doctors"]))
+    if "tobacco_use" in profile:
+        facts.append("User uses tobacco: " + ("Yes" if profile["tobacco_use"] else "No"))
 
     memory_text = ". ".join(facts)
 
