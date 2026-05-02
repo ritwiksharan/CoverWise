@@ -86,19 +86,68 @@ class ConversationalOrchestrator:
         session["messages"].append({"role": "user", "content": message})
         memories = get_user_memories(user_id)
         mem_ctx = "Known from memory: " + ", ".join(memories[:5]) if memories else ""
-        history = "\n".join(
-            ("User: " if m["role"] == "user" else "Assistant: ") + m["content"]
-            for m in session["messages"][-12:]
+
+        # Build Gemini native chat history (alternating user/model turns)
+        from vertexai.generative_models import ChatSession
+        chat_history = []
+        for m in session["messages"][:-1]:  # exclude current message
+            role = "user" if m["role"] == "user" else "model"
+            chat_history.append({"role": role, "parts": [{"text": m["content"]}]})
+
+        system = (
+            INTAKE_SYSTEM + "\n\n" + mem_ctx +
+            "\n\nIMPORTANT: Reply ONLY with your next question or response. "
+            "Do NOT repeat or summarize the conversation history. "
+            "Do NOT prefix your reply with User: or Assistant:. "
+            "Just respond naturally as if speaking directly to the user."
         )
-        prompt = (
-            INTAKE_SYSTEM + "\n\n" + mem_ctx + "\n\nConversation:\n" + history +
-            "\n\nIf you now have all required fields, output PROFILE_COMPLETE:{json} on its own line. Assistant:"
-        )
+
         try:
-            response = model.generate_content(prompt)
+            # Use fresh model call with history
+            from vertexai.generative_models import GenerativeModel, Content, Part
+            chat_model = GenerativeModel(
+                "gemini-2.0-flash",
+                system_instruction=system
+            )
+            # Build history as Content objects
+            history_contents = []
+            for m in session["messages"][:-1]:
+                role = "user" if m["role"] == "user" else "model"
+                history_contents.append(Content(role=role, parts=[Part.from_text(m["content"])]))
+
+            chat = chat_model.start_chat(history=history_contents)
+            response = chat.send_message(message)
             reply = response.text
-        except Exception:
-            reply = "Could you share your ZIP code, age, annual income, and household size?"
+        except Exception as e:
+            print("Chat error: " + str(e))
+            # Fallback to simple prompt
+            history = "\n".join(
+                ("User: " if m["role"] == "user" else "Assistant: ") + m["content"]
+                for m in session["messages"][-8:]
+            )
+            prompt = (
+                INTAKE_SYSTEM + "\n\n" + mem_ctx +
+                "\n\nDo NOT repeat conversation history. Just give your next response.\n\n" +
+                "Context:\n" + history + "\n\nYour response:"
+            )
+            try:
+                response = model.generate_content(prompt)
+                reply = response.text
+            except Exception:
+                reply = "Could you share your ZIP code, age, annual income, and household size?"
+
+        # Clean up any accidental history echoing
+        if "User:" in reply and "Assistant:" in reply:
+            # LLM echoed history - extract just the last assistant line
+            lines = reply.strip().split("\n")
+            for line in reversed(lines):
+                if line.startswith("Assistant:"):
+                    reply = line.replace("Assistant:", "").strip()
+                    break
+                elif line and not line.startswith("User:"):
+                    reply = line.strip()
+                    break
+
         session["messages"].append({"role": "assistant", "content": reply})
         if "PROFILE_COMPLETE:" in reply:
             profile = self._extract_profile(reply)
@@ -153,7 +202,9 @@ class ConversationalOrchestrator:
             session["analysis"] = analysis
             session["state"] = "complete"
             store_user_profile(user_id, profile)
-            return {"reply": "Profile confirmed! Here is your personalized plan analysis.", "state": "complete", "analysis": analysis}
+            rec = analysis.get("recommendation", "")
+            reply_text = "Profile confirmed! Here is your personalized plan analysis.\n\n" + rec if rec else "Profile confirmed! Here is your personalized plan analysis."
+            return {"reply": reply_text, "state": "complete", "analysis": analysis}
         else:
             session["messages"].append({"role": "user", "content": message})
             session["state"] = "intake"

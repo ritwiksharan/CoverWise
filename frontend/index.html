@@ -672,23 +672,30 @@ async function resetChat() {
   });
   document.getElementById('messages').innerHTML = '';
   document.getElementById('resultsPanel').classList.remove('open');
-  started = false;
-  currentState = 'idle';
-  const welcome = document.createElement('div');
-  welcome.className = 'welcome';
-  welcome.id = 'welcome';
-  welcome.innerHTML = `
-    <div class="welcome-icon">🛡️</div>
-    <h1>Find your <em>best health plan</em> in 30 seconds</h1>
-    <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors.</p>
-    <div class="concepts">
-      <span class="concept active">Multi-Agent</span>
-      <span class="concept active">Agent Handoff</span>
-      <span class="concept active">mem0 Memory</span>
-      <span class="concept active">TTL Caching</span>
-      <span class="concept active">Human-in-Loop</span>
-    </div>`;
-  document.getElementById('messages').appendChild(welcome);
+  started = true;
+  currentState = 'intake';
+
+  // restart conversation immediately
+  showTyping();
+  try {
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: USER_ID})
+    });
+    const data = await res.json();
+    hideTyping();
+    if (data.returning_user) {
+      appendMsg('assistant', data.reply + '\n\n<span class="mem0-badge">🧠 mem0 — profile loaded from memory</span>');
+    } else {
+      appendMsg('assistant', data.reply);
+    }
+    currentState = data.state;
+  } catch(e) {
+    hideTyping();
+    appendMsg('assistant', 'Welcome back! What is your ZIP code?');
+    currentState = 'intake';
+  }
 }
 
 // Start on first click or enter
