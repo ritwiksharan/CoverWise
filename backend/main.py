@@ -26,6 +26,9 @@ app.add_middleware(
 
 orchestrator = OrchestratorAgent()
 
+# Determine frontend path - works both locally and in Docker
+FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
+
 class UserProfile(BaseModel):
     user_id: str
     zip_code: str
@@ -70,11 +73,11 @@ async def cache_stats():
     from cache.cache_manager import get_cache_stats
     return get_cache_stats()
 
-app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
 
-@app.get("/")
-async def root():
-    return FileResponse("../frontend/index.html")
+app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
