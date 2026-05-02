@@ -2,7 +2,7 @@
 
 An agentic AI system that helps Americans find their optimal ACA health insurance plan by analyzing income, medications, and doctors against live government data.
 
-**Live URL:** [your-cloud-run-url] ← update after deploy
+**Live URL:** https://coverwise-272387131334.us-central1.run.app/
 
 ---
 
