@@ -5,6 +5,7 @@ All run in parallel via asyncio, orchestrator merges results
 
 import asyncio
 from tools.gov_apis import (
+    search_plans_by_zip,
     calculate_fpl_percentage, get_fpl_thresholds, search_plans,
     check_drug_formulary, verify_doctor_npi, get_medicaid_threshold, get_fips_from_zip,
     get_state_exchange
@@ -97,7 +98,7 @@ async def subsidy_agent(profile: dict, fpl_pct: float) -> dict:
 async def plan_search_agent(profile: dict) -> dict:
     """Fetch available plans from CMS Marketplace."""
     await asyncio.sleep(0)
-    plans = search_plans(
+    plans = search_plans_by_zip(
         profile["zip_code"], profile["age"],
         profile["income"], profile["household_size"]
     )

@@ -1,2 +1,4 @@
 .env
 backend/.env
+backend/data/
+tab20_zcta520_county20_natl.txt

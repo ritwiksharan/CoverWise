@@ -402,32 +402,27 @@ def get_state_from_fips(fips: str) -> str:
 
 
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
-    """Convert ZIP to county FIPS - uses known map first, then CMS API."""
+    """Convert ZIP to county FIPS.
+    Priority: 1) KNOWN_FIPS hardcoded map, 2) Census file lookup, 3) None
+    """
+    # Check hardcoded map first (instant)
     if zip_code in KNOWN_FIPS:
         return KNOWN_FIPS[zip_code]
 
     def fetch():
-        # Try multiple CMS endpoint formats
-        urls_to_try = [
-            BASE_MARKETPLACE + "/counties/by/zip/" + zip_code + ".json",
-            BASE_MARKETPLACE + "/counties/by/zip/" + zip_code,
-        ]
-        for url in urls_to_try:
-            try:
-                params = {"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {}
-                r = requests.get(url, params=params, timeout=10)
-                if r.status_code == 200:
-                    data = r.json()
-                    counties = data.get("counties", [])
-                    if counties:
-                        fips = counties[0].get("fips")
-                        print("FIPS found for " + zip_code + ": " + str(fips))
-                        return fips
-            except Exception as e:
-                print("FIPS lookup error for " + url + ": " + str(e))
-                continue
+        # Try census file lookup (covers all 33k+ ZIPs if file is present)
+        try:
+            from tools.zip_loader import get_fips_for_zip
+            fips = get_fips_for_zip(zip_code)
+            if fips:
+                print("FIPS from census file for " + zip_code + ": " + fips)
+                return fips
+        except Exception as e:
+            print("Census loader error: " + str(e))
+
         print("FIPS not found for ZIP " + zip_code + " - will use mock plans")
         return None
+
     return cached_call("zip_fips", {"zip": zip_code}, fetch)
 
 
@@ -613,3 +608,104 @@ def get_medicaid_threshold(state_fips: str) -> float:
     expansion_states = {"06", "17", "36", "48", "12"}
     fips_prefix = state_fips[:2] if state_fips else "00"
     return 138.0 if fips_prefix in expansion_states else 100.0
+
+
+def search_plans_by_zip(zip_code: str, age: int, income: float, household_size: int) -> list:
+    """
+    Search plans directly using ZIP - CMS API handles ZIP internally.
+    Falls back to FIPS-based search if needed, then mock.
+    """
+    if not CMS_MARKETPLACE_KEY:
+        return _mock_plans(zip_code, age, income)
+
+    state_exchange = get_state_exchange(zip_code)
+    if state_exchange:
+        return []
+
+    def fetch():
+        url = BASE_MARKETPLACE + "/plans/search?apikey=" + CMS_MARKETPLACE_KEY
+
+        def _try_zip(z):
+            fips = KNOWN_FIPS.get(z) or get_fips_from_zip(z)
+            if not fips:
+                return None
+            state = get_state_from_fips(fips)
+            payload = {
+                "household": {
+                    "income": income,
+                    "people": [{"age": age, "aptc_eligible": True, "uses_tobacco": False}]
+                },
+                "market": "Individual",
+                "place": {"countyfips": fips, "state": state, "zipcode": z},
+                "year": 2024,
+                "limit": 10,
+                "offset": 0,
+            }
+            try:
+                r = requests.post(url, json=payload, timeout=15)
+                if r.status_code != 200:
+                    return None
+                data = r.json()
+                raw = data.get("plans", [])
+                if not raw:
+                    return None
+                plans = []
+                for p in raw[:10]:
+                    try:
+                        deductible = 0
+                        for d in p.get("deductibles", []):
+                            if "Combined" in d.get("type", "") or "Medical EHB" in d.get("type", ""):
+                                val = float(d.get("amount", 0))
+                                if val > 0:
+                                    deductible = val
+                                    break
+                        if deductible == 0 and p.get("deductibles"):
+                            deductible = float(p["deductibles"][0].get("amount", 0))
+                        oop_max = 0
+                        for m in p.get("moops", []):
+                            val = float(m.get("amount", 0))
+                            if val > 0:
+                                oop_max = val
+                                break
+                        if oop_max == 0 and p.get("moops"):
+                            oop_max = float(p["moops"][0].get("amount", 0))
+                        plans.append({
+                            "id": p.get("id", ""),
+                            "name": p.get("name", "Unknown Plan"),
+                            "metal_level": p.get("metal_level", "Silver"),
+                            "premium": float(p.get("premium_w_credit", p.get("premium", 0))),
+                            "full_premium": float(p.get("premium", 0)),
+                            "deductible": deductible,
+                            "oop_max": oop_max,
+                            "issuer": p.get("issuer", {}).get("name", "Unknown"),
+                        })
+                    except Exception:
+                        continue
+                return plans if plans else None
+            except Exception as e:
+                print("CMS call error: " + str(e))
+                return None
+
+        # Try original ZIP first
+        result = _try_zip(zip_code)
+        if result:
+            print("CMS returned " + str(len(result)) + " real plans for " + zip_code)
+            return result
+
+        # ZIP rejected by CMS (PO Box etc) - try nearby ZIPs
+        try:
+            num = int(zip_code)
+            for delta in [1, -1, 2, -2, 5, -5, 10, -10]:
+                nearby = str(num + delta).zfill(5)
+                if nearby[:3] == zip_code[:3]:
+                    result = _try_zip(nearby)
+                    if result:
+                        print("CMS returned " + str(len(result)) + " plans using nearby ZIP " + nearby + " for " + zip_code)
+                        return result
+        except Exception:
+            pass
+
+        print("CMS returned 0 plans for " + zip_code + " - using mock")
+        return _mock_plans(zip_code, age, income)
+
+    return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income)}, fetch)

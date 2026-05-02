@@ -1,6 +1,4 @@
 import os
-import json
-import asyncio
 import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,71 +10,50 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agents.orchestrator import OrchestratorAgent
+from agents.orchestrator import ConversationalOrchestrator
 
-app = FastAPI(title="CoverWise - AI Health Insurance Advisor")
+app = FastAPI(title="CoverWise")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+orchestrator = ConversationalOrchestrator()
 
-orchestrator = OrchestratorAgent()
-
-# Determine frontend path - works both locally and in Docker
-FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
-
-class UserProfile(BaseModel):
-    user_id: str
-    zip_code: str
-    age: int
-    income: float
-    household_size: int
-    drugs: list[str] = []
-    doctors: list[str] = []
-    message: Optional[str] = None
-
-class ChatMessage(BaseModel):
+class ChatRequest(BaseModel):
     user_id: str
     message: str
-    profile: Optional[UserProfile] = None
 
-@app.post("/api/analyze")
-async def analyze(profile: UserProfile):
+class StartRequest(BaseModel):
+    user_id: str
+
+@app.post("/api/start")
+async def start(req: StartRequest):
     try:
-        result = await orchestrator.run(profile.dict())
-        return result
+        return await orchestrator.start(req.user_id)
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat")
-async def chat(msg: ChatMessage):
+async def chat(req: ChatRequest):
     try:
-        result = await orchestrator.chat(msg.user_id, msg.message, msg.profile.dict() if msg.profile else None)
-        return result
+        return await orchestrator.chat(req.user_id, req.message)
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/memory/{user_id}")
-async def get_memory(user_id: str):
-    from memory.mem0_client import get_user_memories
-    memories = get_user_memories(user_id)
-    return {"memories": memories}
+@app.post("/api/reset")
+async def reset(req: StartRequest):
+    return orchestrator.reset(req.user_id)
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
 
 @app.get("/api/cache/stats")
 async def cache_stats():
     from cache.cache_manager import get_cache_stats
     return get_cache_stats()
 
-@app.get("/api/health")
-async def health():
-    return {"status": "ok"}
-
+FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
 app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
 
 if __name__ == "__main__":

@@ -4,655 +4,700 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoverWise — AI Health Insurance Advisor</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0f1e;
-    --bg2: #111827;
-    --bg3: #1a2235;
-    --border: #1e2d45;
-    --border2: #263554;
-    --text: #f0f4ff;
-    --text2: #8899bb;
-    --text3: #4a5f80;
-    --accent: #3b82f6;
-    --accent2: #60a5fa;
-    --green: #10b981;
-    --yellow: #f59e0b;
-    --red: #ef4444;
-    --orange: #f97316;
-    --purple: #8b5cf6;
-    --gold: #fbbf24;
-    --silver: #94a3b8;
-    --bronze: #a16207;
-    --radius: 10px;
-    --radius-lg: 16px;
-    --display: Playfair Display, serif;
-    --body: DM Sans, sans-serif;
-    --mono: DM Mono, monospace;
+    --bg: #080c14;
+    --bg2: #0e1420;
+    --bg3: #141c2e;
+    --border: #1a2540;
+    --border2: #243358;
+    --text: #eef2ff;
+    --text2: #7b91c4;
+    --text3: #3d5080;
+    --accent: #4f8cff;
+    --accent2: #7eb3ff;
+    --green: #22d3a0;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --r: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content:''; position:fixed; inset:0; z-index:0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events:none;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: var(--body);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── BACKGROUND ── */
-  .bg-grid {
-    position: fixed; inset: 0; z-index: 0;
-    background-image: 
-      linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-  }
-  .bg-glow {
-    position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
-    width: 800px; height: 400px;
-    background: radial-gradient(ellipse, rgba(59,130,246,0.08) 0%, transparent 70%);
-    pointer-events: none; z-index: 0;
-  }
-
-  /* ── LAYOUT ── */
-  .app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
-
-  /* ── HEADER ── */
+  /* HEADER */
   header {
-    padding: 40px 0 32px;
-    display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 40px;
+    position:relative; z-index:10;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; border-bottom:1px solid var(--border);
+    background:rgba(8,12,20,0.8); backdrop-filter:blur(20px);
   }
-  .logo {
-    display: flex; align-items: center; gap: 12px;
-  }
+  .logo { display:flex; align-items:center; gap:10px; }
   .logo-icon {
-    width: 40px; height: 40px;
-    background: linear-gradient(135deg, var(--accent), var(--purple));
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
+    width:34px; height:34px; border-radius:8px;
+    background:linear-gradient(135deg,#4f8cff,#a78bfa);
+    display:flex; align-items:center; justify-content:center; font-size:16px;
   }
-  .logo-text { font-family: var(--display); font-size: 22px; font-weight: 700; }
-  .logo-sub { font-size: 11px; color: var(--text3); font-family: var(--mono); letter-spacing: 1px; text-transform: uppercase; }
-  .header-badge {
-    font-size: 11px; font-family: var(--mono);
-    color: var(--green); border: 1px solid var(--green);
-    padding: 4px 10px; border-radius: 20px;
-    background: rgba(16,185,129,0.08);
+  .logo-name { font-family:'Instrument Serif',serif; font-size:20px; }
+  .logo-sub { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:12px; }
+  .status-dot {
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; font-family:'DM Mono',monospace; color:var(--green);
+    padding:4px 10px; border:1px solid rgba(34,211,160,0.3); border-radius:20px;
+    background:rgba(34,211,160,0.06);
   }
+  .status-dot::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+  .reset-btn {
+    font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);
+    padding:4px 10px; border:1px solid var(--border2); border-radius:20px;
+    background:none; cursor:pointer; transition:all 0.2s;
+  }
+  .reset-btn:hover { color:var(--text2); border-color:var(--accent); }
 
-  /* ── HERO ── */
-  .hero { text-align: center; margin-bottom: 48px; }
-  .hero h1 {
-    font-family: var(--display);
-    font-size: clamp(32px, 5vw, 52px);
-    font-weight: 900;
-    line-height: 1.1;
-    margin-bottom: 16px;
-  }
-  .hero h1 span { color: var(--accent2); }
-  .hero p { font-size: 16px; color: var(--text2); max-width: 520px; margin: 0 auto 24px; line-height: 1.7; }
-  .concepts {
-    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-  }
-  .concept-tag {
-    font-size: 11px; font-family: var(--mono);
-    padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border2);
-    color: var(--text3);
-  }
-  .concept-tag.active { color: var(--accent2); border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  /* MAIN LAYOUT */
+  .main { flex:1; display:flex; overflow:hidden; position:relative; z-index:1; }
 
-  /* ── FORM ── */
-  .form-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 32px;
-    margin-bottom: 32px;
+  /* CHAT PANEL */
+  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .messages {
+    flex:1; overflow-y:auto; padding:24px;
+    display:flex; flex-direction:column; gap:16px;
+    scrollbar-width:thin; scrollbar-color:var(--border) transparent;
   }
-  .form-title {
-    font-family: var(--display); font-size: 20px; font-weight: 700;
-    margin-bottom: 6px;
-  }
-  .form-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .form-group { display: flex; flex-direction: column; gap: 6px; }
-  .form-group.full { grid-column: 1 / -1; }
-  label { font-size: 12px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
-  input, textarea {
-    background: var(--bg3); border: 1px solid var(--border2);
-    border-radius: var(--radius); padding: 10px 14px;
-    color: var(--text); font-family: var(--body); font-size: 14px;
-    outline: none; transition: border-color 0.2s;
-  }
-  input:focus, textarea:focus { border-color: var(--accent); }
-  input::placeholder { color: var(--text3); }
-  textarea { resize: none; height: 60px; }
+  .messages::-webkit-scrollbar { width:4px; }
+  .messages::-webkit-scrollbar-track { background:transparent; }
+  .messages::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
 
-  .btn {
-    background: linear-gradient(135deg, var(--accent), var(--purple));
-    color: white; border: none; border-radius: var(--radius);
-    padding: 14px 28px; font-family: var(--body); font-size: 15px; font-weight: 600;
-    cursor: pointer; width: 100%; margin-top: 8px;
-    transition: opacity 0.2s, transform 0.1s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  .btn:hover { opacity: 0.9; }
-  .btn:active { transform: scale(0.99); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* MESSAGES */
+  .msg { display:flex; gap:10px; animation:msgIn 0.3s ease; max-width:78%; }
+  @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+  .msg.user { align-self:flex-end; flex-direction:row-reverse; }
+  .msg.assistant { align-self:flex-start; }
 
-  /* ── LOADING ── */
-  .loading {
-    display: none; background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 40px 32px; text-align: center;
-    margin-bottom: 32px;
+  .msg-avatar {
+    width:32px; height:32px; border-radius:8px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
   }
-  .loading.active { display: block; }
-  .spinner {
-    width: 40px; height: 40px; margin: 0 auto 20px;
-    border: 3px solid var(--border2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .agent-status { display: flex; flex-direction: column; gap: 8px; max-width: 300px; margin: 16px auto 0; }
-  .agent-row {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 13px; color: var(--text2);
-    animation: fadeIn 0.4s ease both;
-  }
-  .agent-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .msg.assistant .msg-avatar { background:linear-gradient(135deg,#4f8cff,#a78bfa); }
+  .msg.user .msg-avatar { background:var(--bg3); border:1px solid var(--border2); }
 
-  /* ── RESULTS ── */
-  .results { display: none; animation: fadeIn 0.5s ease; }
-  .results.active { display: block; }
+  .msg-bubble {
+    padding:12px 16px; border-radius:var(--r); font-size:14px; line-height:1.7;
+    max-width:100%;
+  }
+  .msg.assistant .msg-bubble {
+    background:var(--bg2); border:1px solid var(--border);
+    border-bottom-left-radius:4px; color:var(--text2);
+  }
+  .msg.user .msg-bubble {
+    background:rgba(79,140,255,0.15); border:1px solid rgba(79,140,255,0.3);
+    border-bottom-right-radius:4px; color:var(--text);
+  }
+  .msg-bubble strong { color:var(--text); }
+  .msg-bubble em { color:var(--accent2); font-style:normal; }
 
-  /* Route badge */
+  /* TYPING INDICATOR */
+  .typing { display:none; align-self:flex-start; }
+  .typing.active { display:flex; }
+  .typing-dots {
+    display:flex; gap:4px; padding:14px 16px;
+    background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); border-bottom-left-radius:4px;
+  }
+  .typing-dot { width:6px; height:6px; border-radius:50%; background:var(--text3); animation:typingDot 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay:0.2s; }
+  .typing-dot:nth-child(3) { animation-delay:0.4s; }
+  @keyframes typingDot { 0%,60%,100%{transform:none;opacity:0.3} 30%{transform:translateY(-4px);opacity:1} }
+
+  /* INPUT */
+  .input-area {
+    padding:16px 24px; border-top:1px solid var(--border);
+    background:rgba(8,12,20,0.6); backdrop-filter:blur(20px);
+  }
+  .input-row { display:flex; gap:10px; align-items:flex-end; }
+  .input-box {
+    flex:1; background:var(--bg2); border:1px solid var(--border2);
+    border-radius:var(--r); padding:12px 16px;
+    color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px;
+    outline:none; resize:none; min-height:46px; max-height:120px;
+    transition:border-color 0.2s; line-height:1.5;
+  }
+  .input-box:focus { border-color:var(--accent); }
+  .input-box::placeholder { color:var(--text3); }
+  .send-btn {
+    width:46px; height:46px; border-radius:var(--r);
+    background:linear-gradient(135deg,var(--accent),var(--purple));
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-size:18px; transition:opacity 0.2s, transform 0.1s; flex-shrink:0;
+  }
+  .send-btn:hover { opacity:0.9; }
+  .send-btn:active { transform:scale(0.95); }
+  .send-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+  /* RESULTS PANEL */
+  .results-panel {
+    width:420px; border-left:1px solid var(--border);
+    display:flex; flex-direction:column; overflow:hidden;
+    background:var(--bg2);
+    transform:translateX(100%); transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  .results-panel.open { transform:translateX(0); }
+  .results-header {
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .results-header h2 { font-family:'Instrument Serif',serif; font-size:18px; }
+  .results-body { flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; }
+  .results-body::-webkit-scrollbar { width:4px; }
+  .results-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* RESULT CARDS */
+  .result-stat-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .result-stat {
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--r); padding:12px 14px;
+  }
+  .result-stat-label { font-size:10px; font-family:'DM Mono',monospace; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+  .result-stat-val { font-family:'Instrument Serif',serif; font-size:22px; font-weight:400; }
+  .result-stat-val.green { color:var(--green); }
+  .result-stat-val.blue { color:var(--accent2); }
+  .result-stat-val.yellow { color:var(--yellow); }
+
   .route-badge {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 8px 16px; border-radius: 20px; font-size: 13px;
-    font-family: var(--mono); margin-bottom: 24px;
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 12px; border-radius:20px; font-size:12px;
+    font-family:'DM Mono',monospace;
   }
-  .route-badge.subsidized { background: rgba(16,185,129,0.1); border: 1px solid var(--green); color: var(--green); }
-  .route-badge.medicaid { background: rgba(139,92,246,0.1); border: 1px solid var(--purple); color: var(--purple); }
-  .route-badge.marketplace { background: rgba(59,130,246,0.1); border: 1px solid var(--accent); color: var(--accent2); }
-  .route-badge.full_price { background: rgba(245,158,11,0.1); border: 1px solid var(--yellow); color: var(--yellow); }
-  .route-badge.state_exchange { background: rgba(139,92,246,0.1); border: 1px solid var(--purple); color: var(--purple); }
+  .route-badge.subsidized { background:rgba(34,211,160,0.1); border:1px solid var(--green); color:var(--green); }
+  .route-badge.marketplace { background:rgba(79,140,255,0.1); border:1px solid var(--accent); color:var(--accent2); }
+  .route-badge.medicaid { background:rgba(167,139,250,0.1); border:1px solid var(--purple); color:var(--purple); }
+  .route-badge.state_exchange { background:rgba(167,139,250,0.1); border:1px solid var(--purple); color:var(--purple); }
 
-  /* Stats row */
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px;
-  }
-  .stat-label { font-size: 11px; font-family: var(--mono); color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .stat-value { font-family: var(--display); font-size: 24px; font-weight: 700; }
-  .stat-value.green { color: var(--green); }
-  .stat-value.blue { color: var(--accent2); }
-  .stat-value.yellow { color: var(--gold); }
-
-  /* Recommendation */
-  .rec-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 28px; margin-bottom: 24px;
-  }
-  .rec-card h2 { font-family: var(--display); font-size: 18px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-  .rec-body { font-size: 14px; line-height: 1.8; color: var(--text2); white-space: pre-wrap; }
-
-  /* Plans grid */
-  .plans-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
   .plan-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 20px;
-    transition: border-color 0.2s;
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--r); padding:14px; transition:border-color 0.2s;
   }
-  .plan-card:hover { border-color: var(--border2); }
-  .plan-card.best { border-color: var(--accent); background: rgba(59,130,246,0.04); }
-  .plan-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .plan-card:hover { border-color:var(--border2); }
+  .plan-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .metal-badge {
-    font-size: 10px; font-family: var(--mono); padding: 3px 8px;
-    border-radius: 8px; border: 1px solid; font-weight: 500;
+    font-size:10px; font-family:'DM Mono',monospace;
+    padding:2px 8px; border-radius:8px; border:1px solid;
   }
-  .metal-badge.Gold { color: var(--gold); border-color: var(--gold); background: rgba(251,191,36,0.1); }
-  .metal-badge.Silver { color: var(--silver); border-color: var(--silver); background: rgba(148,163,184,0.1); }
-  .metal-badge.Bronze { color: #d97706; border-color: #d97706; background: rgba(161,98,7,0.1); }
-  .plan-name { font-family: var(--display); font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-  .plan-issuer { font-size: 12px; color: var(--text3); margin-bottom: 14px; }
-  .plan-price { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--accent2); margin-bottom: 2px; }
-  .plan-price-label { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
-  .plan-details { display: flex; flex-direction: column; gap: 6px; }
-  .plan-detail { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
-  .plan-detail-label { color: var(--text3); }
-  .plan-detail-val { color: var(--text2); font-family: var(--mono); }
-  .best-tag { font-size: 10px; font-family: var(--mono); color: var(--accent2); padding: 2px 8px; border-radius: 8px; background: rgba(59,130,246,0.15); border: 1px solid var(--accent); }
+  .metal-badge.Gold { color:#fbbf24; border-color:#fbbf24; background:rgba(251,191,36,0.1); }
+  .metal-badge.Silver { color:#94a3b8; border-color:#94a3b8; background:rgba(148,163,184,0.1); }
+  .metal-badge.Bronze { color:#d97706; border-color:#d97706; background:rgba(217,119,6,0.1); }
+  .metal-badge.Platinum { color:#e879f9; border-color:#e879f9; background:rgba(232,121,249,0.1); }
+  .plan-name { font-family:'Instrument Serif',serif; font-size:15px; margin-bottom:2px; }
+  .plan-issuer { font-size:11px; color:var(--text3); margin-bottom:10px; }
+  .plan-price { font-family:'DM Mono',monospace; font-size:22px; color:var(--accent2); margin-bottom:2px; }
+  .plan-price-sub { font-size:11px; color:var(--text3); margin-bottom:10px; }
+  .plan-details { display:flex; flex-direction:column; gap:0; }
+  .plan-detail { display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-top:1px solid var(--border); }
+  .plan-detail-label { color:var(--text3); }
+  .plan-detail-val { color:var(--text2); font-family:'DM Mono',monospace; }
 
-  /* Warnings */
   .warnings-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
+    background:rgba(251,191,36,0.05); border:1px solid rgba(251,191,36,0.2);
+    border-radius:var(--r); padding:14px;
   }
-  .warnings-card h2 { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 14px; }
-  .warning-item {
-    font-size: 13px; color: var(--text2); line-height: 1.6;
-    padding: 10px 0; border-bottom: 1px solid var(--border);
-  }
-  .warning-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .warnings-card h3 { font-size:13px; font-weight:600; margin-bottom:10px; }
+  .warning-item { font-size:12px; color:var(--text2); line-height:1.6; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .warning-item:last-child { border-bottom:none; }
 
-  /* Cache stats */
   .cache-bar {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 12px 16px;
-    display: flex; align-items: center; gap: 16px;
-    font-size: 12px; color: var(--text3); margin-bottom: 24px;
-    font-family: var(--mono);
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--r); padding:10px 14px;
+    font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);
+    display:flex; gap:12px; flex-wrap:wrap;
   }
-  .cache-bar span { color: var(--green); }
+  .cache-bar span { color:var(--green); }
 
-  /* Memory badge */
-  .memory-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 11px; font-family: var(--mono); color: var(--purple);
-    padding: 4px 10px; border-radius: 20px;
-    background: rgba(139,92,246,0.1); border: 1px solid var(--purple);
-    margin-bottom: 16px;
+  .state-exchange-card {
+    background:rgba(167,139,250,0.05); border:1px solid rgba(167,139,250,0.3);
+    border-radius:var(--r); padding:16px;
+  }
+  .state-exchange-card h3 { font-family:'Instrument Serif',serif; font-size:16px; margin-bottom:8px; }
+  .state-exchange-card p { font-size:13px; color:var(--text2); line-height:1.6; margin-bottom:14px; }
+  .exchange-link {
+    display:inline-flex; align-items:center; gap:6px;
+    background:linear-gradient(135deg,var(--accent),var(--purple));
+    color:white; text-decoration:none; padding:10px 18px;
+    border-radius:var(--r); font-size:13px; font-weight:600;
   }
 
-  /* Chat */
-  .chat-card {
-    background: var(--bg2); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 24px; margin-top: 24px;
+  /* CONFIRM CARD */
+  .confirm-card {
+    background:rgba(79,140,255,0.05); border:1px solid rgba(79,140,255,0.3);
+    border-radius:var(--r); padding:14px; margin-top:4px;
   }
-  .chat-card h2 { font-family: var(--display); font-size: 16px; font-weight: 700; margin-bottom: 16px; }
-  .chat-messages { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-height: 300px; overflow-y: auto; }
-  .chat-msg { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.6; max-width: 85%; }
-  .chat-msg.user { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); align-self: flex-end; color: var(--text); }
-  .chat-msg.ai { background: var(--bg3); border: 1px solid var(--border); align-self: flex-start; color: var(--text2); }
-  .chat-input-row { display: flex; gap: 10px; }
-  .chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 14px; color: var(--text); font-family: var(--body); font-size: 14px; outline: none; }
-  .chat-input:focus { border-color: var(--accent); }
-  .chat-btn { background: var(--accent); color: white; border: none; border-radius: var(--radius); padding: 10px 18px; font-size: 14px; cursor: pointer; font-family: var(--body); font-weight: 600; }
-  .chat-btn:hover { opacity: 0.9; }
+  .confirm-card h4 { font-size:12px; font-family:'DM Mono',monospace; color:var(--accent2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
+  .confirm-item { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid var(--border); }
+  .confirm-item:last-child { border-bottom:none; }
+  .confirm-label { color:var(--text3); }
+  .confirm-val { color:var(--text); font-weight:500; }
+  .confirm-actions { display:flex; gap:8px; margin-top:12px; }
+  .confirm-yes {
+    flex:1; background:var(--green); color:var(--bg); border:none;
+    border-radius:8px; padding:10px; font-size:13px; font-weight:600;
+    cursor:pointer; transition:opacity 0.2s;
+  }
+  .confirm-yes:hover { opacity:0.9; }
+  .confirm-no {
+    flex:1; background:none; color:var(--text2); border:1px solid var(--border2);
+    border-radius:8px; padding:10px; font-size:13px;
+    cursor:pointer; transition:all 0.2s;
+  }
+  .confirm-no:hover { border-color:var(--red); color:var(--red); }
 
-  @media (max-width: 700px) {
-    .form-grid { grid-template-columns: 1fr; }
-    .plans-grid { grid-template-columns: 1fr; }
-    .stats-row { grid-template-columns: 1fr 1fr; }
+  /* MEM0 BADGE */
+  .mem0-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; font-family:'DM Mono',monospace; color:var(--purple);
+    padding:3px 8px; border-radius:20px;
+    background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.3);
+  }
+
+  /* WELCOME */
+  .welcome {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:40px; gap:16px;
+  }
+  .welcome-icon { font-size:48px; }
+  .welcome h1 { font-family:'Instrument Serif',serif; font-size:clamp(28px,4vw,42px); line-height:1.2; }
+  .welcome h1 em { color:var(--accent2); font-style:italic; }
+  .welcome p { font-size:15px; color:var(--text2); max-width:440px; line-height:1.7; }
+  .concepts { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .concept { font-size:11px; font-family:'DM Mono',monospace; padding:4px 10px; border-radius:20px; border:1px solid var(--border2); color:var(--text3); }
+  .concept.active { color:var(--accent2); border-color:var(--accent); background:rgba(79,140,255,0.08); }
+
+  @media (max-width: 768px) {
+    .results-panel { position:fixed; inset:0; width:100%; z-index:50; transform:translateY(100%); }
+    .results-panel.open { transform:translateY(0); }
   }
 </style>
 </head>
 <body>
-<div class="bg-grid"></div>
-<div class="bg-glow"></div>
-<div class="app">
 
-  <header>
-    <div class="logo">
-      <div class="logo-icon">🛡️</div>
-      <div>
-        <div class="logo-text">CoverWise</div>
-        <div class="logo-sub">AI Insurance Advisor</div>
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <div class="logo-name">CoverWise</div>
+      <div class="logo-sub">AI Insurance Advisor</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot">Live</div>
+    <button class="reset-btn" onclick="resetChat()">New Chat</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="chat-panel">
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">🛡️</div>
+        <h1>Find your <em>best health plan</em> in 30 seconds</h1>
+        <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors — then tells you exactly which plan saves you the most money.</p>
+        <div class="concepts">
+          <span class="concept active">Multi-Agent</span>
+          <span class="concept active">Agent Handoff</span>
+          <span class="concept active">mem0 Memory</span>
+          <span class="concept active">TTL Caching</span>
+          <span class="concept active">Human-in-Loop</span>
+          <span class="concept">Parallel Execution</span>
+        </div>
       </div>
     </div>
-    <div class="header-badge">● All APIs Free</div>
-  </header>
-
-  <div class="hero">
-    <h1>Find your <span>best health plan</span><br>in 30 seconds</h1>
-    <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors — then tells you exactly which plan saves you the most money.</p>
-    <div class="concepts">
-      <span class="concept-tag active">Multi-Agent Orchestration</span>
-      <span class="concept-tag active">Agent Handoff</span>
-      <span class="concept-tag active">mem0 Memory</span>
-      <span class="concept-tag active">TTL Caching</span>
-      <span class="concept-tag active">Human-in-Loop</span>
-      <span class="concept-tag">Parallel Execution</span>
+    <div class="msg typing" id="typing">
+      <div class="msg-avatar">🛡️</div>
+      <div class="typing-dots">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="input-row">
+        <textarea class="input-box" id="inputBox" placeholder="Type your message..." rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+      </div>
     </div>
   </div>
 
-  <div class="form-card">
-    <div class="form-title">Your Profile</div>
-    <div class="form-subtitle">All data stays local. Used only to find your best plan.</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>ZIP Code</label>
-        <input type="text" id="zip" placeholder="e.g. 10001" maxlength="5" placeholder="e.g. 77001">
-      </div>
-      <div class="form-group">
-        <label>Age</label>
-        <input type="number" id="age" placeholder="e.g. 34" min="18" max="64">
-      </div>
-      <div class="form-group">
-        <label>Annual Household Income ($)</label>
-        <input type="number" id="income" placeholder="e.g. 52000">
-      </div>
-      <div class="form-group">
-        <label>Household Size</label>
-        <input type="number" id="household" placeholder="e.g. 2" min="1" max="10">
-      </div>
-      <div class="form-group full">
-        <label>Medications (comma-separated)</label>
-        <input type="text" id="drugs" placeholder="e.g. Ozempic, Metformin, Lisinopril">
-      </div>
-      <div class="form-group full">
-        <label>Doctors to keep (comma-separated)</label>
-        <input type="text" id="doctors" placeholder="e.g. Dr. Sarah Chen, Dr. James Park">
-      </div>
+  <div class="results-panel" id="resultsPanel">
+    <div class="results-header">
+      <h2>Your Analysis</h2>
+      <button class="reset-btn" onclick="closeResults()">✕</button>
     </div>
-    <button class="btn" id="analyzeBtn" onclick="analyze()">
-      <span>🔍</span> Analyze My Coverage Options
-    </button>
+    <div class="results-body" id="resultsBody"></div>
   </div>
-
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <div style="font-family: var(--display); font-size: 18px; margin-bottom: 8px;">Analyzing your options...</div>
-    <div style="font-size: 13px; color: var(--text2);">Running 6 specialized agents in parallel</div>
-    <div class="agent-status" id="agentStatus"></div>
-  </div>
-
-  <div class="results" id="results"></div>
-
 </div>
 
 <script>
 const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
-let currentProfile = null;
+let started = false;
+let currentState = 'idle';
 
-const AGENT_MESSAGES = [
-  "Profile agent → routing by income bracket",
-  "Plan search agent → querying CMS Marketplace",
-  "Subsidy agent → calculating APTC credit",
-  "Drug check agent → checking formularies",
-  "Doctor check agent → NPPES NPI lookup",
-  "Risk & gaps agent → scanning coverage holes",
-  "Metal tier agent → Bronze/Silver/Gold analysis",
-  "Recommendation agent → synthesizing with AI",
-];
-
-function showAgentProgress() {
-  const el = document.getElementById('agentStatus');
-  el.innerHTML = '';
-  AGENT_MESSAGES.forEach((msg, i) => {
-    setTimeout(() => {
-      const row = document.createElement('div');
-      row.className = 'agent-row';
-      row.style.animationDelay = `${i * 0.1}s`;
-      row.innerHTML = `<div class="agent-dot"></div><span>${msg}</span>`;
-      el.appendChild(row);
-    }, i * 600);
-  });
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
-async function analyze() {
-  const zip = document.getElementById('zip').value.trim();
-  const age = parseInt(document.getElementById('age').value);
-  const income = parseFloat(document.getElementById('income').value);
-  const household = parseInt(document.getElementById('household').value);
-  const drugs = document.getElementById('drugs').value.split(',').map(s => s.trim()).filter(Boolean);
-  const doctors = document.getElementById('doctors').value.split(',').map(s => s.trim()).filter(Boolean);
-
-  if (!zip || !age || !income || !household) {
-    alert('Please fill in all required fields.');
-    return;
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
   }
+}
 
-  currentProfile = { user_id: USER_ID, zip_code: zip, age, income, household_size: household, drugs, doctors };
-
-  document.getElementById('analyzeBtn').disabled = true;
-  document.getElementById('loading').classList.add('active');
-  document.getElementById('results').classList.remove('active');
-  showAgentProgress();
-
+async function init() {
+  if (started) return;
+  started = true;
+  document.getElementById('welcome').style.display = 'none';
+  showTyping();
   try {
-    const res = await fetch('/api/analyze', {
+    const res = await fetch('/api/start', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentProfile)
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: USER_ID})
     });
     const data = await res.json();
-    renderResults(data);
-  } catch (e) {
-    // Demo mode fallback
-    renderResults(getMockResults(zip, age, income, household, drugs));
-  } finally {
-    document.getElementById('loading').classList.remove('active');
-    document.getElementById('analyzeBtn').disabled = false;
+    hideTyping();
+    if (data.returning_user) {
+      appendMsg('assistant', data.reply + '\n\n<span class="mem0-badge">🧠 mem0 — profile loaded from memory</span>');
+    } else {
+      appendMsg('assistant', data.reply);
+    }
+    currentState = data.state;
+  } catch(e) {
+    hideTyping();
+    appendMsg('assistant', "Welcome to CoverWise! To find your best health plan, what is your ZIP code?");
+    currentState = 'intake';
   }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('inputBox');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  if (!started) {
+    document.getElementById('welcome').style.display = 'none';
+    started = true;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+
+  appendMsg('user', msg);
+  showTyping();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: USER_ID, message: msg})
+    });
+    const data = await res.json();
+    hideTyping();
+    document.getElementById('sendBtn').disabled = false;
+
+    if (data.state === 'confirm' && data.profile) {
+      appendMsg('assistant', data.reply);
+      appendConfirmCard(data.profile);
+    } else if (data.state === 'complete' && data.analysis) {
+      appendMsg('assistant', formatReply(data.reply));
+      renderResults(data.analysis);
+    } else {
+      appendMsg('assistant', formatReply(data.reply));
+    }
+    currentState = data.state;
+  } catch(e) {
+    hideTyping();
+    document.getElementById('sendBtn').disabled = false;
+    appendMsg('assistant', 'Something went wrong. Please try again.');
+  }
+}
+
+function appendMsg(role, content) {
+  const messages = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.style.display = 'none';
+
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = role === 'assistant' ? '🛡️' : '👤';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.innerHTML = formatReply(content);
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function appendConfirmCard(profile) {
+  const messages = document.getElementById('messages');
+  const drugs = (profile.drugs || []).join(', ') || 'None';
+  const doctors = (profile.doctors || []).join(', ') || 'None';
+  const income = parseFloat(profile.income || 0).toLocaleString('en-US', {minimumFractionDigits:0});
+
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.style.maxWidth = '85%';
+  div.innerHTML = `
+    <div class="msg-avatar">🛡️</div>
+    <div class="confirm-card">
+      <h4>Profile Confirmation</h4>
+      <div class="confirm-item"><span class="confirm-label">ZIP Code</span><span class="confirm-val">${profile.zip_code}</span></div>
+      <div class="confirm-item"><span class="confirm-label">Age</span><span class="confirm-val">${profile.age}</span></div>
+      <div class="confirm-item"><span class="confirm-label">Annual Income</span><span class="confirm-val">$${income}</span></div>
+      <div class="confirm-item"><span class="confirm-label">Household Size</span><span class="confirm-val">${profile.household_size}</span></div>
+      <div class="confirm-item"><span class="confirm-label">Medications</span><span class="confirm-val">${drugs}</span></div>
+      <div class="confirm-item"><span class="confirm-label">Doctors</span><span class="confirm-val">${doctors}</span></div>
+      <div class="confirm-actions">
+        <button class="confirm-yes" onclick="confirmProfile()">✓ Looks correct — analyze my plans</button>
+        <button class="confirm-no" onclick="correctProfile()">✗ Something is wrong</button>
+      </div>
+    </div>`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+async function confirmProfile() {
+  document.querySelectorAll('.confirm-actions').forEach(el => el.style.display = 'none');
+  appendMsg('user', 'Yes, that looks correct');
+  showTyping();
+  document.getElementById('sendBtn').disabled = true;
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({user_id: USER_ID, message: 'yes'})
+    });
+    const data = await res.json();
+    hideTyping();
+    document.getElementById('sendBtn').disabled = false;
+    if (data.analysis) {
+      appendMsg('assistant', formatReply(data.reply));
+      renderResults(data.analysis);
+    } else {
+      appendMsg('assistant', formatReply(data.reply));
+    }
+    currentState = data.state;
+  } catch(e) {
+    hideTyping();
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+function correctProfile() {
+  document.querySelectorAll('.confirm-actions').forEach(el => el.style.display = 'none');
+  appendMsg('user', 'Something is wrong, let me correct it');
+  appendMsg('assistant', 'No problem — what would you like to correct?');
+  currentState = 'intake';
+}
+
+function formatReply(text) {
+  if (!text) return '';
+  return text
+    .replace(/\\\$/g, '$')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
+function showTyping() {
+  const t = document.getElementById('typing');
+  t.classList.add('active');
+  const messages = document.getElementById('messages');
+  messages.appendChild(t);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function hideTyping() {
+  document.getElementById('typing').classList.remove('active');
 }
 
 function renderResults(data) {
-  const el = document.getElementById('results');
-  const route = data.route || 'marketplace';
-  const subsidy = data.subsidy || {};
-  const plans = data.plans || [];
-  const drugs = data.drugs || {};
-  const risks = data.risks || {};
-  const cache = data.cache_stats || {};
-  const profile = data.profile || {};
-  const memoryUsed = data.memory_used;
+  const panel = document.getElementById('resultsPanel');
+  const body = document.getElementById('resultsBody');
+  body.innerHTML = '';
 
+  const route = data.route || 'marketplace';
   const routeLabels = {
-    state_exchange: '→ State-Based Exchange',
-    subsidized: '✓ Subsidy-Eligible Route',
-    medicaid: '✓ Medicaid Route — Free Coverage',
-    marketplace: '→ Full Marketplace Route',
-    full_price: '→ Full Price Route',
-    chip: '✓ CHIP Eligible'
+    subsidized: '✓ Subsidy-Eligible',
+    marketplace: '→ Full Marketplace',
+    medicaid: '✓ Medicaid Eligible',
+    state_exchange: '→ State Exchange',
   };
 
-  let html = '';
-
-  // Memory badge
-  if (memoryUsed) {
-    html += `<div class="memory-badge">🧠 mem0 — returning user profile loaded from memory</div>`;
-  }
-
   // Route badge
-  html += `<div class="route-badge ${route}">${routeLabels[route] || route} — ${profile.route_reason || ''}</div>`;
+  const badge = document.createElement('div');
+  badge.className = 'route-badge ' + route;
+  badge.textContent = routeLabels[route] || route;
+  body.appendChild(badge);
 
-  // State exchange route
+  // State exchange
   if (route === 'state_exchange' && data.state_exchange) {
     const ex = data.state_exchange;
-    html += `<div class="rec-card">
-      <h2>🏛️ Your State Has Its Own Exchange</h2>
-      <div class="rec-body" style="margin-bottom:20px">${ex.message}</div>
-      <a href="${ex.exchange_url}" target="_blank" style="
-        display: inline-flex; align-items: center; gap: 8px;
-        background: linear-gradient(135deg, var(--accent), var(--purple));
-        color: white; text-decoration: none; padding: 12px 24px;
-        border-radius: var(--radius); font-weight: 600; font-size: 14px;
-      ">
-        🔗 Visit ${ex.exchange_name} →
-      </a>
-      <div style="margin-top:16px; font-size:12px; color:var(--text3)">
-        You can still use CoverWise to estimate your subsidy and understand your options before visiting the exchange.
-      </div>
-    </div>`;
-    el.innerHTML = html;
-    el.classList.add('active');
+    const card = document.createElement('div');
+    card.className = 'state-exchange-card';
+    card.innerHTML = `
+      <h3>🏛️ ${ex.state} State Exchange</h3>
+      <p>${ex.message}</p>
+      <a href="${ex.exchange_url}" target="_blank" class="exchange-link">🔗 Visit ${ex.exchange_name} →</a>`;
+    body.appendChild(card);
+    panel.classList.add('open');
     return;
   }
 
-  // If Medicaid route, show simple card
+  // Medicaid
   if (route === 'medicaid' && data.medicaid) {
-    html += `<div class="rec-card">
-      <h2>🏥 Medicaid Eligible</h2>
-      <div class="rec-body">${data.medicaid.message}\n\n${data.medicaid.action}</div>
-    </div>`;
-    el.innerHTML = html;
-    el.classList.add('active');
+    const card = document.createElement('div');
+    card.className = 'state-exchange-card';
+    card.innerHTML = `<h3>🏥 Medicaid Eligible</h3><p>${data.medicaid.message}</p>`;
+    body.appendChild(card);
+    panel.classList.add('open');
     return;
   }
 
-  // Stats row
-  const monthlyCredit = subsidy.monthly_credit || 0;
-  const annualCredit = subsidy.annual_credit || 0;
-  const fpl = profile.fpl_percentage || 0;
-  const lowestPlan = plans.length ? Math.min(...plans.map(p => (p.premium || 0) - monthlyCredit)) : 0;
-
-  html += `<div class="stats-row">
-    <div class="stat-card">
-      <div class="stat-label">Monthly Subsidy</div>
-      <div class="stat-value green">$${monthlyCredit.toFixed(0)}</div>
+  // Stats
+  const subsidy = data.subsidy || {};
+  const monthly = subsidy.monthly_credit || 0;
+  const annual = subsidy.annual_credit || 0;
+  const fpl = data.fpl_percentage || 0;
+  const statsRow = document.createElement('div');
+  statsRow.className = 'result-stat-row';
+  statsRow.innerHTML = `
+    <div class="result-stat">
+      <div class="result-stat-label">Monthly Subsidy</div>
+      <div class="result-stat-val green">$${monthly.toFixed(0)}</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Annual Credit</div>
-      <div class="stat-value blue">$${annualCredit.toFixed(0)}</div>
+    <div class="result-stat">
+      <div class="result-stat-label">Annual Credit</div>
+      <div class="result-stat-val blue">$${annual.toFixed(0)}</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">FPL %</div>
-      <div class="stat-value yellow">${fpl}%</div>
+    <div class="result-stat">
+      <div class="result-stat-label">FPL %</div>
+      <div class="result-stat-val yellow">${fpl}%</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Best Plan From</div>
-      <div class="stat-value green">${Math.max(0, lowestPlan) === 0 ? "Subsidy covers premium" : "$" + Math.max(0, lowestPlan).toFixed(0) + "/mo"}</div>
-    </div>
-  </div>`;
+    <div class="result-stat">
+      <div class="result-stat-label">Best Plan From</div>
+      <div class="result-stat-val green">${monthly >= 189 ? 'Subsidy covers premium' : '$' + Math.max(0, (data.plans?.[0]?.premium || 0) - monthly).toFixed(0) + '/mo'}</div>
+    </div>`;
+  body.appendChild(statsRow);
 
   // Cache stats
-  if (cache.total_calls > 0) {
-    html += `<div class="cache-bar">
-      ⚡ Cache: <span>${cache.hits} hits</span> / ${cache.total_calls} calls — <span>${cache.hit_rate_pct}% hit rate</span>
-      &nbsp;|&nbsp; ${cache.cached_entries} entries stored &nbsp;|&nbsp; API calls saved: <span>${cache.hits}</span>
-    </div>`;
+  const cache = data.cache_stats;
+  if (cache && cache.total_calls > 0) {
+    const cacheBar = document.createElement('div');
+    cacheBar.className = 'cache-bar';
+    cacheBar.innerHTML = `⚡ Cache: <span>${cache.hits} hits</span> / ${cache.total_calls} calls — <span>${cache.hit_rate_pct}% hit rate</span> | <span>${cache.hits} API calls saved</span>`;
+    body.appendChild(cacheBar);
   }
 
-  // AI Recommendation
-  if (data.recommendation) {
-    html += `<div class="rec-card">
-      <h2>🤖 AI Recommendation</h2>
-      <div class="rec-body">${data.recommendation.replace(/\\\$/g, "$").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\*(.*?)\*/g, "<em>$1</em>").replace(/\n/g, "<br>")}</div>
-    </div>`;
-  }
-
-  // Plans grid — sorted by net premium ascending to match AI ranking
+  // Plans
+  const plans = data.plans || [];
   if (plans.length) {
-    const oopFactor = { Bronze: 0.4, Silver: 0.25, Gold: 0.15, Platinum: 0.05 };
-    const sortedPlans = plans; // No sorting — AI recommendation above is the authoritative ranking
-    html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:8px;">Available Plans</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Reference table — AI recommendation above is the authoritative ranking</div>`;
-    html += `<div class="plans-grid">`;
-    sortedPlans.slice(0, 3).forEach((plan, i) => {
-      const netPremium = Math.max(0, (plan.premium || 0) - monthlyCredit);
-      html += `<div class="plan-card">
+    const header = document.createElement('div');
+    header.style.cssText = 'font-family:"Instrument Serif",serif;font-size:16px;font-weight:400;margin-bottom:4px;';
+    header.textContent = 'Available Plans';
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-size:11px;color:var(--text3);font-family:"DM Mono",monospace;margin-bottom:12px;';
+    sub.textContent = 'Reference table — see AI recommendation in chat';
+    body.appendChild(header);
+    body.appendChild(sub);
+
+    plans.slice(0, 3).forEach(plan => {
+      const netPremium = Math.max(0, (plan.premium || 0) - monthly);
+      const card = document.createElement('div');
+      card.className = 'plan-card';
+      card.innerHTML = `
         <div class="plan-header">
           <span class="metal-badge ${plan.metal_level}">${plan.metal_level}</span>
-
         </div>
         <div class="plan-name">${plan.name}</div>
         <div class="plan-issuer">${plan.issuer}</div>
-        <div class="plan-price">$${netPremium.toFixed(0)}<span style="font-size:14px;color:var(--text3)">/mo</span></div>
-        <div class="plan-price-label">after $${monthlyCredit.toFixed(0)} subsidy</div>
+        <div class="plan-price">$${netPremium.toFixed(0)}<span style="font-size:13px;color:var(--text3)">/mo</span></div>
+        <div class="plan-price-sub">after $${monthly.toFixed(0)} subsidy</div>
         <div class="plan-details">
           <div class="plan-detail"><span class="plan-detail-label">Full Premium</span><span class="plan-detail-val">$${(plan.premium||0).toFixed(0)}/mo</span></div>
           <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
           <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
           <div class="plan-detail"><span class="plan-detail-label">Issuer</span><span class="plan-detail-val">${plan.issuer}</span></div>
-        </div>
-      </div>`;
+        </div>`;
+      body.appendChild(card);
     });
-    html += `</div>`;
   }
 
-  // Warnings & flags
-  const allWarnings = [
-    ...(drugs.warnings || []),
-    ...(risks.flags || []),
-    ...(subsidy.csr_note ? [subsidy.csr_note] : []),
-    ...(subsidy.subsidy_cliff_warning ? ['🚨 Subsidy cliff: Your income is near the 400% FPL cutoff — a small raise could cost thousands in lost subsidies.'] : [])
-  ];
-
+  // Warnings
+  const drugs = data.drugs || {};
+  const risks = data.risks || {};
+  const allWarnings = [...(drugs.warnings || []), ...(risks.flags || [])];
   if (allWarnings.length) {
-    html += `<div class="warnings-card">
-      <h2>⚠️ Flags & Warnings</h2>
-      ${allWarnings.map(w => `<div class="warning-item">${w}</div>`).join('')}
+    const wCard = document.createElement('div');
+    wCard.className = 'warnings-card';
+    wCard.innerHTML = '<h3>⚠️ Flags & Warnings</h3>' +
+      allWarnings.map(w => `<div class="warning-item">${w}</div>`).join('');
+    body.appendChild(wCard);
+  }
+
+  panel.classList.add('open');
+}
+
+function closeResults() {
+  document.getElementById('resultsPanel').classList.remove('open');
+}
+
+async function resetChat() {
+  await fetch('/api/reset', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({user_id: USER_ID})
+  });
+  document.getElementById('messages').innerHTML = '';
+  document.getElementById('resultsPanel').classList.remove('open');
+  started = false;
+  currentState = 'idle';
+  const welcome = document.createElement('div');
+  welcome.className = 'welcome';
+  welcome.id = 'welcome';
+  welcome.innerHTML = `
+    <div class="welcome-icon">🛡️</div>
+    <h1>Find your <em>best health plan</em> in 30 seconds</h1>
+    <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors.</p>
+    <div class="concepts">
+      <span class="concept active">Multi-Agent</span>
+      <span class="concept active">Agent Handoff</span>
+      <span class="concept active">mem0 Memory</span>
+      <span class="concept active">TTL Caching</span>
+      <span class="concept active">Human-in-Loop</span>
     </div>`;
-  }
-
-  // Drug results
-  if ((drugs.results || []).length) {
-    html += `<div class="rec-card">
-      <h2>💊 Drug Coverage</h2>`;
-    drugs.results.forEach(d => {
-      const tierColor = d.tier <= 2 ? 'var(--green)' : d.tier === 3 ? 'var(--yellow)' : 'var(--red)';
-      html += `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
-        <span style="color:var(--text)">${d.drug_name}</span>
-        <span>Tier <strong style="color:${tierColor}">${d.tier}</strong> — ~$${d.monthly_cost}/mo ${d.prior_auth ? '🔒 Prior Auth' : ''}</span>
-      </div>`;
-    });
-    html += `</div>`;
-  }
-
-  // Chat
-  html += `<div class="chat-card">
-    <h2>💬 Ask a follow-up question</h2>
-    <div class="chat-messages" id="chatMessages"></div>
-    <div class="chat-input-row">
-      <input class="chat-input" id="chatInput" placeholder="e.g. Which plan covers Ozempic best? Should I pick Silver or Bronze?" onkeydown="if(event.key==='Enter')sendChat()">
-      <button class="chat-btn" onclick="sendChat()">Ask</button>
-    </div>
-  </div>`;
-
-  el.innerHTML = html;
-  el.classList.add('active');
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('messages').appendChild(welcome);
 }
 
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const msg = input.value.trim();
-  if (!msg) return;
+// Start on first click or enter
+document.getElementById('inputBox').addEventListener('focus', () => {
+  if (!started) init();
+}, {once: true});
 
-  const messages = document.getElementById('chatMessages');
-  messages.innerHTML += `<div class="chat-msg user">${msg}</div>`;
-  input.value = '';
-
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: USER_ID, message: msg, profile: currentProfile })
-    });
-    const data = await res.json();
-    messages.innerHTML += `<div class="chat-msg ai">${data.reply}</div>`;
-    messages.scrollTop = messages.scrollHeight;
-  } catch (e) {
-    messages.innerHTML += `<div class="chat-msg ai">Sorry, I couldn't process that right now. Please try again.</div>`;
-  }
-}
-
-function getMockResults(zip, age, income, household, drugs) {
-  const fpl_pcts = { 1: 14580, 2: 19720, 3: 24860, 4: 30000 };
-  const base = fpl_pcts[Math.min(household, 4)] || 30000;
-  const fpl = Math.round((income / base) * 100 * 10) / 10;
-  const credit = fpl <= 400 ? Math.max(0, 450 - (income * 0.085 / 12)) : 0;
-
-  return {
-    route: fpl < 138 ? 'medicaid' : fpl <= 400 ? 'subsidized' : 'marketplace',
-    profile: { fpl_percentage: fpl, route: fpl <= 400 ? 'subsidized' : 'marketplace', route_reason: `At ${fpl}% FPL you qualify for ACA premium tax credits.` },
-    subsidy: { monthly_credit: Math.round(credit), annual_credit: Math.round(credit * 12), csr_eligible: fpl <= 250, eligible: fpl <= 400 },
-    plans: [
-      { id: 'P1', name: 'BlueCross Silver Select', metal_level: 'Silver', premium: 342, deductible: 3500, oop_max: 7000, issuer: 'BlueCross' },
-      { id: 'P2', name: 'Aetna Bronze Plus', metal_level: 'Bronze', premium: 218, deductible: 6000, oop_max: 8700, issuer: 'Aetna' },
-      { id: 'P3', name: 'UHC Gold Complete', metal_level: 'Gold', premium: 487, deductible: 1500, oop_max: 5000, issuer: 'UnitedHealth' },
-    ],
-    drugs: {
-      results: drugs.map(d => ({ drug_name: d, tier: d.toLowerCase().includes('ozempic') ? 4 : 2, monthly_cost: d.toLowerCase().includes('ozempic') ? 280 : 15, prior_auth: d.toLowerCase().includes('ozempic') })),
-      warnings: drugs.some(d => d.toLowerCase().includes('ozempic')) ? ['⚠️ Ozempic is Tier 4 on most plans — ~$280/month. Ask your doctor about Trulicity as a Tier 2 alternative.'] : []
-    },
-    risks: { flags: ['💡 Silver plans with CSR give you Gold-level benefits at Silver premiums.', '⚡ Set a calendar reminder for the Jan 15 open enrollment deadline.'] },
-    recommendation: `Based on your profile (${fpl}% FPL, income $${income.toLocaleString()}/year):\n\n1. BlueCross Silver Select — $${Math.max(0, 342 - Math.round(credit))}/month after your $${Math.round(credit)} subsidy. Best overall value with CSR benefits reducing your deductible.\n\n2. Aetna Bronze Plus — $${Math.max(0, 218 - Math.round(credit))}/month. Pair with HSA for tax savings if you're generally healthy.\n\n3. UHC Gold Complete — $${Math.max(0, 487 - Math.round(credit))}/month. Worth it if you expect $3,000+ in annual medical costs.\n\n⭐ Action: Enroll in the Silver plan to lock in CSR benefits — these are only available on Silver tier.`,
-    cache_stats: { hits: 7, misses: 3, total_calls: 10, hit_rate_pct: 70, cached_entries: 7 },
-    memory_used: false,
-  };
-}
+// Auto-start after short delay
+setTimeout(() => { if (!started) init(); }, 800);
 </script>
 </body>
 </html>
