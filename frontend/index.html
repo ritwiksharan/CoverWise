@@ -27,9 +27,9 @@
     --bronze: #a16207;
     --radius: 10px;
     --radius-lg: 16px;
-    --display: 'Playfair Display', serif;
-    --body: 'DM Sans', sans-serif;
-    --mono: 'DM Mono', monospace;
+    --display: Playfair Display, serif;
+    --body: DM Sans, sans-serif;
+    --mono: DM Mono, monospace;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -184,6 +184,7 @@
   .route-badge.medicaid { background: rgba(139,92,246,0.1); border: 1px solid var(--purple); color: var(--purple); }
   .route-badge.marketplace { background: rgba(59,130,246,0.1); border: 1px solid var(--accent); color: var(--accent2); }
   .route-badge.full_price { background: rgba(245,158,11,0.1); border: 1px solid var(--yellow); color: var(--yellow); }
+  .route-badge.state_exchange { background: rgba(139,92,246,0.1); border: 1px solid var(--purple); color: var(--purple); }
 
   /* Stats row */
   .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
@@ -321,19 +322,19 @@
     <div class="form-grid">
       <div class="form-group">
         <label>ZIP Code</label>
-        <input type="text" id="zip" placeholder="e.g. 10001" maxlength="5" value="10001">
+        <input type="text" id="zip" placeholder="e.g. 10001" maxlength="5" placeholder="e.g. 77001">
       </div>
       <div class="form-group">
         <label>Age</label>
-        <input type="number" id="age" placeholder="e.g. 34" min="18" max="64" value="34">
+        <input type="number" id="age" placeholder="e.g. 34" min="18" max="64">
       </div>
       <div class="form-group">
         <label>Annual Household Income ($)</label>
-        <input type="number" id="income" placeholder="e.g. 52000" value="52000">
+        <input type="number" id="income" placeholder="e.g. 52000">
       </div>
       <div class="form-group">
         <label>Household Size</label>
-        <input type="number" id="household" placeholder="e.g. 2" min="1" max="10" value="2">
+        <input type="number" id="household" placeholder="e.g. 2" min="1" max="10">
       </div>
       <div class="form-group full">
         <label>Medications (comma-separated)</label>
@@ -438,6 +439,7 @@ function renderResults(data) {
   const memoryUsed = data.memory_used;
 
   const routeLabels = {
+    state_exchange: '→ State-Based Exchange',
     subsidized: '✓ Subsidy-Eligible Route',
     medicaid: '✓ Medicaid Route — Free Coverage',
     marketplace: '→ Full Marketplace Route',
@@ -454,6 +456,29 @@ function renderResults(data) {
 
   // Route badge
   html += `<div class="route-badge ${route}">${routeLabels[route] || route} — ${profile.route_reason || ''}</div>`;
+
+  // State exchange route
+  if (route === 'state_exchange' && data.state_exchange) {
+    const ex = data.state_exchange;
+    html += `<div class="rec-card">
+      <h2>🏛️ Your State Has Its Own Exchange</h2>
+      <div class="rec-body" style="margin-bottom:20px">${ex.message}</div>
+      <a href="${ex.exchange_url}" target="_blank" style="
+        display: inline-flex; align-items: center; gap: 8px;
+        background: linear-gradient(135deg, var(--accent), var(--purple));
+        color: white; text-decoration: none; padding: 12px 24px;
+        border-radius: var(--radius); font-weight: 600; font-size: 14px;
+      ">
+        🔗 Visit ${ex.exchange_name} →
+      </a>
+      <div style="margin-top:16px; font-size:12px; color:var(--text3)">
+        You can still use CoverWise to estimate your subsidy and understand your options before visiting the exchange.
+      </div>
+    </div>`;
+    el.innerHTML = html;
+    el.classList.add('active');
+    return;
+  }
 
   // If Medicaid route, show simple card
   if (route === 'medicaid' && data.medicaid) {
@@ -486,8 +511,8 @@ function renderResults(data) {
       <div class="stat-value yellow">${fpl}%</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Lowest Net Premium</div>
-      <div class="stat-value green">$${Math.max(0, lowestPlan).toFixed(0)}/mo</div>
+      <div class="stat-label">Best Plan From</div>
+      <div class="stat-value green">${Math.max(0, lowestPlan) === 0 ? "Subsidy covers premium" : "$" + Math.max(0, lowestPlan).toFixed(0) + "/mo"}</div>
     </div>
   </div>`;
 
@@ -503,20 +528,23 @@ function renderResults(data) {
   if (data.recommendation) {
     html += `<div class="rec-card">
       <h2>🤖 AI Recommendation</h2>
-      <div class="rec-body">${data.recommendation.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
+      <div class="rec-body">${data.recommendation.replace(/\\\$/g, "$").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\*(.*?)\*/g, "<em>$1</em>").replace(/\n/g, "<br>")}</div>
     </div>`;
   }
 
-  // Plans grid
+  // Plans grid — sorted by net premium ascending to match AI ranking
   if (plans.length) {
-    html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:16px;">Available Plans</div>`;
+    const oopFactor = { Bronze: 0.4, Silver: 0.25, Gold: 0.15, Platinum: 0.05 };
+    const sortedPlans = plans; // No sorting — AI recommendation above is the authoritative ranking
+    html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:8px;">Available Plans</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Reference table — AI recommendation above is the authoritative ranking</div>`;
     html += `<div class="plans-grid">`;
-    plans.slice(0, 3).forEach((plan, i) => {
+    sortedPlans.slice(0, 3).forEach((plan, i) => {
       const netPremium = Math.max(0, (plan.premium || 0) - monthlyCredit);
-      html += `<div class="plan-card ${i === 0 ? 'best' : ''}">
+      html += `<div class="plan-card">
         <div class="plan-header">
           <span class="metal-badge ${plan.metal_level}">${plan.metal_level}</span>
-          ${i === 0 ? '<span class="best-tag">★ Best Match</span>' : ''}
+
         </div>
         <div class="plan-name">${plan.name}</div>
         <div class="plan-issuer">${plan.issuer}</div>
@@ -526,6 +554,7 @@ function renderResults(data) {
           <div class="plan-detail"><span class="plan-detail-label">Full Premium</span><span class="plan-detail-val">$${(plan.premium||0).toFixed(0)}/mo</span></div>
           <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
           <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
+          <div class="plan-detail"><span class="plan-detail-label">Issuer</span><span class="plan-detail-val">${plan.issuer}</span></div>
         </div>
       </div>`;
     });

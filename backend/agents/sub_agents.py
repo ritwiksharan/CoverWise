@@ -6,7 +6,8 @@ All run in parallel via asyncio, orchestrator merges results
 import asyncio
 from tools.gov_apis import (
     calculate_fpl_percentage, get_fpl_thresholds, search_plans,
-    check_drug_formulary, verify_doctor_npi, get_medicaid_threshold, get_fips_from_zip
+    check_drug_formulary, verify_doctor_npi, get_medicaid_threshold, get_fips_from_zip,
+    get_state_exchange
 )
 
 # ─── PROFILE AGENT ────────────────────────────────────────────────────────────
@@ -20,12 +21,15 @@ async def profile_agent(profile: dict) -> dict:
     
     route = determine_route(fpl_pct, medicaid_threshold)
     
+    state_exchange = get_state_exchange(profile["zip_code"])
+
     return {
         "agent": "profile",
         "fpl_percentage": fpl_pct,
         "fips": fips,
-        "route": route,
+        "route": "state_exchange" if state_exchange else route,
         "route_reason": get_route_reason(route, fpl_pct),
+        "state_exchange": state_exchange,
     }
 
 def determine_route(fpl_pct: float, medicaid_threshold: float) -> str:

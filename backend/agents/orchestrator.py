@@ -40,6 +40,18 @@ class OrchestratorAgent:
         route = profile_result["route"]
         fpl_pct = profile_result["fpl_percentage"]
 
+        # HANDOFF: State-based exchange route
+        state_exchange = profile_result.get("state_exchange")
+        if state_exchange:
+            return {
+                "route": "state_exchange",
+                "profile": profile_result,
+                "state_exchange": state_exchange,
+                "recommendation": state_exchange["message"],
+                "plans": [],
+                "cache_stats": get_cache_stats(),
+            }
+
         if route == "medicaid":
             medicaid_result = await medicaid_agent(profile, fpl_pct)
             store_user_profile(user_id, profile)
