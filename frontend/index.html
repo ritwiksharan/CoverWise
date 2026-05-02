@@ -795,29 +795,31 @@ function renderResults(data) {
 
   if (data.recommendation) {
     let rec = data.recommendation;
-    // Simple Markdown table parser
+    // Improved Markdown table parser
     if (rec.includes('|')) {
       const lines = rec.split('\n');
       let inTable = false;
-      let tableHtml = '<div class="table-container"><table>';
-      rec = lines.map(line => {
-        if (line.trim().startsWith('|')) {
-          if (!inTable) { inTable = true; return '<div class="table-container"><table>'; }
-          if (line.includes('---')) return ''; // Skip separator
-          const cells = line.split('|').filter(c => c.trim().length > 0);
-          return `<tr>${cells.map(c => `<td>${c.trim()}</td>`).join('')}</tr>`;
+      let newLines = [];
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('|')) {
+          if (!inTable) { inTable = true; newLines.push('<div class="table-container"><table>'); }
+          if (trimmed.includes('---')) return; // Skip separator
+          const cells = trimmed.split('|').filter((c, i, a) => i > 0 && i < a.length - 1);
+          newLines.push(`<tr>${cells.map(c => `<td>${c.trim()}</td>`).join('')}</tr>`);
         } else {
-          if (inTable) { inTable = false; return '</table></div>' + line; }
-          return line;
+          if (inTable) { inTable = false; newLines.push('</table></div>'); }
+          newLines.push(line);
         }
-      }).join('\n');
-      if (inTable) rec += '</table></div>';
+      });
+      if (inTable) newLines.push('</table></div>');
+      rec = newLines.join('\n');
     }
 
     html += `<div class="rec-card"><h2>🤖 AI Recommendation (ADK Expert)</h2>
       <div class="rec-body">${rec
-        .replace(/### (.*?)\n/g, '<h4 style="margin-top:16px;color:var(--accent2)">$1</h4>')
-        .replace(/## (.*?)\n/g, '<h3 style="margin-top:20px;color:var(--text)">$1</h3>')
+        .replace(/^### (.*?)$/gm, '<h4 style="margin-top:16px;color:var(--accent2)">$1</h4>')
+        .replace(/^## (.*?)$/gm, '<h3 style="margin-top:20px;color:var(--text)">$1</h3>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         .replace(/\n/g, '<br>')}</div></div>`;
