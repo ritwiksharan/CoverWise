@@ -127,8 +127,57 @@ def get_state_exchange(zip_code: str) -> Optional[dict]:
     return None
 
 
+# Known FIPS codes for common ZIPs - avoids extra API call
+KNOWN_FIPS = {
+    "77001": "48201", "77002": "48201", "77003": "48201", "77004": "48201",
+    "77005": "48201", "77006": "48201", "77007": "48201", "77008": "48201",
+    "33101": "12086", "33102": "12086", "33109": "12086", "33125": "12086",
+    "33128": "12086", "33130": "12086", "33131": "12086", "33132": "12086",
+    "60601": "17031", "60602": "17031", "60603": "17031", "60604": "17031",
+    "60605": "17031", "60606": "17031", "60607": "17031", "60608": "17031",
+    "85001": "04013", "85002": "04013", "85003": "04013", "85004": "04013",
+    "85006": "04013", "85007": "04013", "85008": "04013", "85009": "04013",
+    "30301": "13121", "30302": "13121", "30303": "13121", "30304": "13121",
+    "30305": "13121", "30306": "13121", "30307": "13121", "30308": "13121",
+    "75201": "48113", "75202": "48113", "75203": "48113", "75204": "48113",
+    "75205": "48113", "75206": "48113", "75207": "48113", "75208": "48113",
+    "78201": "48029", "78202": "48029", "78203": "48029", "78204": "48029",
+    "78205": "48029", "78206": "48029", "78207": "48029", "78208": "48029",
+    "32801": "12095", "32802": "12095", "32803": "12095", "32804": "12095",
+    "32805": "12095", "32806": "12095", "32807": "12095", "32808": "12095",
+    "98101": "53033", "98102": "53033", "98103": "53033", "98104": "53033",
+    "48201": "26163", "48202": "26163", "48203": "26163", "48204": "26163",
+    "44101": "39035", "44102": "39035", "44103": "39035", "44104": "39035",
+    "15201": "42003", "15202": "42003", "15203": "42003", "15204": "42003",
+    "28201": "37119", "28202": "37119", "28203": "37119", "28204": "37119",
+    "37201": "47037", "37202": "47037", "37203": "47037", "37204": "47037",
+    "89101": "32003", "89102": "32003", "89103": "32003", "89104": "32003",
+    "87101": "35001", "87102": "35001", "87103": "35001", "87104": "35001",
+    "80201": "08031", "80202": "08031", "80203": "08031", "80204": "08031",
+}
+
+def get_state_from_fips(fips: str) -> str:
+    """Get state code from county FIPS (first 2 digits)."""
+    state_map = {
+        "48": "TX", "12": "FL", "17": "IL", "04": "AZ", "13": "GA",
+        "53": "WA", "26": "MI", "39": "OH", "42": "PA", "37": "NC",
+        "47": "TN", "32": "NV", "35": "NM", "08": "CO", "22": "LA",
+        "28": "MS", "01": "AL", "05": "AR", "06": "CA", "08": "CO",
+        "09": "CT", "10": "DE", "11": "DC", "19": "IA", "20": "KS",
+        "21": "KY", "23": "ME", "24": "MD", "25": "MA", "27": "MN",
+        "29": "MO", "30": "MT", "31": "NE", "33": "NH", "34": "NJ",
+        "38": "ND", "41": "OR", "44": "RI", "45": "SC", "46": "SD",
+        "49": "UT", "50": "VT", "51": "VA", "54": "WV", "55": "WI",
+        "56": "WY",
+    }
+    return state_map.get(fips[:2], "TX")
+
+
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
-    """Convert ZIP to county FIPS - cached forever."""
+    """Convert ZIP to county FIPS - uses known map first, then CMS API."""
+    if zip_code in KNOWN_FIPS:
+        return KNOWN_FIPS[zip_code]
+
     def fetch():
         try:
             url = BASE_MARKETPLACE + "/counties/by/zip/" + zip_code + ".json"
@@ -175,7 +224,7 @@ def search_plans(zip_code: str, age: int, income: float, household_size: int) ->
     if not fips:
         return _mock_plans(zip_code, age, income)
 
-    state = get_state_from_zip(zip_code) or "TX"
+    state = get_state_from_fips(fips) if fips else get_state_from_zip(zip_code) or "TX"
 
     def fetch():
         try:
@@ -183,26 +232,55 @@ def search_plans(zip_code: str, age: int, income: float, household_size: int) ->
             payload = {
                 "household": {
                     "income": income,
-                    "people": [{"age": age, "aptc_eligible": True}]
+                    "people": [{"age": age, "aptc_eligible": True, "uses_tobacco": False}]
                 },
                 "market": "Individual",
                 "place": {"countyfips": fips, "state": state, "zipcode": zip_code},
-                "year": 2024
+                "year": 2024,
+                "limit": 10,
+                "offset": 0,
             }
             r = requests.post(url, json=payload, timeout=15)
+            if r.status_code != 200:
+                print("CMS API error: " + str(r.status_code) + " " + r.text[:200])
+                return _mock_plans(zip_code, age, income)
             data = r.json()
             raw_plans = data.get("plans", [])
+            if not raw_plans:
+                print("CMS API returned 0 plans for " + zip_code + " fips=" + str(fips))
+                return _mock_plans(zip_code, age, income)
             plans = []
             for p in raw_plans[:10]:
-                plans.append({
-                    "id": p.get("id", ""),
-                    "name": p.get("name", "Unknown Plan"),
-                    "metal_level": p.get("metal_level", "Silver"),
-                    "premium": float(p.get("premium", 0)),
-                    "deductible": float(p.get("deductibles", [{}])[0].get("amount", 0)) if p.get("deductibles") else 0,
-                    "oop_max": float(p.get("moops", [{}])[0].get("amount", 0)) if p.get("moops") else 0,
-                    "issuer": p.get("issuer", {}).get("name", "Unknown"),
-                })
+                try:
+                    deductible = 0
+                    for d in p.get("deductibles", []):
+                        if d.get("type") == "Medical EHB Deductible" and d.get("csr") == "No Cost Sharing":
+                            deductible = float(d.get("amount", 0))
+                            break
+                    if deductible == 0 and p.get("deductibles"):
+                        deductible = float(p["deductibles"][0].get("amount", 0))
+
+                    oop_max = 0
+                    for m in p.get("moops", []):
+                        if m.get("type") == "Maximum Out of Pocket Payment EHB":
+                            oop_max = float(m.get("amount", 0))
+                            break
+                    if oop_max == 0 and p.get("moops"):
+                        oop_max = float(p["moops"][0].get("amount", 0))
+
+                    plans.append({
+                        "id": p.get("id", ""),
+                        "name": p.get("name", "Unknown Plan"),
+                        "metal_level": p.get("metal_level", "Silver"),
+                        "premium": float(p.get("premium", 0)),
+                        "deductible": deductible,
+                        "oop_max": oop_max,
+                        "issuer": p.get("issuer", {}).get("name", "Unknown"),
+                    })
+                except Exception as pe:
+                    print("Plan parse error: " + str(pe))
+                    continue
+            print("CMS API returned " + str(len(plans)) + " real plans for " + zip_code)
             return plans if plans else _mock_plans(zip_code, age, income)
         except Exception as e:
             print("Plan search error: " + str(e))
