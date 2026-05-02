@@ -198,6 +198,11 @@
     border-radius:var(--radius-lg); padding:28px; margin-bottom:24px; }
   .rec-card h2 { font-family:var(--display); font-size:18px; font-weight:700;
     margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .table-container { overflow-x: auto; margin: 16px 0; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,0.05); }
+  .rec-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rec-body th, .rec-body td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .rec-body tr:last-child td { border-bottom: none; }
+  .rec-body tr:nth-child(even) { background: rgba(255,255,255,0.02); }
   .rec-body { font-size:14px; line-height:1.8; color:var(--text2); white-space:pre-wrap; }
 
   .plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px; }
@@ -743,8 +748,28 @@ function renderResults(data) {
   }
 
   if (data.recommendation) {
+    let rec = data.recommendation;
+    // Simple Markdown table parser
+    if (rec.includes('|')) {
+      const lines = rec.split('\n');
+      let inTable = false;
+      let tableHtml = '<div class="table-container"><table>';
+      rec = lines.map(line => {
+        if (line.trim().startsWith('|')) {
+          if (!inTable) { inTable = true; return '<div class="table-container"><table>'; }
+          if (line.includes('---')) return ''; // Skip separator
+          const cells = line.split('|').filter(c => c.trim().length > 0);
+          return `<tr>${cells.map(c => `<td>${c.trim()}</td>`).join('')}</tr>`;
+        } else {
+          if (inTable) { inTable = false; return '</table></div>' + line; }
+          return line;
+        }
+      }).join('\n');
+      if (inTable) rec += '</table></div>';
+    }
+
     html += `<div class="rec-card"><h2>🤖 AI Recommendation (ADK Expert)</h2>
-      <div class="rec-body">${data.recommendation
+      <div class="rec-body">${rec
         .replace(/### (.*?)\n/g, '<h4 style="margin-top:16px;color:var(--accent2)">$1</h4>')
         .replace(/## (.*?)\n/g, '<h3 style="margin-top:20px;color:var(--text)">$1</h3>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')

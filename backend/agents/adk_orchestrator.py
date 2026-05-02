@@ -29,40 +29,32 @@ REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
 APP_NAME = "CoverWise"
 
 ORCHESTRATOR_INSTRUCTION = """You are the CoverWise Expert Analysis Agent.
-Your goal is to provide a comprehensive, data-driven health insurance recommendation.
+Your goal is to provide a multi-pillar insurance analysis based on live tool data.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REPORT STRUCTURE — YOU MUST FOLLOW THIS
+ANALYSIS PILLARS — YOU MUST ANALYZE EACH
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. ## 🏆 Best Value Selection
-   Explicitly pick the #1 plan based on **True Annual Cost**. 
-   Show the math: (Net Premium * 12) + Est. OOP + Drug Costs = **$Total**.
-   Explain exactly why this plan won (e.g. "Lowest out-of-pocket exposure for a chronic user").
-
-2. ## 📊 Plan Comparison Table
-   Create a Markdown table comparing the Top 3 plans across these metrics:
-   | Plan | Net Premium | Deductible | True Annual Cost | Top Benefit |
-   |------|-------------|------------|------------------|-------------|
-   | ...  | ...         | ...        | ...              | ...         |
-
-3. ## 💰 Financial Optimization
-   Discuss the **APTC subsidy** and **CSR eligibility**. If the user is CSR-eligible, explain why Silver is superior to Gold/Bronze using specific dollar comparisons.
-4. ## 💊 Medication & Doctor Notes
-   Confirm coverage for each entered drug/doctor based on tool data.
-5. ## ⚠️ Local Market Alerts
-   Address HRSA shortages or SEP status.
+1. ## 🛡️ Financial Pillar (Risk vs Reward)
+   Analyze the trade-off between monthly premiums and maximum financial exposure (OOP Max). 
+   Use the math: (Net Premium * 12) + Est. OOP = **True Cost**.
+2. ## 💊 Medical Pillar (Benefit Depth)
+   Analyze drug coverage. Rank plans by how many medications are 'Tier 1' vs 'Tier 3' or 'Not Covered'.
+3. ## 🏥 Network Pillar (Provider Access)
+   Report on doctor network status. If a doctor is out-of-network, flag the cost risk.
+4. ## 🌐 Market Pillar (Local Context)
+   Address SEP eligibility and HRSA shortage scores.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RULES
+REPORT STRUCTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Use Markdown tables for plan comparisons.
-• Use bold text for all dollar amounts.
-• Never invent data. If a tool returns "Unknown", say "Data not provided by insurer".
-• Maintain a professional, expert advisor tone.
+• Use Markdown tables for Plan Comparisons.
+• Use bullet points for Drug/Doctor findings.
+• Final Verdict: Clear, quantitative reasoning for the #1 pick.
+
+Never invent data. If a tool returns "Unknown", say "Data not provided by insurer".
 """
 
 async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
-# ... (rest of function unchanged, just need to keep the code structure)
     """
     Run all domain-specific tools in parallel waves and return the consolidated data.
     """
@@ -175,21 +167,18 @@ class ADKOrchestrator:
         user_id = profile.get("user_id", "anonymous")
         session_id = user_id
         
-        # Create or Get session
         try:
             await self._session_service.create_session(
                 app_name=APP_NAME, user_id=user_id, session_id=session_id,
                 state={"profile": profile}
             )
         except Exception:
-            # If session exists, update profile
             session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
             session.state["profile"] = profile
 
         memory_context = build_memory_context(user_id) or ""
         prompt_text = (
-            f"Mandatory: Call 'run_full_analysis_parallel' to retrieve the current insurance data. "
-            f"After receiving the data, generate the recommendation report using the required structure. "
+            f"Perform a multi-pillar insurance analysis. "
             f"User Profile: {profile}. Context: {memory_context}"
         )
         msg = Content(role="user", parts=[Part(text=prompt_text)])
@@ -202,11 +191,8 @@ class ADKOrchestrator:
                         if hasattr(part, "text") and part.text:
                             reply += part.text
         
-        # Get the consolidated data from state
         session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
         data = session.state.get("analysis_data", {})
-        
-        # Store in Mem0
         store_user_profile(user_id, profile)
         
         return {
@@ -229,17 +215,30 @@ class ADKOrchestrator:
         self._ensure_runner()
         session_id = user_id
         
-        # Ensure session exists. Runner.run_async will handle it if create_session is called correctly.
         try:
             await self._session_service.create_session(
                 app_name=APP_NAME, user_id=user_id, session_id=session_id,
                 state={"profile": profile or {}}
             )
         except Exception:
-            pass # Already exists
+            pass
 
-        memory_context = build_memory_context(user_id) or ""
-        msg = Content(role="user", parts=[Part(text=message)])
+        # Retrieve context from previous analysis
+        session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
+        analysis_data = session.state.get("analysis_data", {})
+        user_profile = session.state.get("profile", profile or {})
+
+        context_msg = (
+            f"SYSTEM CONTEXT: You are helping a user with their insurance choices. "
+            f"User Profile: {user_profile}. "
+            f"Analysis Data Summary: {len(analysis_data.get('plans', []))} plans found. "
+            f"Subsidy: ${analysis_data.get('subsidy', {}).get('monthly_aptc', 0)}/mo. "
+            f"Drugs checked: {len(analysis_data.get('medication_coverage', {}).get('resolved_drugs', []))}. "
+            f"Market Risks: {analysis_data.get('market_risks', {})}. "
+            f"Please answer based on this specific data."
+        )
+
+        msg = Content(role="user", parts=[Part(text=f"{context_msg}\n\nUSER MESSAGE: {message}")])
         
         reply = ""
         async for event in self._runner.run_async(user_id=user_id, session_id=session_id, new_message=msg):
@@ -249,4 +248,4 @@ class ADKOrchestrator:
                         if hasattr(part, "text") and part.text:
                             reply += part.text
         
-        return {"reply": reply, "memory_used": bool(memory_context)}
+        return {"reply": reply, "memory_used": False}
