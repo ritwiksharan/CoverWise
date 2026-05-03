@@ -265,6 +265,20 @@
     padding:3px 8px; border-radius:20px;
     background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.3);
   }
+  .premium-badge {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; font-family:'DM Mono',monospace; color:var(--yellow);
+    padding:3px 8px; border-radius:20px;
+    background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3);
+  }
+  .hsa-card {
+    background:rgba(34,211,160,0.05); border:1px solid rgba(34,211,160,0.2);
+    border-radius:var(--r); padding:14px; margin-top:8px;
+  }
+  .hsa-card h4 { font-size:12px; font-family:'DM Mono',monospace; color:var(--green); margin-bottom:8px; text-transform:uppercase; }
+  .hsa-table { width:100%; font-size:11px; border-collapse:collapse; }
+  .hsa-table th { color:var(--text3); padding:4px 6px; text-align:left; border-bottom:1px solid var(--border); }
+  .hsa-table td { color:var(--text2); padding:4px 6px; font-family:'DM Mono',monospace; border-bottom:1px solid var(--border); }
 
   /* WELCOME */
   .welcome {
@@ -546,6 +560,14 @@ function renderResults(data) {
     state_exchange: '→ State Exchange',
   };
 
+  // Premium badge
+  if (data.analysis && data.analysis.is_premium) {
+    const pb = document.createElement('div');
+    pb.className = 'premium-badge';
+    pb.textContent = '★ Premium Analysis — HSA Forecasts + 3x Detail';
+    body.appendChild(pb);
+  }
+
   // Route badge
   const badge = document.createElement('div');
   badge.className = 'route-badge ' + route;
@@ -640,7 +662,18 @@ function renderResults(data) {
           <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
           <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
           <div class="plan-detail"><span class="plan-detail-label">Issuer</span><span class="plan-detail-val">${plan.issuer}</span></div>
-        </div>`;
+          ${plan.true_annual_cost ? `<div class="plan-detail"><span class="plan-detail-label">True Annual Cost</span><span class="plan-detail-val" style="color:var(--accent2)">$${plan.true_annual_cost.toLocaleString()}</span></div>` : ""}
+          ${plan.pa_warning ? `<div class="plan-detail"><span class="plan-detail-label" style="color:var(--red)">⚠️ Prior Auth Required</span><span class="plan-detail-val" style="color:var(--red)">Yes</span></div>` : ""}
+        </div>
+        ${plan.hsa_eligible && plan.hsa_5yr_growth ? `
+        <div class="hsa-card">
+          <h4>💰 HSA Wealth Forecast</h4>
+          <table class="hsa-table">
+            <tr><th>Year</th><th>Contributions</th><th>Balance (7% growth)</th></tr>
+            ${[1,2,3,4,5].map(y => `<tr><td>Year ${y}</td><td>$${(4150*y).toLocaleString()}</td><td>$${Math.round(4150*y*Math.pow(1.07,y/2)).toLocaleString()}</td></tr>`).join("")}
+          </table>
+          <div style="font-size:11px;color:var(--green);margin-top:6px;">Est. 5-year balance: $${plan.hsa_5yr_growth.toLocaleString()} | Tax savings: $${plan.hsa_tax_savings?.toLocaleString()}/yr</div>
+        </div>` : ""}`;
       body.appendChild(card);
     });
   }

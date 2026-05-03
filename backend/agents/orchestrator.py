@@ -25,10 +25,14 @@ model = GenerativeModel("gemini-2.0-flash")
 INTAKE_SYSTEM = (
     "You are CoverWise, a friendly AI health insurance advisor. "
     "Collect the user profile through natural conversation. "
-    "You need: zip_code, age, annual_income, household_size, medications (optional), doctors (optional). "
+    "You need: zip_code, age, annual_income, household_size, medications (optional), doctors (optional), "
+    "utilization (rarely/sometimes/frequently/chronic - how often they use healthcare), "
+    "tobacco_use (yes/no), is_premium (yes/no - premium users get deeper HSA forecasts and 3x more detail). "
     "Ask one question at a time. Be warm and conversational. Keep responses to 1-2 sentences. "
-    'Once you have all required fields output EXACTLY this on its own line with no extra text: '
-    'PROFILE_COMPLETE:{"zip_code":"77001","age":34,"income":52000,"household_size":2,"drugs":[],"doctors":[]}'
+    "Ask utilization as: How often do you typically use healthcare? (rarely/sometimes/frequently/chronic) "
+    "Ask premium as: Would you like our premium deep analysis with HSA wealth forecasts and detailed benefit comparisons? (free/premium) "
+    "Once you have all required fields output EXACTLY this on its own line with no extra text: "
+    'PROFILE_COMPLETE:{"zip_code":"77001","age":34,"income":52000,"household_size":2,"drugs":[],"doctors":[],"utilization":"sometimes","tobacco_use":false,"is_premium":false}'
 )
 
 ADVISOR_SYSTEM = (
@@ -212,6 +216,7 @@ class ConversationalOrchestrator:
 
     async def _run_analysis(self, user_id, profile):
         from tools.gov_apis import get_state_exchange, calculate_fpl_percentage
+
         fpl_pct = calculate_fpl_percentage(float(profile["income"]), int(profile["household_size"]))
         state_exchange = get_state_exchange(str(profile["zip_code"]))
         if state_exchange:
@@ -219,6 +224,19 @@ class ConversationalOrchestrator:
         if fpl_pct < 138:
             med = await medicaid_agent(profile, fpl_pct)
             return {"route": "medicaid", "fpl_percentage": fpl_pct, "medicaid": med, "recommendation": med["message"], "plans": []}
+
+        # Try ADK orchestrator first (available on Cloud Run)
+        try:
+            from agents.adk_orchestrator import ADKOrchestrator, ADK_AVAILABLE
+            if ADK_AVAILABLE:
+                adk = ADKOrchestrator()
+                result = await adk.analyze(profile)
+                result["fpl_percentage"] = fpl_pct
+                return result
+        except Exception as e:
+            print("ADK analysis failed, falling back to basic: " + str(e))
+
+        # Fallback: basic parallel sub-agents
         wave1 = await asyncio.gather(subsidy_agent(profile, fpl_pct), plan_search_agent(profile), doctor_check_agent(profile))
         subsidy, plan_result, doctors = wave1
         plans = plan_result.get("plans", [])
@@ -264,7 +282,8 @@ class ConversationalOrchestrator:
             "Warnings: " + drug_warnings,
             "Risk flags:\n" + flags,
             "Metal rec: " + (metal.get("recommendation") or ""),
-            "Give top 3 plans ranked by TRUE annual cost. For each: net premium after subsidy, why it ranks here, drug note, one warning. Under 400 words.",
+            "Give top 3 plans ranked by TRUE annual cost. For each: net premium after subsidy, why it ranks here, drug note, one warning." +
+            (" Include a 5-Year HSA Wealth Forecast table for any HSA-eligible plans. Provide breakeven analysis between top plans. Explain CSR variants in detail. Give 3x more detail on financial tradeoffs. No word limit." if profile.get("is_premium") else " Under 400 words."),
         ]
         prompt = "\n".join(str(p) for p in parts)
         try:
