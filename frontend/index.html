@@ -449,27 +449,6 @@
     </div>
   </div>
 
-  <!-- ── HEALTH INSURANCE Q&A (always visible) ── -->
-  <div class="feature-card" id="insuranceQAStandalone" style="border-color:var(--purple)">
-    <h2>🤖 Ask Me Anything About Health Insurance</h2>
-    <p>Powered by live CMS Marketplace data, RxNorm drug database, and Gemini AI. Ask about plan costs, drug coverage, subsidies, enrollment, or any health insurance question.</p>
-    <div class="search-history" style="margin-bottom:12px">
-      <span class="history-chip" onclick="askInsurance(this.textContent)">What is a deductible vs out-of-pocket max?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">How does the APTC subsidy work?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">HMO vs PPO — which should I choose?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Is Ozempic covered on Silver plans?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">What qualifies for a Special Enrollment Period?</span>
-    </div>
-    <div class="specialist-input-row">
-      <input class="specialist-input" id="insuranceQAInputStandalone"
-        placeholder="e.g. What is CSR? How much subsidy do I get at $45k income? Is Metformin covered?"
-        onkeydown="if(event.key==='Enter')runInsuranceQA('standalone')">
-      <button class="specialist-btn" id="insuranceQABtnStandalone"
-        onclick="runInsuranceQA('standalone')"
-        style="background:linear-gradient(135deg,var(--purple),var(--accent))">Ask AI</button>
-    </div>
-    <div id="insuranceQAResultsStandalone"></div>
-  </div>
 
   <!-- ── LOADING ── -->
   <div class="loading" id="loading">
@@ -606,11 +585,6 @@
     border-radius:8px; background:var(--bg3); margin-top:10px;
     display:inline-block; }
   .qa-data-toggle:hover { border-color:var(--accent); color:var(--accent2); }
-  .qa-raw-data { background:var(--bg); border:1px solid var(--border);
-    border-radius:var(--radius); padding:12px; margin-top:8px;
-    font-family:var(--mono); font-size:11px; color:var(--text3);
-    max-height:300px; overflow-y:auto; white-space:pre-wrap;
-    word-break:break-all; display:none; }
 </style>
 
 <script>
@@ -865,6 +839,16 @@ async function doAnalyze(profile) {
 }
 
 // ── RENDER RESULTS ────────────────────────────────────────────────────────────
+function formatInline(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*\*\*/g, '') // Remove quadruple asterisks
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
+}
+
 function renderMarkdown(text) {
   if (!text) return '';
   const lines = text.split('\n');
@@ -882,7 +866,7 @@ function renderMarkdown(text) {
       if (/^\|[\s\-:|]+\|$/.test(trimmed)) continue;
       const cells = trimmed.split('|').filter((_, i, a) => i > 0 && i < a.length - 1);
       const tag = isFirstRow ? 'th' : 'td';
-      out.push(`<tr>${cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('')}</tr>`);
+      out.push(`<tr>${cells.map(c => `<${tag}>${formatInline(c.trim())}</${tag}>`).join('')}</tr>`);
       continue;
     }
 
@@ -891,25 +875,20 @@ function renderMarkdown(text) {
 
     // Headings (order: most # first)
     if (/^#{4,}\s/.test(trimmed)) {
-      out.push(`<h5 style="margin-top:14px;color:var(--text2);font-size:14px">${trimmed.replace(/^#+\s*/, '')}</h5>`);
+      out.push(`<h5 style="margin-top:14px;color:var(--text2);font-size:14px">${formatInline(trimmed.replace(/^#+\s*/, ''))}</h5>`);
     } else if (trimmed.startsWith('### ')) {
-      out.push(`<h4 style="margin-top:16px;color:var(--accent2)">${trimmed.slice(4)}</h4>`);
+      out.push(`<h4 style="margin-top:16px;color:var(--accent2)">${formatInline(trimmed.slice(4))}</h4>`);
     } else if (trimmed.startsWith('## ')) {
-      out.push(`<h3 style="margin-top:20px;color:var(--text)">${trimmed.slice(3)}</h3>`);
+      out.push(`<h3 style="margin-top:20px;color:var(--text)">${formatInline(trimmed.slice(3))}</h3>`);
     } else if (trimmed.startsWith('# ')) {
-      out.push(`<h2 style="margin-top:24px;color:var(--text)">${trimmed.slice(2)}</h2>`);
+      out.push(`<h2 style="margin-top:24px;color:var(--text)">${formatInline(trimmed.slice(2))}</h2>`);
     } else if (/^[-─═]{3,}$/.test(trimmed)) {
       // Horizontal rule: --- or ─── or ═══
       out.push('<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
     } else if (trimmed === '') {
       out.push('<br>');
     } else {
-      // Inline formatting then emit as a line
-      let line = rawLine
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
-      out.push(line + '<br>');
+      out.push(formatInline(rawLine) + '<br>');
     }
   }
   if (inTable) out.push('</table></div>');
@@ -1248,7 +1227,7 @@ function renderResults(data) {
         <option value="job_loss">Lost job-based coverage (layoff, quit, COBRA expiring)</option>
         <option value="marriage">Got married</option>
         <option value="divorce">Got divorced or legally separated</option>
-        <option value="birth">Had or adopted a baby or child</option>
+
         <option value="moved">Moved to a new ZIP code or state</option>
         <option value="citizenship">Gained US citizenship or lawful presence</option>
         <option value="income_change">Income changed significantly</option>
@@ -1269,29 +1248,6 @@ function renderResults(data) {
       <button class="specialist-btn" id="hospitalBtn" onclick="runHospitalSearch()">Check Hospital</button>
     </div>
     <div id="hospitalResults"></div>
-  </div>`;
-
-  // ── FEATURE: HEALTH INSURANCE Q&A (in results) ───────────────────────────────
-  html += `
-  <div class="feature-card" id="insuranceQASection" style="border-color:var(--purple)">
-    <h2>🤖 Ask Me Anything About Health Insurance</h2>
-    <p>Powered by live CMS Marketplace data, RxNorm drug database, and Gemini AI. Ask about your plans, drug coverage, subsidies, enrollment windows, or any health insurance question.</p>
-    <div class="search-history" style="margin-bottom:12px">
-      <span class="history-chip" onclick="askInsurance(this.textContent)">What is a deductible vs out-of-pocket max?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">How does the APTC subsidy work?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">HMO vs PPO — which should I choose?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Is Ozempic covered on Silver plans?</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">What qualifies for a Special Enrollment Period?</span>
-    </div>
-    <div class="specialist-input-row">
-      <input class="specialist-input" id="insuranceQAInput"
-        placeholder="e.g. What is CSR? How much subsidy at $45k income? Is Metformin tier 1 or 2?"
-        onkeydown="if(event.key==='Enter')runInsuranceQA('results')">
-      <button class="specialist-btn" id="insuranceQABtn"
-        onclick="runInsuranceQA('results')"
-        style="background:linear-gradient(135deg,var(--purple),var(--accent))">Ask AI</button>
-    </div>
-    <div id="insuranceQAResults"></div>
   </div>`;
 
   // ── DOCTOR RESULTS ──────────────────────────────────────────────────────────
@@ -1733,7 +1689,7 @@ function showSepGuide() {
     job_loss: { title:'Lost Job-Based Coverage', deadline:'60 days from loss of coverage', warning:'COBRA and SEP deadlines overlap — if you elect COBRA then drop it, you may not get another SEP.', steps:['Get a letter from employer confirming your coverage end date.','Go to healthcare.gov (or your state exchange) immediately.','Elect COBRA to keep your plan at up to 102% of full premium — compare vs marketplace subsidized plans, which are often cheaper.','Apply on healthcare.gov with proof of prior coverage loss.'] },
     marriage: { title:'Got Married', deadline:'60 days from date of marriage', steps:['You and your spouse can enroll together on a marketplace plan.','Compare: marketplace family plan vs each on your own employer plan.','Bring your marriage certificate.','Update household size — this changes FPL% and subsidy amount significantly.'] },
     divorce: { title:'Got Divorced / Legally Separated', deadline:'60 days from finalization', steps:['If on a spouse\'s plan, you now need your own coverage.','Go to healthcare.gov to enroll in a marketplace plan.','Update your household size — subsidy may change significantly.','Children may qualify for CHIP if income drops after divorce.'] },
-    birth: { title:'Had or Adopted a Baby / Child', deadline:'60 days from birth or adoption', steps:['Your newborn can be added to your existing plan retroactively from birth — not just the SEP window.','Update household size on healthcare.gov — affects subsidy and Medicaid thresholds.','Consider upgrading to Gold or Silver if high infant care is expected.'] },
+
     moved: { title:'Moved to a New ZIP Code or State', deadline:'60 days from your move date', steps:['Plans are location-specific — your old plan may not be valid at the new address.','Re-enter your new address on healthcare.gov to see new available plans.','Your new state may have different Medicaid expansion and exchange rules.','If moving to CA, NY, WA, CO, or another state-exchange state, go to that state\'s site directly.'] },
     citizenship: { title:'Gained US Citizenship or Lawful Presence', deadline:'60 days from when you gained status', steps:['Now eligible for marketplace plans and APTC subsidies.','Bring documentation of your immigration or citizenship status.','If income is low, check Medicaid eligibility first.'] },
     income_change: { title:'Income Changed Significantly', deadline:'Report anytime during the year', warning:'Failing to report income changes can result in large APTC repayments at tax time.', steps:['Go to healthcare.gov → "Report a Life Change" immediately.','If income dropped below 100% FPL, check Medicaid eligibility.','If income rose above 400% FPL, your subsidy ends — plan for the cost increase.','Use the Income Simulator (above) to preview your new subsidy amount.'] },
@@ -1850,110 +1806,6 @@ function getMockResults(profile) {
     cache_stats:{hits:0,misses:0,total_calls:0,hit_rate_pct:0,cached_entries:0},
     memory_used:false,
   };
-}
-
-// ── INSURANCE Q&A ────────────────────────────────────────────────────────────
-
-/**
- * Pre-fill the Q&A input and fire the query.
- * Works for both the standalone section and the results section.
- * @param {string} q - Question text
- */
-function askInsurance(q) {
-  // Prefer the results-section input if visible, otherwise the standalone one
-  const resultsInput = document.getElementById('insuranceQAInput');
-  if (resultsInput) {
-    resultsInput.value = q;
-    runInsuranceQA('results');
-  } else {
-    const standaloneInput = document.getElementById('insuranceQAInputStandalone');
-    if (standaloneInput) {
-      standaloneInput.value = q;
-      runInsuranceQA('standalone');
-    }
-  }
-}
-
-/**
- * Execute an insurance Q&A query.
- * @param {'results'|'standalone'} context - Which section is calling
- */
-async function runInsuranceQA(context) {
-  const inputId = context === 'results' ? 'insuranceQAInput' : 'insuranceQAInputStandalone';
-  const btnId   = context === 'results' ? 'insuranceQABtn'   : 'insuranceQABtnStandalone';
-  const resId   = context === 'results' ? 'insuranceQAResults' : 'insuranceQAResultsStandalone';
-
-  const input   = document.getElementById(inputId);
-  const btn     = document.getElementById(btnId);
-  const resultsEl = document.getElementById(resId);
-
-  if (!input || !btn || !resultsEl) return;
-
-  const question = input.value.trim();
-  if (!question) return;
-
-  // Loading state
-  btn.disabled = true;
-  btn.textContent = 'Thinking…';
-  resultsEl.innerHTML = `
-    <div class="intake-msg agent" style="margin-top:12px">
-      <div class="typing-dots"><span></span><span></span><span></span></div>
-      <span style="margin-left:8px;font-size:12px;color:var(--text3)">Querying FEMA & SEC EDGAR…</span>
-    </div>`;
-
-  try {
-    const res = await fetch('/api/insurance-qa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: USER_ID,
-        question: question,
-        is_premium: isPremium,
-      }),
-    });
-
-    const data = await res.json();
-    const answer = data.answer || 'No answer returned.';
-    const toolUsed = data.tool_used || 'unknown';
-    const rawData = data.data || {};
-
-    const toolLabels = {
-      query_flood_claims:       'FEMA NFIP Claims',
-      query_insurer_financials: 'SEC EDGAR Financials',
-      risk_score:               'ZIP Flood Risk Score',
-      compare_insurers:         'Insurer Comparison',
-      error:                    'Error',
-    };
-    const toolLabel = toolLabels[toolUsed] || toolUsed;
-
-    const rawId = 'qa_raw_' + Date.now();
-    resultsEl.innerHTML = `
-      <div style="margin-top:12px">
-        <div class="qa-tool-badge">⚙ Tool: ${toolLabel}</div>
-        <div class="qa-answer">${renderMarkdown(answer)}</div>
-        <span class="qa-data-toggle" onclick="toggleQARaw('${rawId}')">Show raw data ▾</span>
-        <pre class="qa-raw-data" id="${rawId}">${JSON.stringify(rawData, null, 2)}</pre>
-      </div>`;
-
-    input.value = '';
-  } catch (e) {
-    resultsEl.innerHTML = `
-      <div style="color:var(--red);font-size:13px;margin-top:10px">
-        Error contacting server: ${e.message || e}. Please try again.
-      </div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Ask AI';
-  }
-}
-
-function toggleQARaw(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const isVisible = el.style.display === 'block';
-  el.style.display = isVisible ? 'none' : 'block';
-  const toggle = el.previousElementSibling;
-  if (toggle) toggle.textContent = isVisible ? 'Show raw data ▾' : 'Hide raw data ▴';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────

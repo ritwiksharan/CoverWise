@@ -14,98 +14,8 @@ CMS_MARKETPLACE_KEY = os.getenv("CMS_API_KEY", "")
 BASE_MARKETPLACE = "https://marketplace.api.healthcare.gov/api/v1"
 BASE_ORDER_REFERRING = "https://data.cms.gov/data-api/v1/dataset/c99b5865-1119-4436-bb80-c5af2773ea1f/data"
 
-# States that run their own exchanges - not on federal CMS API
-STATE_EXCHANGES = {
-    "NY": {"name": "NY State of Health", "url": "https://nystateofhealth.ny.gov"},
-    "CA": {"name": "Covered California", "url": "https://www.coveredca.com"},
-    "WA": {"name": "Washington Healthplanfinder", "url": "https://www.wahealthplanfinder.org"},
-    "CO": {"name": "Connect for Health Colorado", "url": "https://connectforhealthco.com"},
-    "CT": {"name": "Access Health CT", "url": "https://www.accesshealthct.com"},
-    "ID": {"name": "Your Health Idaho", "url": "https://www.yourhealthidaho.org"},
-    "KY": {"name": "Kynect", "url": "https://kynect.ky.gov"},
-    "ME": {"name": "CoverME.gov", "url": "https://coverme.gov"},
-    "MD": {"name": "Maryland Health Connection", "url": "https://www.marylandhealthconnection.gov"},
-    "MA": {"name": "Massachusetts Health Connector", "url": "https://www.mahealthconnector.org"},
-    "MN": {"name": "MNsure", "url": "https://www.mnsure.org"},
-    "NV": {"name": "Nevada Health Link", "url": "https://www.nevadahealthlink.com"},
-    "NJ": {"name": "Get Covered NJ", "url": "https://www.getcoverednj.com"},
-    "NM": {"name": "beWellnm", "url": "https://www.bewellnm.com"},
-    "PA": {"name": "Pennie", "url": "https://pennie.com"},
-    "RI": {"name": "HealthSource RI", "url": "https://healthsourceri.com"},
-    "VT": {"name": "Vermont Health Connect", "url": "https://vermonthealthconnect.gov"},
-    "VA": {"name": "Marketplace Virginia", "url": "https://www.marketplace.virginia.gov"},
-    "DC": {"name": "DC Health Link", "url": "https://dchealthlink.com"},
-}
-
-# ZIP code prefix to state mapping (first 3 digits)
-ZIP_STATE_MAP = {
-    "100": "NY", "101": "NY", "102": "NY", "103": "NY", "104": "NY",
-    "105": "NY", "106": "NY", "107": "NY", "108": "NY", "109": "NY",
-    "110": "NY", "111": "NY", "112": "NY", "113": "NY", "114": "NY",
-    "115": "NY", "116": "NY", "117": "NY", "118": "NY", "119": "NY",
-    "120": "NY", "121": "NY", "122": "NY", "123": "NY", "124": "NY",
-    "125": "NY", "126": "NY", "127": "NY", "128": "NY", "129": "NY",
-    "900": "CA", "901": "CA", "902": "CA", "903": "CA", "904": "CA",
-    "905": "CA", "906": "CA", "907": "CA", "908": "CA", "910": "CA",
-    "911": "CA", "912": "CA", "913": "CA", "914": "CA", "915": "CA",
-    "916": "CA", "917": "CA", "918": "CA", "919": "CA", "920": "CA",
-    "921": "CA", "922": "CA", "923": "CA", "924": "CA", "925": "CA",
-    "926": "CA", "927": "CA", "928": "CA", "930": "CA", "931": "CA",
-    "932": "CA", "933": "CA", "934": "CA", "935": "CA", "936": "CA",
-    "937": "CA", "938": "CA", "939": "CA", "940": "CA", "941": "CA",
-    "942": "CA", "943": "CA", "944": "CA", "945": "CA", "946": "CA",
-    "947": "CA", "948": "CA", "949": "CA", "950": "CA", "951": "CA",
-    "980": "WA", "981": "WA", "982": "WA", "983": "WA", "984": "WA",
-    "985": "WA", "986": "WA", "988": "WA", "989": "WA",
-    "800": "CO", "801": "CO", "802": "CO", "803": "CO", "804": "CO",
-    "805": "CO", "806": "CO", "807": "CO", "808": "CO", "809": "CO",
-    "810": "CO", "811": "CO", "812": "CO", "813": "CO", "814": "CO",
-    "815": "CO", "816": "CO",
-    "060": "CT", "061": "CT", "062": "CT", "063": "CT", "064": "CT",
-    "065": "CT", "066": "CT", "067": "CT", "068": "CT", "069": "CT",
-    "020": "MA", "021": "MA", "022": "MA", "023": "MA", "024": "MA",
-    "025": "MA", "026": "MA", "027": "MA",
-    "070": "NJ", "071": "NJ", "072": "NJ", "073": "NJ", "074": "NJ",
-    "075": "NJ", "076": "NJ", "077": "NJ", "078": "NJ", "079": "NJ",
-    "080": "NJ", "081": "NJ", "082": "NJ", "083": "NJ", "084": "NJ",
-    "085": "NJ", "086": "NJ", "087": "NJ", "088": "NJ", "089": "NJ",
-    "170": "PA", "171": "PA", "172": "PA", "173": "PA", "174": "PA",
-    "175": "PA", "176": "PA", "177": "PA", "178": "PA", "179": "PA",
-    "180": "PA", "181": "PA", "182": "PA", "183": "PA", "184": "PA",
-    "185": "PA", "186": "PA", "187": "PA", "188": "PA", "189": "PA",
-    "190": "PA", "191": "PA", "192": "PA", "193": "PA", "194": "PA",
-    "195": "PA", "196": "PA",
-    "200": "DC", "202": "DC", "203": "DC", "204": "DC", "205": "DC",
-    "550": "MN", "551": "MN", "553": "MN", "554": "MN", "555": "MN",
-    "556": "MN", "557": "MN", "558": "MN", "559": "MN", "560": "MN",
-    "561": "MN", "562": "MN", "563": "MN", "564": "MN", "565": "MN",
-    "566": "MN", "567": "MN",
-    "890": "NV", "891": "NV", "893": "NV", "894": "NV", "895": "NV",
-    "897": "NV", "898": "NV",
-    "870": "NM", "871": "NM", "872": "NM", "873": "NM", "874": "NM",
-    "875": "NM", "877": "NM", "878": "NM", "879": "NM", "880": "NM",
-    "881": "NM", "882": "NM", "883": "NM", "884": "NM",
-    "028": "RI", "029": "RI",
-    "050": "VT", "051": "VT", "052": "VT", "053": "VT", "054": "VT",
-    "056": "VT", "057": "VT", "058": "VT", "059": "VT",
-    "220": "VA", "221": "VA", "222": "VA", "223": "VA", "224": "VA",
-    "225": "VA", "226": "VA", "227": "VA", "228": "VA", "229": "VA",
-    "230": "VA", "231": "VA", "232": "VA", "233": "VA", "234": "VA",
-    "235": "VA", "236": "VA", "237": "VA", "238": "VA", "239": "VA",
-    "240": "VA", "241": "VA", "242": "VA", "243": "VA", "244": "VA",
-    "245": "VA", "246": "VA",
-    "836": "ID", "837": "ID", "838": "ID",
-    "400": "KY", "401": "KY", "402": "KY", "403": "KY", "404": "KY",
-    "405": "KY", "406": "KY", "407": "KY", "408": "KY", "409": "KY",
-    "410": "KY", "411": "KY", "412": "KY", "413": "KY", "414": "KY",
-    "415": "KY", "416": "KY", "417": "KY", "418": "KY",
-    "039": "ME", "040": "ME", "041": "ME", "042": "ME", "043": "ME",
-    "044": "ME", "045": "ME", "046": "ME", "047": "ME", "048": "ME",
-    "049": "ME",
-    "206": "MD", "207": "MD", "208": "MD", "209": "MD", "210": "MD",
-    "211": "MD", "212": "MD", "214": "MD", "215": "MD", "216": "MD",
-    "217": "MD", "218": "MD", "219": "MD",
-}
+# ZIP code prefix to state mapping (first 3 digits) - Placeholder for federal states
+ZIP_STATE_MAP = {}
 
 # Known FIPS codes for common ZIPs - avoids extra API call
 KNOWN_FIPS = {
@@ -166,18 +76,7 @@ def get_state_from_zip(zip_code: str) -> Optional[str]:
 
 
 def get_state_exchange(zip_code: str) -> Optional[dict]:
-    state = get_state_from_zip(zip_code)
-    if state and state in STATE_EXCHANGES:
-        exchange = STATE_EXCHANGES[state]
-        return {
-            "state": state,
-            "exchange_name": exchange["name"],
-            "exchange_url": exchange["url"],
-            "message": (
-                f"Your state ({state}) runs its own health exchange. "
-                f"Visit {exchange['name']} at {exchange['url']} to see plans available in your area."
-            ),
-        }
+    return None
     return None
 
 
@@ -1055,6 +954,72 @@ def get_plan_specialist_copay(plan_id: str, benefit_type: str = "Specialist Visi
         return {"found": False, "source": "fallback"}
 
     return cached_call("plan_benefit", {"plan_id": plan_id, "benefit": benefit_type.lower()}, fetch)
+
+
+# CMS benefit name → drug tier key mapping (ordered: most-specific first)
+_DRUG_BENEFIT_TIER_MAP = [
+    ("preferred generic",       ["PREFERRED-GENERIC"]),
+    ("non-preferred generic",   ["NON-PREFERRED-GENERIC"]),
+    ("generic",                 ["GENERIC", "PREFERRED-GENERIC"]),
+    ("preferred brand",         ["PREFERRED-BRAND", "BRAND"]),
+    ("non-preferred brand",     ["NON-PREFERRED-BRAND"]),
+    ("preferred specialty",     ["PREFERRED-SPECIALTY"]),
+    ("non-preferred specialty", ["NON-PREFERRED-SPECIALTY"]),
+    ("specialty",               ["SPECIALTY", "PREFERRED-SPECIALTY", "NON-PREFERRED-SPECIALTY"]),
+]
+
+
+def get_plan_drug_copays(plan_id: str, year: int = 2024) -> dict:
+    """
+    Fetch per-tier drug cost-sharing from the CMS plan benefits endpoint.
+    Returns {TIER_KEY: {copay_amount, coinsurance_rate, display_string, after_deductible}}.
+    Most-specific keyword matched first (preferred generic beats generic).
+    """
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/plans/{plan_id}",
+                params=_params({"year": year}),
+                timeout=12,
+            )
+            if r.status_code != 200:
+                return {}
+            data = r.json()
+            plan_data = data.get("plan", data)
+            benefits = plan_data.get("benefits", [])
+            tier_copays: dict = {}
+            for benefit in benefits:
+                bname = benefit.get("name", "").lower()
+                if "drug" not in bname and "formulary" not in bname:
+                    continue
+                matching_tiers = None
+                for keyword, tiers in _DRUG_BENEFIT_TIER_MAP:
+                    if keyword in bname:
+                        matching_tiers = tiers
+                        break
+                if not matching_tiers:
+                    continue
+                cost_sharings = benefit.get("cost_sharings", [])
+                in_net = next(
+                    (c for c in cost_sharings if "In" in c.get("network_tier", "In-Network")),
+                    cost_sharings[0] if cost_sharings else {},
+                )
+                display = in_net.get("display_string", "")
+                entry = {
+                    "copay_amount":     float(in_net.get("copay_amount") or 0),
+                    "coinsurance_rate": float(in_net.get("coinsurance_rate") or 0),
+                    "display_string":   display,
+                    "after_deductible": "deductible" in display.lower(),
+                }
+                for tier_key in matching_tiers:
+                    if tier_key not in tier_copays:   # don't overwrite more-specific match
+                        tier_copays[tier_key] = entry
+            return tier_copays
+        except Exception as e:
+            print(f"Plan drug copays fetch error for {plan_id}: {e}")
+            return {}
+
+    return cached_call("plan_drug_copays", {"plan_id": plan_id, "year": year}, fetch)
 
 
 # Metal-level copay estimates (fallback when CMS benefits API has no data)

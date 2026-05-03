@@ -41,6 +41,7 @@ from agents.tools import (
     get_location_info, get_subsidy_estimate, find_plans,
     check_medication_coverage, verify_doctors, get_market_risks
 )
+from tools.gov_apis import get_plan_drug_copays
 from memory.mem0_client import build_memory_context, store_user_profile
 from cache.cache_manager import get_cache_stats
 
@@ -99,6 +100,39 @@ STRUCTURE & FORMATTING
 • Tone: Objective, mathematical, and authoritative.
 """
 
+# ── Drug cost helpers ────────────────────────────────────────────────────────
+# Typical monthly list price per tier — used when plan charges coinsurance, not a flat copay.
+_TIER_LIST_PRICE = {
+    "GENERIC": 50,          "PREFERRED-GENERIC": 40,     "NON-PREFERRED-GENERIC": 80,
+    "PREFERRED-BRAND": 300, "BRAND": 300,                "NON-PREFERRED-BRAND": 500,
+    "SPECIALTY": 3000,      "PREFERRED-SPECIALTY": 2500, "NON-PREFERRED-SPECIALTY": 4000,
+}
+
+# Last-resort fallback when CMS benefits API returns nothing for a plan
+_TIER_COPAY_FALLBACK = {
+    "PREFERRED-GENERIC": 10, "GENERIC": 10,     "NON-PREFERRED-GENERIC": 20,
+    "PREFERRED-BRAND": 45,   "BRAND": 45,       "NON-PREFERRED-BRAND": 75,
+    "SPECIALTY": 100,        "PREFERRED-SPECIALTY": 100, "NON-PREFERRED-SPECIALTY": 150,
+}
+
+
+def _calc_drug_monthly_cost(tier: str, plan_copay_data: dict):
+    """Return (monthly_cost_float, display_str) using real CMS cost-sharing or fallback."""
+    info = plan_copay_data.get(tier, {})
+    if info:
+        copay = float(info.get("copay_amount") or 0)
+        coins = float(info.get("coinsurance_rate") or 0)
+        display = info.get("display_string", "")
+        if copay > 0:
+            return copay, display or f"${copay:.0f}/mo copay"
+        if coins > 0:
+            monthly = round(_TIER_LIST_PRICE.get(tier, 200) * coins, 2)
+            return monthly, display or f"{coins*100:.0f}% coinsurance (~${monthly:.0f}/mo)"
+        return 0.0, display or "$0 (covered)"
+    cost = float(_TIER_COPAY_FALLBACK.get(tier, 50))
+    return cost, f"~${cost:.0f}/mo (estimated)"
+
+
 # ── PHASE 1: Data Collection ──────────────────────────────────────────────────
 
 async def _collect_analysis_data(profile: dict) -> dict:
@@ -154,20 +188,13 @@ async def _collect_analysis_data(profile: dict) -> dict:
         rxcui = str(c.get("rxcui", ""))
         drug_coverage_map.setdefault(pid, {})[rxcui] = c
 
-    # Per-drug monthly copay lookup (tier → est. copay)
-    TIER_COPAY = {
-        "PREFERRED-GENERIC": 10, "GENERIC": 10,
-        "NON-PREFERRED-GENERIC": 20,
-        "PREFERRED-BRAND": 45, "BRAND": 45,
-        "NON-PREFERRED-BRAND": 75,
-        "PREFERRED-SPECIALTY": 100, "SPECIALTY": 100,
-        "NON-PREFERRED-SPECIALTY": 150,
-    }
-
     processed_plans = []
     for p in plans[:plan_limit]:
         pid = p.get("id")
         net_monthly = max(0, p.get("premium", 0) - monthly_credit)
+
+        # Real drug cost-sharing from CMS plan benefits endpoint
+        plan_copay_data = get_plan_drug_copays(pid)
 
         est_drugs   = 0
         pa_required = False
@@ -177,26 +204,30 @@ async def _collect_analysis_data(profile: dict) -> dict:
             rxcui = str(d.get("rxcui", ""))
             cov   = drug_coverage_map.get(pid, {}).get(rxcui, {})
             tier  = (cov.get("drug_tier") or "").upper()
-            copay = TIER_COPAY.get(tier, 50) if cov.get("coverage") == "Covered" else 0
 
             if cov.get("coverage") == "Covered":
+                copay, copay_display = _calc_drug_monthly_cost(tier, plan_copay_data)
                 est_drugs += copay * 12
                 if cov.get("prior_authorization"):
                     pa_required = True
             elif cov.get("coverage") == "NotCovered":
-                est_drugs += 500 * 12   # full out-of-pocket estimate
+                copay, copay_display = 500.0, "$500/mo (OOP — not covered)"
+                est_drugs += 500 * 12
+            else:
+                copay, copay_display = 0.0, "—"
 
             drug_detail.append({
-                "name":       d.get("name", ""),
-                "rxcui":      rxcui,
-                "coverage":   cov.get("coverage", "DataNotProvided"),
-                "tier":       tier or "—",
-                "pa":         bool(cov.get("prior_authorization")),
-                "st":         bool(cov.get("step_therapy")),
-                "ql":         bool(cov.get("quantity_limit")),
-                "copay_mo":   copay,
-                "source":     cov.get("source", "cms"),
-                "note":       cov.get("note", ""),
+                "name":          d.get("name", ""),
+                "rxcui":         rxcui,
+                "coverage":      cov.get("coverage", "DataNotProvided"),
+                "tier":          tier or "—",
+                "pa":            bool(cov.get("prior_authorization")),
+                "st":            bool(cov.get("step_therapy")),
+                "ql":            bool(cov.get("quantity_limit")),
+                "copay_mo":      copay,
+                "copay_display": copay_display,
+                "source":        cov.get("source", "cms"),
+                "note":          cov.get("note", ""),
             })
 
         est_oop = p.get("deductible", 0) * oop_factor
@@ -300,7 +331,7 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
 
 # ── PHASE 2: Synthesis Prompt Builder ────────────────────────────────────────
 
-def _build_synthesis_prompt(profile: dict, data: dict) -> str:
+def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> str:
     """
     Convert structured analysis data into a rich, human-readable document
     that Gemini can reason over using ORCHESTRATOR_INSTRUCTION.
@@ -424,9 +455,11 @@ def _build_synthesis_prompt(profile: dict, data: dict) -> str:
             pa    = "YES ⚠" if cov.get("prior_authorization") else "no"
             st    = "YES" if cov.get("step_therapy") else "no"
             ql    = "YES" if cov.get("quantity_limit") else "no"
-            # find pre-computed copay from plan drug_detail
             dd    = next((x for x in p.get("drug_detail",[]) if x.get("rxcui") == rxcui), {})
-            copay = f"${dd.get('copay_mo',0)}/mo" if dd.get("coverage") == "Covered" else "—"
+            if dd.get("coverage") == "Covered":
+                copay = dd.get("copay_display") or f"${dd.get('copay_mo',0):.0f}/mo"
+            else:
+                copay = "—"
             src   = "RAG✓" if cov.get("source") == "rag_formulary" else "CMS"
             note  = " ⚡proxy" if cov.get("note") else ""
             lines.append(f"| {pname} | {cov.get('coverage','—')} | {tier} | {pa} | {st} | {ql} | {copay} | {src}{note} |")
@@ -471,6 +504,28 @@ def _build_synthesis_prompt(profile: dict, data: dict) -> str:
     for f in flags:
         lines.append(f"  {f}")
 
+    # ── LLM Ranking Agent output ─────────────────────────────────────────────
+    if ranking:
+        import json as _json
+        lines += ["", "LLM RANKING AGENT OUTPUT (Phase 1.5 — use this as your starting ranking)", "─" * 40]
+        top = ranking.get("top_recommendation", {})
+        if top:
+            lines.append(f"Top Recommendation: {top.get('plan_name','')} — {top.get('rationale','')}")
+        csr_ov = ranking.get("csr_override")
+        if csr_ov:
+            lines.append(f"CSR Override: {csr_ov}")
+        ev = ranking.get("expected_value_ranking", [])
+        if ev:
+            lines += ["Expected Value Ranking:", "| Rank | Plan | EV Score | Key Reason |", "|------|------|---------|-----------|"]
+            for r in ev:
+                lines.append(f"| {r.get('rank')} | {r.get('plan_name','')} | ${r.get('ev_score',0):,.0f} | {r.get('key_reason','')} |")
+        rf = ranking.get("red_flags", [])
+        if rf:
+            lines.append("Red Flags from Ranking Agent:")
+            for flag in rf:
+                lines.append(f"  • {flag}")
+        lines.append("")
+
     # ── Synthesis instruction ────────────────────────────────────────────────
     lines += [
         "",
@@ -478,18 +533,121 @@ def _build_synthesis_prompt(profile: dict, data: dict) -> str:
         "SYNTHESIS INSTRUCTION",
         "═" * 60,
         "Using ALL data above, produce a complete multi-pillar recommendation.",
+        "The LLM Ranking Agent (Phase 1.5) has already computed the plan ordering — use it as your starting point.",
         "Follow the exact structure in your system instructions:",
         "  1. Financial Pillar — use the scenario tables and breakeven data above.",
-        "  2. Medical Pillar — cite exact tiers, PA requirements, and copay estimates from the drug tables.",
+        "  2. Medical Pillar — cite exact tiers, PA requirements, and real copay strings from the drug tables.",
         "  3. Network Pillar — confirm each doctor's verified name, NPI, MIPS score, and network status.",
         "  4. Market Pillar — cite HRSA and enrollment deadline from the data above.",
-        "Then apply the Agentic Plan Ranking Protocol (Healthy / Clinical / Worst-Case scenarios).",
+        "Apply the Agentic Plan Ranking Protocol (Healthy / Clinical / Worst-Case scenarios) — confirm or adjust the LLM agent's ranking with your deeper analysis.",
         f"{'Apply PREMIUM TIER RULES: 3× detail, HSA wealth forecast, side-by-side benefit table.' if is_prem else 'Free tier: focus on the top 3 plans.'}",
         "Do NOT invent any numbers. Every dollar figure must match the tables above exactly.",
         "═" * 60,
     ]
 
     return "\n".join(lines)
+
+
+# ── PHASE 1.5: LLM Ranking Agent ─────────────────────────────────────────────
+
+_RANKING_INSTRUCTION = """You are a health insurance plan ranking agent.
+Given structured plan data, rank the plans using a Simulated Year model:
+  1. Healthy Year — rank by lowest annual premium only
+  2. Clinical Year — rank by lowest (premium + estimated drug costs)
+  3. Worst Case   — rank by lowest (premium + OOP max)
+  4. Expected Value — weighted average (0.3 * healthy + 0.4 * clinical + 0.3 * worst)
+
+Return ONLY valid JSON matching exactly:
+{
+  "rankings": {
+    "healthy_year":   [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}],
+    "clinical_year":  [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}],
+    "worst_case":     [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}]
+  },
+  "expected_value_ranking": [{"rank": 1, "plan_id": "...", "plan_name": "...", "ev_score": 0, "key_reason": "..."}],
+  "top_recommendation": {"plan_id": "...", "plan_name": "...", "rationale": "..."},
+  "csr_override": null,
+  "red_flags": []
+}
+If a Silver plan has CSR, set csr_override to its plan_id and explain the deductible drop in rationale.
+red_flags: list any PA/step-therapy issues, OOP cliff risks, or doctor network warnings."""
+
+
+async def _rank_plans_with_llm(data: dict) -> dict:
+    """
+    Phase 1.5 — LLM Ranking Agent.
+    Calls Gemini with structured JSON output to rank plans across all three scenarios.
+    Returns ranking dict embedded in the synthesis prompt so Phase 2 sees reasoned ordering.
+    """
+    if not VERTEXAI_AVAILABLE:
+        return {}
+
+    plans  = data.get("plans", [])
+    subsidy = data.get("subsidy", {})
+    flags  = data.get("risk_flags", [])
+
+    # Build compact input for the ranking agent
+    plan_rows = []
+    for p in plans:
+        row = {
+            "plan_id":      p.get("id"),
+            "plan_name":    p.get("name"),
+            "metal_level":  p.get("metal_level"),
+            "plan_type":    p.get("type"),
+            "net_monthly":  p.get("premium_w_credit", 0),
+            "annual_premium": p.get("scenario_healthy", 0),
+            "clinical_year":  p.get("scenario_clinical", 0),
+            "worst_case":     p.get("scenario_worst", 0),
+            "deductible":     p.get("deductible", 0),
+            "oop_max":        p.get("oop_max", 0),
+            "hsa_eligible":   p.get("hsa_eligible", False),
+            "est_drug_cost_annual": p.get("est_annual_drug_cost", 0),
+            "pa_warning":     p.get("pa_warning", False),
+            "drug_tiers":     [
+                {"name": dd.get("name"), "tier": dd.get("tier"), "pa": dd.get("pa"),
+                 "st": dd.get("st"), "copay_display": dd.get("copay_display")}
+                for dd in p.get("drug_detail", [])
+            ],
+        }
+        plan_rows.append(row)
+
+    ranking_input = {
+        "plans": plan_rows,
+        "csr_variant": subsidy.get("csr_variant"),
+        "monthly_aptc": subsidy.get("monthly_aptc", 0),
+        "is_medicaid_eligible": subsidy.get("is_medicaid_eligible", False),
+        "risk_flags": flags[:5],
+    }
+
+    import json
+    ranking_prompt = (
+        "Rank the following insurance plans across all three Simulated Year scenarios.\n\n"
+        f"INPUT DATA:\n{json.dumps(ranking_input, indent=2)}\n\n"
+        "Return ONLY the JSON specified in your system instructions. No extra text."
+    )
+
+    try:
+        vertexai.init(project=PROJECT_ID, location=REGION)
+        model = GenerativeModel(
+            "gemini-2.0-flash-001",
+            system_instruction=_RANKING_INSTRUCTION,
+            generation_config=GenerationConfig(
+                max_output_tokens=2048,
+                temperature=0.1,
+                response_mime_type="application/json",
+            ),
+        )
+        response = await asyncio.to_thread(model.generate_content, ranking_prompt)
+        text = response.text.strip()
+        # Strip markdown fences if present
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text)
+    except Exception as e:
+        print(f"[ranking_agent] LLM ranking failed: {e}")
+        return {}
 
 
 # ── PHASE 2: Gemini Direct Synthesis ─────────────────────────────────────────
@@ -543,18 +701,28 @@ class ADKOrchestrator:
 
     async def analyze(self, profile: dict) -> dict:
         """
-        Two-phase pipeline:
-          Phase 1 — collect all data (parallel waves, no AI)
-          Phase 2 — build rich synthesis prompt, call Gemini with ORCHESTRATOR_INSTRUCTION
+        Three-phase agentic pipeline:
+          Phase 1   — parallel data collection (Python, no AI — 3 waves of API calls)
+          Phase 1.5 — LLM Ranking Agent (Gemini JSON mode: ranks plans by scenario)
+          Phase 2   — LLM Synthesis Agent (Gemini text: full 4-pillar recommendation)
         """
         user_id = profile.get("user_id", "anonymous")
         print(f"[orchestrator] analyze() start — user={user_id} ZIP={profile.get('zip_code')}")
 
         # ── Phase 1: data collection ─────────────────────────────────────────
         data = await _collect_analysis_data(profile)
+        print(f"[orchestrator] Phase 1 complete — {len(data.get('plans',[]))} plans collected")
+
+        # ── Phase 1.5: LLM Ranking Agent ─────────────────────────────────────
+        ranking = await _rank_plans_with_llm(data)
+        if ranking:
+            data["llm_ranking"] = ranking
+            print(f"[orchestrator] Phase 1.5 complete — LLM ranking: {ranking.get('top_recommendation',{}).get('plan_name','n/a')}")
+        else:
+            print("[orchestrator] Phase 1.5 skipped (Vertex AI unavailable or ranking failed)")
 
         # ── Phase 2: synthesis ───────────────────────────────────────────────
-        synthesis_prompt = _build_synthesis_prompt(profile, data)
+        synthesis_prompt = _build_synthesis_prompt(profile, data, ranking=ranking or None)
         print(f"[orchestrator] synthesis prompt built ({len(synthesis_prompt)} chars) — calling Gemini")
         recommendation = await _synthesize_with_gemini(synthesis_prompt, data.get("is_premium", False))
         print(f"[orchestrator] recommendation received ({len(recommendation)} chars)")
@@ -589,6 +757,7 @@ class ADKOrchestrator:
                 "route_reason":   "Based on income and location analysis.",
             },
             "recommendation":       recommendation,
+            "llm_ranking":          data.get("llm_ranking", {}),
             "synthesis_prompt_len": len(synthesis_prompt),
             "plans":     data.get("plans", []),
             "subsidy":   sub,
