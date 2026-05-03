@@ -318,6 +318,26 @@ class ADKOrchestrator:
         analysis_data = session.state.get("analysis_data", {})
         user_profile = session.state.get("profile", profile or {})
 
+        # If no prior analysis in session but profile is available, fetch plans + subsidy on the fly
+        if not analysis_data.get("plans") and (profile or user_profile):
+            p = profile or user_profile
+            zip_code = p.get("zip_code", "")
+            age = p.get("age", 30)
+            income = p.get("income", 40000)
+            household_size = p.get("household_size", 1)
+            tobacco_use = p.get("tobacco_use", False)
+            if zip_code:
+                try:
+                    live_sub, live_plans = await asyncio.gather(
+                        asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
+                        asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use),
+                    )
+                    analysis_data = {"subsidy": live_sub, "plans": live_plans[:10],
+                                     "medication_coverage": {}, "doctor_verification": {},
+                                     "risk_flags": [], "recommendation": ""}
+                except Exception:
+                    pass
+
         # Build rich context from analysis data
         subsidy = analysis_data.get("subsidy", {})
         plans = analysis_data.get("plans", [])

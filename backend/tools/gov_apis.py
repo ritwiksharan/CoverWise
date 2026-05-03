@@ -1091,20 +1091,38 @@ def search_hospitals(name: str, state: str, city: str = "") -> list:
     """Search NPPES for hospitals / facilities (NPI-2) by name."""
     def fetch():
         try:
-            params = {
-                "version": "2.1",
-                "enumeration_type": "NPI-2",
-                "organization_name": name,
-                "limit": 5,
-            }
-            if state:
-                params["state"] = state.upper()
-            if city:
-                params["city"] = city.upper()
-            r = requests.get(NPPES_API, params=params, timeout=12)
-            results = r.json().get("results", [])
+            # Try progressively looser queries: exact → first 2 words → first word
+            queries = [name]
+            words = name.split()
+            if len(words) >= 3:
+                queries.append(" ".join(words[:2]))
+            if len(words) >= 2:
+                queries.append(words[0])
+
+            results = []
+            for q in queries:
+                params = {
+                    "version": "2.1",
+                    "enumeration_type": "NPI-2",
+                    "organization_name": q,
+                    "limit": 10,
+                }
+                if state:
+                    params["state"] = state.upper()
+                if city:
+                    params["city"] = city.upper()
+                r = requests.get(NPPES_API, params=params, timeout=12)
+                results = r.json().get("results", [])
+                if results:
+                    break  # stop at first query that returns results
+
             hospitals = []
+            seen_npis = set()
             for item in results:
+                npi = item.get("number")
+                if npi in seen_npis:
+                    continue
+                seen_npis.add(npi)
                 basic = item.get("basic", {})
                 addresses = item.get("addresses") or [{}]
                 practice_addr = next(
@@ -1112,7 +1130,7 @@ def search_hospitals(name: str, state: str, city: str = "") -> list:
                     addresses[0]
                 )
                 hospitals.append({
-                    "npi": item.get("number"),
+                    "npi": npi,
                     "name": basic.get("organization_name", name),
                     "city": practice_addr.get("city", ""),
                     "state": practice_addr.get("state", ""),
@@ -1120,7 +1138,7 @@ def search_hospitals(name: str, state: str, city: str = "") -> list:
                     "phone": practice_addr.get("telephone_number", ""),
                     "status": basic.get("status", ""),
                 })
-            return hospitals
+            return hospitals[:5]
         except Exception as e:
             print(f"Hospital search error: {e}")
             return []
