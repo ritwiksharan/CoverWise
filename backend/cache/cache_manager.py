@@ -71,8 +71,8 @@ def get_cache_stats() -> dict:
         "misses": _stats["misses"],
         "hit_rate_pct": round(hit_rate, 1),
         "cached_entries": len(_cache),
-	"namespaces": list({v["namespace"] for v in _cache.values()}),
-     }
+        "namespaces": list({v["namespace"] for v in _cache.values()}),
+    }
 
 def cached_call(namespace: str, params: dict, fetch_fn):
     """Helper: check cache first, call fetch_fn on miss, store result."""

@@ -6,8 +6,8 @@ All run in parallel via asyncio, orchestrator merges results
 import asyncio
 from tools.gov_apis import (
     search_plans_by_zip,
-    calculate_fpl_percentage, get_fpl_thresholds, search_plans,
-    check_drug_formulary, verify_doctor_npi, get_medicaid_threshold, get_fips_from_zip,
+    calculate_fpl_percentage,  
+    check_drug_coverage, lookup_npi_registry, get_medicaid_threshold, get_fips_from_zip,
     get_state_exchange
 )
 
@@ -18,7 +18,8 @@ async def profile_agent(profile: dict) -> dict:
     await asyncio.sleep(0)  # yield to event loop
     fpl_pct = calculate_fpl_percentage(profile["income"], profile["household_size"])
     fips = get_fips_from_zip(profile["zip_code"])
-    medicaid_threshold = get_medicaid_threshold(fips or "")
+    state = _fips_to_state(fips or "") if fips else "TX"
+    medicaid_threshold = get_medicaid_threshold(state)
     
     route = determine_route(fpl_pct, medicaid_threshold)
     
@@ -119,7 +120,7 @@ async def drug_check_agent(profile: dict, plans: list) -> dict:
     for drug in profile["drugs"]:
         # Check against first plan as representative (production: check all)
         plan_id = plans[0]["id"] if plans else "DEMO"
-        info = check_drug_formulary(drug, plan_id)
+        info = check_drug_coverage(drug, plan_id)
         results.append(info)
         
         if info["tier"] >= 4:
@@ -140,7 +141,7 @@ async def doctor_check_agent(profile: dict) -> dict:
     
     results = []
     for doctor in profile["doctors"]:
-        npi_info = verify_doctor_npi(doctor)
+        npi_info = lookup_npi_registry(doctor)
         results.append(npi_info)
     
     return {

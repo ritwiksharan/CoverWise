@@ -1,17 +1,18 @@
 """
-Government API Tools - All free APIs for insurance data
-Every call goes through the cache layer first
+Government API Tools — all data pulled live from CMS and federal APIs.
+Every call goes through the cache layer first.
 """
 
 import os
+import re
 import requests
+from datetime import date, timedelta
 from typing import Optional
 from cache.cache_manager import cached_call
 
 CMS_MARKETPLACE_KEY = os.getenv("CMS_API_KEY", "")
 BASE_MARKETPLACE = "https://marketplace.api.healthcare.gov/api/v1"
-BASE_RXNORM = "https://rxnav.nlm.nih.gov/REST"
-BASE_NPPES = "https://npiregistry.cms.hhs.gov/api"
+BASE_ORDER_REFERRING = "https://data.cms.gov/data-api/v1/dataset/c99b5865-1119-4436-bb80-c5af2773ea1f/data"
 
 # States that run their own exchanges - not on federal CMS API
 STATE_EXCHANGES = {
@@ -106,27 +107,6 @@ ZIP_STATE_MAP = {
     "217": "MD", "218": "MD", "219": "MD",
 }
 
-
-def get_state_from_zip(zip_code: str) -> Optional[str]:
-    """Get state code from ZIP prefix."""
-    prefix = zip_code[:3] if zip_code else ""
-    return ZIP_STATE_MAP.get(prefix)
-
-
-def get_state_exchange(zip_code: str) -> Optional[dict]:
-    """Return state exchange info if ZIP is in a non-federal state."""
-    state = get_state_from_zip(zip_code)
-    if state and state in STATE_EXCHANGES:
-        exchange = STATE_EXCHANGES[state]
-        return {
-            "state": state,
-            "exchange_name": exchange["name"],
-            "exchange_url": exchange["url"],
-            "message": "Your state (" + state + ") runs its own health exchange. Visit " + exchange["name"] + " to see plans available in your area.",
-        }
-    return None
-
-
 # Known FIPS codes for common ZIPs - avoids extra API call
 KNOWN_FIPS = {
     "77001": "48201", "77002": "48201", "77003": "48201", "77004": "48201",
@@ -154,558 +134,761 @@ KNOWN_FIPS = {
     "89101": "32003", "89102": "32003", "89103": "32003", "89104": "32003",
     "87101": "35001", "87102": "35001", "87103": "35001", "87104": "35001",
     "80201": "08031", "80202": "08031", "80203": "08031", "80204": "08031",
-    "67001": "20191",
-    "67002": "20015",
-    "67003": "20191",
-    "67004": "20035",
-    "67005": "20035",
-    "67010": "20015",
-    "67012": "20035",
-    "67013": "20035",
-    "67015": "20015",
-    "67016": "20015",
-    "67017": "20035",
-    "67025": "20015",
-    "67026": "20015",
-    "67037": "20015",
-    "67041": "20015",
-    "67042": "20015",
-    "67050": "20015",
-    "67052": "20015",
-    "67055": "20015",
-    "67056": "20015",
-    "67060": "20015",
-    "67062": "20015",
-    "67067": "20015",
-    "67073": "20015",
-    "67201": "20173",
-    "67202": "20173",
-    "67203": "20173",
-    "67204": "20173",
-    "67205": "20173",
-    "67206": "20173",
-    "67207": "20173",
-    "67208": "20173",
-    "67209": "20173",
-    "67210": "20173",
-    "67211": "20173",
-    "67212": "20173",
-    "46201": "18097",
-    "46202": "18097",
-    "46203": "18097",
-    "46204": "18097",
-    "46205": "18097",
-    "46206": "18097",
-    "46207": "18097",
-    "46208": "18097",
-    "43201": "39049",
-    "43202": "39049",
-    "43203": "39049",
-    "43204": "39049",
-    "43205": "39049",
-    "43206": "39049",
-    "43207": "39049",
-    "43215": "39049",
-    "63101": "29510",
-    "63102": "29510",
-    "63103": "29510",
-    "63104": "29510",
-    "63106": "29510",
-    "63107": "29510",
-    "63108": "29510",
-    "63109": "29510",
-    "27601": "37183",
-    "27602": "37183",
-    "27603": "37183",
-    "27604": "37183",
-    "27605": "37183",
-    "27606": "37183",
-    "27607": "37183",
-    "27608": "37183",
-    "53201": "55079",
-    "53202": "55079",
-    "53203": "55079",
-    "53204": "55079",
-    "53205": "55079",
-    "53206": "55079",
-    "53207": "55079",
-    "53208": "55079",
-    "97201": "41051",
-    "97202": "41051",
-    "97203": "41051",
-    "97204": "41051",
-    "97205": "41051",
-    "97206": "41051",
-    "97207": "41051",
-    "97208": "41051",
-    "68101": "31055",
-    "68102": "31055",
-    "68103": "31055",
-    "68104": "31055",
-    "50301": "19153",
-    "50302": "19153",
-    "50303": "19153",
-    "50309": "19153",
-    "70112": "22071",
-    "70113": "22071",
-    "70115": "22071",
-    "70116": "22071",
-    "39201": "28049",
-    "39202": "28049",
-    "39203": "28049",
-    "39204": "28049",
-    "35201": "01073",
-    "35202": "01073",
-    "35203": "01073",
-    "35204": "01073",
-    "29201": "45079",
-    "29202": "45079",
-    "29203": "45079",
-    "29204": "45079",
-    "84101": "49035",
-    "84102": "49035",
-    "84103": "49035",
-    "84104": "49035",
-    "72201": "05119",
-    "72202": "05119",
-    "72203": "05119",
-    "72204": "05119",
-    "73101": "40109",
-    "73102": "40109",
-    "73103": "40109",
-    "73104": "40109",
-    "59601": "30049",
-    "59602": "30049",
-    "82001": "56021",
-    "82002": "56021",
-    "58101": "38017",
-    "58102": "38017",
-    "57101": "46083",
-    "57102": "46083",
-    "25301": "54039",
-    "25302": "54039",
-    "25303": "54039",
-    "25304": "54039",
-    "99501": "02020",
-    "99502": "02020",
-    "99503": "02020",
-    "99504": "02020",
-    "96813": "15003",
-    "96814": "15003",
-    "96815": "15003",
-    "96816": "15003",
-    "19801": "10003",
-    "19802": "10003",
-    "19803": "10003",
-    "19804": "10003",
-    "03101": "33011",
-    "03102": "33011",
-    "03103": "33011",
-    "03104": "33011",
-    "28201": "37119",
-    "28202": "37119",
-    "28203": "37119",
-    "28204": "37119",
-    "44101": "39035",
-    "44102": "39035",
-    "44103": "39035",
-    "44104": "39035",
-    "15201": "42003",
-    "15202": "42003",
-    "15203": "42003",
-    "15204": "42003",
-    "73301": "48453",
-    "73344": "48453",
-    "78701": "48453",
-    "78702": "48453",
-    "78703": "48453",
-    "78704": "48453",
-    "78705": "48453",
-    "78721": "48453",
-    "78722": "48453",
-    "78723": "48453",
-    "78724": "48453",
-    "78725": "48453",
-    "78726": "48453",
-    "78727": "48453",
-    "78728": "48453",
-    "78729": "48453",
-    "78730": "48453",
-    "78731": "48453",
-    "78732": "48453",
-    "78733": "48453",
-    "78734": "48453",
-    "78735": "48453",
-    "78736": "48453",
-    "78737": "48453",
-    "78738": "48453",
-    "78739": "48453",
-    "78741": "48453",
-    "78742": "48453",
-    "78744": "48453",
-    "78745": "48453",
-    "78746": "48453",
-    "78747": "48453",
-    "78748": "48453",
-    "78749": "48453",
-    "78750": "48453",
-    "78751": "48453",
-    "78752": "48453",
-    "78753": "48453",
-    "78754": "48453",
-    "78755": "48453",
-    "78756": "48453",
-    "78757": "48453",
-    "78758": "48453",
-    "78759": "48453",
-    "32901": "12009",
-    "32902": "12009",
-    "32903": "12009",
-    "32904": "12009",
-    "32905": "12009",
-    "32906": "12009",
-    "32907": "12009",
-    "32908": "12009",
-    "34201": "12081",
-    "34202": "12081",
-    "34203": "12081",
-    "34205": "12081",
-    "34208": "12081",
-    "34209": "12081",
-    "34210": "12081",
-    "34211": "12081",
-    "34212": "12081",
-    "34215": "12081",
-    "34216": "12081",
-    "34217": "12081",
-    "34219": "12081",
-    "34220": "12081",
-    "34221": "12081",
-    "34222": "12081",
 }
 
-def get_state_from_fips(fips: str) -> str:
-    """Get state code from county FIPS (first 2 digits)."""
-    state_map = {
-        "48": "TX", "12": "FL", "17": "IL", "04": "AZ", "13": "GA",
-        "53": "WA", "26": "MI", "39": "OH", "42": "PA", "37": "NC",
-        "47": "TN", "32": "NV", "35": "NM", "08": "CO", "22": "LA",
-        "28": "MS", "01": "AL", "05": "AR", "06": "CA", "08": "CO",
-        "09": "CT", "10": "DE", "11": "DC", "19": "IA", "20": "KS",
-        "21": "KY", "23": "ME", "24": "MD", "25": "MA", "27": "MN",
-        "29": "MO", "30": "MT", "31": "NE", "33": "NH", "34": "NJ",
-        "38": "ND", "41": "OR", "44": "RI", "45": "SC", "46": "SD",
-        "49": "UT", "50": "VT", "51": "VA", "54": "WV", "55": "WI",
-        "56": "WY",
-    }
-    return state_map.get(fips[:2], "TX")
+# ---------- FIPS / STATE ----------
 
+_FIPS_STATE_MAP = {
+    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT",
+    "10": "DE", "12": "FL", "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
+    "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME", "24": "MD", "25": "MA",
+    "26": "MI", "27": "MN", "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV",
+    "33": "NH", "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
+    "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD", "47": "TN",
+    "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
+    "56": "WY",
+}
+
+
+def _fips_to_state(fips: str) -> str:
+    return _FIPS_STATE_MAP.get(fips[:2], "") if fips else ""
+
+
+def _params(extra: dict = {}) -> dict:
+    p = {"apikey": CMS_MARKETPLACE_KEY}
+    p.update(extra)
+    return p
+
+
+def get_state_from_zip(zip_code: str) -> Optional[str]:
+    prefix = zip_code[:3] if zip_code else ""
+    return ZIP_STATE_MAP.get(prefix)
+
+
+def get_state_exchange(zip_code: str) -> Optional[dict]:
+    state = get_state_from_zip(zip_code)
+    if state and state in STATE_EXCHANGES:
+        exchange = STATE_EXCHANGES[state]
+        return {
+            "state": state,
+            "exchange_name": exchange["name"],
+            "exchange_url": exchange["url"],
+            "message": (
+                f"Your state ({state}) runs its own health exchange. "
+                f"Visit {exchange['name']} at {exchange['url']} to see plans available in your area."
+            ),
+        }
+    return None
+
+
+# ---------- ZIP → FIPS ----------
 
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
-    """Convert ZIP to county FIPS.
-    Priority: 1) KNOWN_FIPS hardcoded map, 2) Census file lookup, 3) None
+    """Get County FIPS from ZIP code.
+    Priority: 1) KNOWN_FIPS hardcoded map, 2) Census file lookup (33k ZIPs),
+    3) Nearby ZIP inference for PO Box ZIPs not in census file.
     """
-    # Check hardcoded map first (instant)
+    zip_code = str(zip_code).strip().zfill(5)
     if zip_code in KNOWN_FIPS:
         return KNOWN_FIPS[zip_code]
 
     def fetch():
-        # Try census file lookup (covers all 33k+ ZIPs if file is present)
+        # Try census file lookup first (covers 33,791 ZIPs)
         try:
             from tools.zip_loader import get_fips_for_zip
             fips = get_fips_for_zip(zip_code)
             if fips:
-                print("FIPS from census file for " + zip_code + ": " + fips)
+                print(f"FIPS from census file for {zip_code}: {fips}")
                 return fips
         except Exception as e:
-            print("Census loader error: " + str(e))
+            print(f"Census loader error: {e}")
 
-        print("FIPS not found for ZIP " + zip_code + " - will use mock plans")
-        return None
-
-    return cached_call("zip_fips", {"zip": zip_code}, fetch)
-
-
-def get_fpl_thresholds() -> dict:
-    """Federal Poverty Level table - cached 1 year."""
-    def fetch():
-        return {
-            1: 14580, 2: 19720, 3: 24860, 4: 30000,
-            5: 35140, 6: 40280, 7: 45420, 8: 50560
-        }
-    return cached_call("fpl_table", {}, fetch)
-
-
-def calculate_fpl_percentage(income: float, household_size: int) -> float:
-    fpl = get_fpl_thresholds()
-    base = fpl.get(min(household_size, 8), 50560)
-    return round((income / base) * 100, 1)
-
-
-def search_plans(zip_code: str, age: int, income: float, household_size: int) -> list:
-    """Search CMS Marketplace plans via POST - cached 24h."""
-    # Check if state-based exchange first
-    state_exchange = get_state_exchange(zip_code)
-    if state_exchange:
-        return []
-
-    if not CMS_MARKETPLACE_KEY:
-        print("No CMS API key - using mock plans")
-        return _mock_plans(zip_code, age, income)
-
-    fips = get_fips_from_zip(zip_code)
-    if not fips:
-        print("No FIPS for ZIP " + zip_code + " - using mock plans")
-        return _mock_plans(zip_code, age, income)
-
-    state = get_state_from_fips(fips) if fips else get_state_from_zip(zip_code) or "TX"
-
-    def fetch():
-        try:
-            url = BASE_MARKETPLACE + "/plans/search?apikey=" + CMS_MARKETPLACE_KEY
-            payload = {
-                "household": {
-                    "income": income,
-                    "people": [{"age": age, "aptc_eligible": True, "uses_tobacco": False}]
-                },
-                "market": "Individual",
-                "place": {"countyfips": fips, "state": state, "zipcode": zip_code},
-                "year": 2024,
-                "limit": 10,
-                "offset": 0,
-            }
-            r = requests.post(url, json=payload, timeout=15)
-            if r.status_code != 200:
-                print("CMS API error: " + str(r.status_code) + " " + r.text[:200])
-                return _mock_plans(zip_code, age, income)
-            data = r.json()
-            raw_plans = data.get("plans", [])
-            if not raw_plans:
-                print("CMS API returned 0 plans for " + zip_code + " fips=" + str(fips))
-                return _mock_plans(zip_code, age, income)
-            plans = []
-            for p in raw_plans[:10]:
-                try:
-                    deductible = 0
-                    for d in p.get("deductibles", []):
-                        if d.get("type") == "Medical EHB Deductible" and d.get("csr") == "No Cost Sharing":
-                            deductible = float(d.get("amount", 0))
-                            break
-                    if deductible == 0 and p.get("deductibles"):
-                        deductible = float(p["deductibles"][0].get("amount", 0))
-
-                    oop_max = 0
-                    for m in p.get("moops", []):
-                        if m.get("type") == "Maximum Out of Pocket Payment EHB":
-                            oop_max = float(m.get("amount", 0))
-                            break
-                    if oop_max == 0 and p.get("moops"):
-                        oop_max = float(p["moops"][0].get("amount", 0))
-
-                    plans.append({
-                        "id": p.get("id", ""),
-                        "name": p.get("name", "Unknown Plan"),
-                        "metal_level": p.get("metal_level", "Silver"),
-                        "premium": float(p.get("premium", 0)),
-                        "deductible": deductible,
-                        "oop_max": oop_max,
-                        "issuer": p.get("issuer", {}).get("name", "Unknown"),
-                    })
-                except Exception as pe:
-                    print("Plan parse error: " + str(pe))
-                    continue
-            print("CMS API returned " + str(len(plans)) + " real plans for " + zip_code)
-            return plans if plans else _mock_plans(zip_code, age, income)
-        except Exception as e:
-            print("Plan search error: " + str(e))
-            return _mock_plans(zip_code, age, income)
-
-    return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income)}, fetch)
-
-
-def _mock_plans(zip_code: str, age: int, income: float) -> list:
-    """Realistic mock plans for demo - ordered by typical true annual cost ascending."""
-    return [
-        {"id": "PLAN005", "name": "Cigna Bronze HSA", "metal_level": "Bronze",
-         "premium": 189.0, "deductible": 7000, "oop_max": 9100, "issuer": "Cigna"},
-        {"id": "PLAN002", "name": "Aetna Bronze Plus", "metal_level": "Bronze",
-         "premium": 218.0, "deductible": 6000, "oop_max": 8700, "issuer": "Aetna"},
-        {"id": "PLAN004", "name": "Oscar Silver Simple", "metal_level": "Silver",
-         "premium": 298.0, "deductible": 4000, "oop_max": 7500, "issuer": "Oscar"},
-        {"id": "PLAN001", "name": "BlueCross Silver Select", "metal_level": "Silver",
-         "premium": 342.0, "deductible": 3500, "oop_max": 7000, "issuer": "BlueCross"},
-        {"id": "PLAN003", "name": "UHC Gold Complete", "metal_level": "Gold",
-         "premium": 487.0, "deductible": 1500, "oop_max": 5000, "issuer": "UnitedHealth"},
-    ]
-
-
-def resolve_drug_rxcui(drug_name: str) -> Optional[str]:
-    """Resolve drug name to RxCUI - cached 30 days."""
-    def fetch():
-        try:
-            url = BASE_RXNORM + "/rxcui.json"
-            r = requests.get(url, params={"name": drug_name}, timeout=10)
-            data = r.json()
-            ids = data.get("idGroup", {}).get("rxnormId", [])
-            return ids[0] if ids else None
-        except Exception as e:
-            print("RxNorm error: " + str(e))
-            return None
-    return cached_call("rxnorm_drug", {"drug": drug_name.lower()}, fetch)
-
-
-def check_drug_formulary(drug_name: str, plan_id: str) -> dict:
-    """Check drug tier for a plan."""
-    tiers = {
-        "ozempic": {"tier": 4, "monthly_cost": 280, "prior_auth": True},
-        "metformin": {"tier": 1, "monthly_cost": 5, "prior_auth": False},
-        "lisinopril": {"tier": 1, "monthly_cost": 8, "prior_auth": False},
-        "humira": {"tier": 5, "monthly_cost": 600, "prior_auth": True},
-        "atorvastatin": {"tier": 2, "monthly_cost": 15, "prior_auth": False},
-        "wegovy": {"tier": 4, "monthly_cost": 300, "prior_auth": True},
-        "eliquis": {"tier": 3, "monthly_cost": 120, "prior_auth": False},
-        "jardiance": {"tier": 3, "monthly_cost": 180, "prior_auth": True},
-    }
-    drug_lower = drug_name.lower()
-    result = tiers.get(drug_lower, {"tier": 3, "monthly_cost": 75, "prior_auth": False})
-    result = dict(result)
-    result["drug_name"] = drug_name
-    result["rxcui"] = resolve_drug_rxcui(drug_name)
-    return result
-
-
-def verify_doctor_npi(doctor_name: str) -> dict:
-    """Look up doctor in NPPES NPI registry - cached 7 days."""
-    def fetch():
-        try:
-            parts = doctor_name.split()
-            params = {"version": "2.1", "limit": 1}
-            if len(parts) >= 2:
-                params["first_name"] = parts[0]
-                params["last_name"] = parts[-1]
-            else:
-                params["last_name"] = doctor_name
-            r = requests.get(BASE_NPPES, params=params, timeout=10)
-            data = r.json()
-            results = data.get("results", [])
-            if results:
-                doc = results[0]
-                return {
-                    "found": True,
-                    "npi": doc.get("number"),
-                    "name": doc.get("basic", {}).get("first_name", "") + " " + doc.get("basic", {}).get("last_name", ""),
-                    "specialty": doc.get("taxonomies", [{}])[0].get("desc", "Unknown"),
-                }
-            return {"found": False, "name": doctor_name}
-        except Exception as e:
-            print("NPI lookup error: " + str(e))
-            return {"found": True, "name": doctor_name, "npi": "DEMO123", "specialty": "General Practice"}
-    return cached_call("npi_doctor", {"name": doctor_name.lower()}, fetch)
-
-
-def get_medicaid_threshold(state_fips: str) -> float:
-    """Medicaid income threshold as % of FPL by state."""
-    expansion_states = {"06", "17", "36", "48", "12"}
-    fips_prefix = state_fips[:2] if state_fips else "00"
-    return 138.0 if fips_prefix in expansion_states else 100.0
-
-
-def search_plans_by_zip(zip_code: str, age: int, income: float, household_size: int) -> list:
-    """
-    Search plans directly using ZIP - CMS API handles ZIP internally.
-    Falls back to FIPS-based search if needed, then mock.
-    """
-    if not CMS_MARKETPLACE_KEY:
-        return _mock_plans(zip_code, age, income)
-
-    state_exchange = get_state_exchange(zip_code)
-    if state_exchange:
-        return []
-
-    def fetch():
-        url = BASE_MARKETPLACE + "/plans/search?apikey=" + CMS_MARKETPLACE_KEY
-
-        def _try_zip(z):
-            fips = KNOWN_FIPS.get(z) or get_fips_from_zip(z)
-            if not fips:
-                return None
-            state = get_state_from_fips(fips)
-            payload = {
-                "household": {
-                    "income": income,
-                    "people": [{"age": age, "aptc_eligible": True, "uses_tobacco": False}]
-                },
-                "market": "Individual",
-                "place": {"countyfips": fips, "state": state, "zipcode": z},
-                "year": 2024,
-                "limit": 10,
-                "offset": 0,
-            }
-            try:
-                r = requests.post(url, json=payload, timeout=15)
-                if r.status_code != 200:
-                    return None
-                data = r.json()
-                raw = data.get("plans", [])
-                if not raw:
-                    return None
-                plans = []
-                for p in raw[:10]:
-                    try:
-                        deductible = 0
-                        for d in p.get("deductibles", []):
-                            if "Combined" in d.get("type", "") or "Medical EHB" in d.get("type", ""):
-                                val = float(d.get("amount", 0))
-                                if val > 0:
-                                    deductible = val
-                                    break
-                        if deductible == 0 and p.get("deductibles"):
-                            deductible = float(p["deductibles"][0].get("amount", 0))
-                        oop_max = 0
-                        for m in p.get("moops", []):
-                            val = float(m.get("amount", 0))
-                            if val > 0:
-                                oop_max = val
-                                break
-                        if oop_max == 0 and p.get("moops"):
-                            oop_max = float(p["moops"][0].get("amount", 0))
-                        plans.append({
-                            "id": p.get("id", ""),
-                            "name": p.get("name", "Unknown Plan"),
-                            "metal_level": p.get("metal_level", "Silver"),
-                            "premium": float(p.get("premium_w_credit", p.get("premium", 0))),
-                            "full_premium": float(p.get("premium", 0)),
-                            "deductible": deductible,
-                            "oop_max": oop_max,
-                            "issuer": p.get("issuer", {}).get("name", "Unknown"),
-                        })
-                    except Exception:
-                        continue
-                return plans if plans else None
-            except Exception as e:
-                print("CMS call error: " + str(e))
-                return None
-
-        # Try original ZIP first
-        result = _try_zip(zip_code)
-        if result:
-            print("CMS returned " + str(len(result)) + " real plans for " + zip_code)
-            return result
-
-        # ZIP rejected by CMS (PO Box etc) - try nearby ZIPs
+        # Infer from nearby ZIPs (handles PO Box ZIPs not in census)
         try:
             num = int(zip_code)
             for delta in [1, -1, 2, -2, 5, -5, 10, -10]:
                 nearby = str(num + delta).zfill(5)
                 if nearby[:3] == zip_code[:3]:
-                    result = _try_zip(nearby)
-                    if result:
-                        print("CMS returned " + str(len(result)) + " plans using nearby ZIP " + nearby + " for " + zip_code)
-                        return result
+                    from tools.zip_loader import get_fips_for_zip
+                    fips = get_fips_for_zip(nearby)
+                    if fips:
+                        print(f"FIPS inferred for {zip_code} from nearby {nearby}: {fips}")
+                        return fips
         except Exception:
             pass
 
-        print("CMS returned 0 plans for " + zip_code + " - using mock")
-        return _mock_plans(zip_code, age, income)
+        print(f"FIPS not found for ZIP {zip_code}")
+        return None
 
-    return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income)}, fetch)
+    return cached_call("zip_fips", {"zip": zip_code}, fetch)
+
+
+# ---------- FPL — live from CMS ----------
+
+def get_fpl_thresholds(state: str = "US", year: int = 2024) -> dict:
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/states/{state}/poverty-guidelines",
+                params=_params({"year": year}), timeout=10
+            )
+            guidelines = r.json().get("guidelines", [])
+            return {g["household_size"]: g["guideline"] for g in guidelines}
+        except Exception as e:
+            print(f"FPL lookup error: {e}")
+            return {}
+    return cached_call("fpl_table", {"state": state, "year": year}, fetch)
+
+
+def calculate_fpl_percentage(income: float, household_size: int, state: str = "US") -> float:
+    fpl = get_fpl_thresholds(state)
+    base = fpl.get(min(household_size, 8), 14580)
+    return round((income / base) * 100, 1)
+
+
+def get_applicable_percentage(fpl_pct: float) -> float:
+    """IRS Applicable Percentage Table (2021-2025 ARP/IRA rules)."""
+    if fpl_pct < 150:
+        return 0.0
+    elif fpl_pct < 200:
+        # Sliding scale 0% to 2%
+        return 0.02 * (fpl_pct - 150) / 50
+    elif fpl_pct < 250:
+        # Sliding scale 2% to 4%
+        return 0.02 + 0.02 * (fpl_pct - 200) / 50
+    elif fpl_pct < 300:
+        # Sliding scale 4% to 6%
+        return 0.04 + 0.02 * (fpl_pct - 250) / 50
+    elif fpl_pct < 400:
+        # Sliding scale 6% to 8.5%
+        return 0.06 + 0.025 * (fpl_pct - 300) / 100
+    else:
+        return 0.085
+
+
+def calculate_manual_aptc(income: float, fpl_pct: float, benchmark_premium: float) -> float:
+    """
+    APTC = [Benchmark Silver Premium] - [Expected Contribution]
+    Expected Contribution = Income * Applicable Percentage / 12
+    """
+    applicable_pct = get_applicable_percentage(fpl_pct)
+    expected_contribution = (income * applicable_pct) / 12
+    aptc = max(0, benchmark_premium - expected_contribution)
+    return round(aptc, 2)
+
+
+# ---------- ELIGIBILITY / APTC — live from CMS ----------
+
+def get_eligibility_estimates(income: float, age: int, fips: str, zip_code: str, state: str, tobacco_use: bool = False, year: int = 2024) -> dict:
+    def fetch():
+        try:
+            body = {
+                "household": {
+                    "income": income,
+                    "people": [{"age": age, "aptc_eligible": True, "gender": "Male", "uses_tobacco": tobacco_use}],
+                },
+                "market": "Individual",
+                "place": {"countyfips": fips, "zipcode": zip_code, "state": state},
+                "year": year,
+            }
+            r = requests.post(
+                f"{BASE_MARKETPLACE}/households/eligibility/estimates",
+                params=_params(), json=body, timeout=15
+            )
+            estimates = r.json().get("estimates", [{}])
+            return estimates[0] if estimates else {}
+        except Exception as e:
+            print(f"Eligibility estimate error: {e}")
+            return {}
+    return cached_call("eligibility", {"income": int(income), "age": age, "fips": fips, "tobacco": tobacco_use}, fetch)
+
+
+# ---------- MEDICAID THRESHOLD — live from CMS ----------
+
+def get_medicaid_threshold(state: str) -> float:
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/states/{state}/medicaid",
+                params=_params({"year": 2024}), timeout=10
+            )
+            data = r.json()
+            adult_fpl = data.get("pc_fpl_adult")
+            if adult_fpl:
+                return round(float(adult_fpl) * 100, 1)
+            return 138.0
+        except Exception as e:
+            print(f"Medicaid threshold error: {e}")
+            return 138.0
+    return cached_call("medicaid_threshold", {"state": state}, fetch)
+
+
+# ---------- PLAN SEARCH ----------
+
+def _normalize_plan(p: dict) -> dict:
+    deductible = 0
+    for d in p.get("deductibles", []):
+        if d.get("network_tier") == "In-Network" and d.get("individual"):
+            deductible = d.get("amount", 0)
+            break
+    if not deductible and p.get("deductibles"):
+        deductible = p["deductibles"][0].get("amount", 0)
+
+    oop_max = 0
+    for m in p.get("moops", []):
+        if m.get("network_tier") == "In-Network" and m.get("individual"):
+            oop_max = m.get("amount", 0)
+            break
+    if not oop_max and p.get("moops"):
+        oop_max = p["moops"][0].get("amount", 0)
+
+    issuer = p.get("issuer", {})
+    issuer_name = issuer.get("name", "") if isinstance(issuer, dict) else str(issuer)
+
+    networks = p.get("network", [])
+    network_url = networks[0].get("network_url", "") if networks else ""
+
+    return {
+        "id": p.get("id", ""),
+        "name": p.get("name", ""),
+        "metal_level": p.get("metal_level", ""),
+        "type": p.get("type", ""),
+        "premium": round(p.get("premium", 0), 2),
+        "premium_w_credit": round(p.get("premium_w_credit", p.get("premium", 0)), 2),
+        "deductible": deductible,
+        "oop_max": oop_max,
+        "hsa_eligible": p.get("hsa_eligible", False),
+        "issuer": issuer_name,
+        "formulary_url": p.get("formulary_url", ""),
+        "network_url": network_url,
+        "quality_rating": p.get("quality_rating", {}).get("global_rating") if isinstance(p.get("quality_rating"), dict) else None,
+    }
+
+
+def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, tobacco_use: bool = False) -> list:
+    """Search all CMS Marketplace plans for this household — no hardcoded fallback."""
+    def fetch():
+        if not fips:
+            raise RuntimeError(f"Cannot search plans: no FIPS for ZIP {zip_code}")
+        body = {
+            "household": {
+                "income": income,
+                "people": [{"age": age, "aptc_eligible": True, "gender": "Male", "uses_tobacco": tobacco_use}],
+            },
+            "market": "Individual",
+            "place": {"countyfips": fips, "zipcode": zip_code, "state": state},
+            "year": 2024,
+            "limit": 50,
+        }
+        r = requests.post(f"{BASE_MARKETPLACE}/plans/search", params=_params(), json=body, timeout=20)
+        data = r.json()
+        if "plans" not in data:
+            raise RuntimeError(f"CMS plan search error: {data}")
+        return [_normalize_plan(p) for p in data["plans"]]
+
+    return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income), "tobacco": tobacco_use}, fetch)
+
+
+# ---------- DRUGS — live from CMS ----------
+
+def resolve_drug_rxcui(drug_name: str) -> Optional[dict]:
+    """Resolve drug name to RxCUI using both CMS and RxNorm APIs for robustness."""
+    def fetch():
+        # Try CMS first (includes strength/route usually)
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/drugs/autocomplete",
+                params=_params({"q": drug_name}), timeout=10
+            )
+            results = r.json()
+            if isinstance(results, list) and results:
+                top = results[0]
+                return {
+                    "rxcui": str(top.get("rxcui", "")),
+                    "name": top.get("name", drug_name),
+                    "full_name": top.get("full_name", ""),
+                    "route": top.get("route", ""),
+                    "strength": top.get("strength", ""),
+                }
+        except Exception as e:
+            print(f"CMS Drug autocomplete error: {e}")
+
+        # Fallback to RxNorm (NIH)
+        try:
+            r = requests.get(
+                f"https://rxnav.nlm.nih.gov/REST/rxcui.json",
+                params={"name": drug_name}, timeout=10
+            )
+            data = r.json()
+            ids = data.get("idGroup", {}).get("rxnormId", [])
+            if ids:
+                rxcui = ids[0]
+                # Get more details from RxNorm
+                r2 = requests.get(f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/properties.json", timeout=10)
+                props = r2.json().get("properties", {})
+                return {
+                    "rxcui": str(rxcui),
+                    "name": props.get("name", drug_name),
+                    "full_name": props.get("name", ""),
+                    "route": "",
+                    "strength": ""
+                }
+        except Exception as e:
+            print(f"RxNorm error: {e}")
+            
+        return None
+    return cached_call("rxnorm_drug_v2", {"drug": drug_name.lower()}, fetch)
+
+
+def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024) -> list:
+    """Check drug coverage — captures tier, prior_authorization, step_therapy, quantity_limit."""
+    if not rxcui_list or not plan_ids:
+        return []
+
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/drugs/covered",
+                params=_params({
+                    "year": year,
+                    "drugs": ",".join(str(x) for x in rxcui_list),
+                    "planids": ",".join(plan_ids),
+                }),
+                timeout=15
+            )
+            raw = r.json().get("coverage", [])
+            return [
+                {
+                    "rxcui": c.get("rxcui"),
+                    "plan_id": c.get("plan_id"),
+                    "coverage": c.get("coverage", "Unknown"),
+                    "drug_tier": c.get("drug_tier"),
+                    "prior_authorization": bool(c.get("prior_authorization", False)),
+                    "step_therapy": bool(c.get("step_therapy", False)),
+                    "quantity_limit": bool(c.get("quantity_limit", False)),
+                }
+                for c in raw
+            ]
+        except Exception as e:
+            print(f"Drug coverage check error: {e}")
+            return []
+    key = {"rxcuis": sorted(rxcui_list), "planids": sorted(plan_ids[:5]), "year": year}
+    return cached_call("formulary", key, fetch)
+
+
+# ---------- DOCTOR — CMS Order & Referring ----------
+
+def verify_doctor_cms(doctor_name: str) -> dict:
+    clean = doctor_name.replace("Dr.", "").replace("Dr ", "").strip()
+    parts = clean.split()
+
+    def fetch():
+        try:
+            keyword = " ".join(parts[-2:]) if len(parts) >= 2 else clean
+            r = requests.get(
+                BASE_ORDER_REFERRING,
+                params={"keyword": keyword.upper(), "limit": 5},
+                timeout=10
+            )
+            results = r.json()
+            if not isinstance(results, list) or not results:
+                return {"found": False, "searched_name": doctor_name}
+
+            first = parts[0].upper() if parts else ""
+            last = parts[-1].upper() if len(parts) > 1 else parts[0].upper() if parts else ""
+            match = next(
+                (d for d in results if d.get("FIRST_NAME", "").startswith(first) or d.get("LAST_NAME") == last),
+                results[0]
+            )
+            return {
+                "found": True,
+                "npi": match.get("NPI"),
+                "name": f"{match.get('FIRST_NAME', '')} {match.get('LAST_NAME', '')}".strip(),
+                "medicare_part_b": match.get("PARTB") == "Y",
+                "can_order_dme": match.get("DME") == "Y",
+                "can_order_hha": match.get("HHA") == "Y",
+                "hospice": match.get("HOSPICE") == "Y",
+                "searched_name": doctor_name,
+            }
+        except Exception as e:
+            print(f"Doctor CMS lookup error: {e}")
+            return {"found": False, "searched_name": doctor_name, "error": str(e)}
+    return cached_call("npi_doctor", {"name": clean.lower()}, fetch)
+
+
+# ─── NPPES NPI REGISTRY — proper provider identity lookup ────────────────────
+NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
+
+def lookup_npi_registry(doctor_name: str, city: str = "", state: str = "") -> dict:
+    """Look up a provider via the NPPES NPI Registry — returns NPI, specialty, address, phone."""
+    clean = doctor_name.replace("Dr.", "").replace("Dr ", "").strip()
+    parts = clean.split()
+    last = parts[-1] if parts else clean
+    first = parts[0] if len(parts) > 1 else ""
+
+    def fetch():
+        try:
+            params = {"version": "2.1", "enumeration_type": "NPI-1", "limit": 5,
+                      "last_name": last.upper()}
+            if first:
+                params["first_name"] = first.upper()
+            if city:
+                params["city"] = city.upper()
+            if state:
+                params["state"] = state.upper()
+
+            r = requests.get(NPPES_API, params=params, timeout=10)
+            results = r.json().get("results", [])
+            if not results:
+                return {"found": False, "searched_name": doctor_name}
+
+            match = results[0]
+            basic = match.get("basic", {})
+            taxonomies = match.get("taxonomies") or [{}]
+            addresses = match.get("addresses") or [{}]
+            primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
+            practice_addr = next(
+                (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                addresses[0]
+            )
+            all_candidates = [
+                {
+                    "npi": r2.get("number"),
+                    "name": f"{r2.get('basic',{}).get('first_name','')} {r2.get('basic',{}).get('last_name','')}".strip(),
+                    "specialty": ((r2.get("taxonomies") or [{}])[0]).get("desc", ""),
+                    "city": ((r2.get("addresses") or [{}])[0]).get("city", ""),
+                    "state": ((r2.get("addresses") or [{}])[0]).get("state", ""),
+                }
+                for r2 in results[:3]
+            ]
+            return {
+                "found": True,
+                "npi": match.get("number"),
+                "name": f"{basic.get('first_name','')} {basic.get('last_name','')}".strip(),
+                "credential": basic.get("credential", ""),
+                "specialty": primary_tax.get("desc", ""),
+                "city": practice_addr.get("city", ""),
+                "state": practice_addr.get("state", ""),
+                "phone": practice_addr.get("telephone_number", ""),
+                "active": basic.get("status", "") == "A",
+                "all_candidates": all_candidates,
+                "searched_name": doctor_name,
+            }
+        except Exception as e:
+            print(f"NPPES lookup error: {e}")
+            return {"found": False, "searched_name": doctor_name, "error": str(e)}
+
+    return cached_call("npi_registry", {"name": clean.lower(), "city": city.lower(), "state": state.lower()}, fetch)
+
+
+# ─── IN-NETWORK VERIFICATION — CMS plan provider endpoint ────────────────────
+
+def check_doctor_in_plan_network(plan_id: str, npi: str, zip_code: str) -> dict:
+    """Check if a provider (by NPI) is in a specific plan's network via CMS."""
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/plans/{plan_id}/providers",
+                params=_params({"npi": npi, "zip": zip_code}),
+                timeout=10
+            )
+            data = r.json()
+            providers = data.get("providers", [])
+            if providers:
+                p = providers[0]
+                return {
+                    "in_network": True,
+                    "network_tier": p.get("network_tier", "In-Network"),
+                    "accepting_patients": p.get("accepting_patients", True),
+                    "provider_name": p.get("name", ""),
+                }
+            return {"in_network": False, "accepting_patients": None}
+        except Exception as e:
+            print(f"Plan network check error: {e}")
+            return {"in_network": None, "error": str(e)}
+
+    return cached_call("plan_network", {"plan_id": plan_id, "npi": str(npi)}, fetch)
+
+
+# ─── openFDA — GENERIC DRUG ALTERNATIVES ─────────────────────────────────────
+OPENFDA_API = "https://api.fda.gov/drug/ndc.json"
+
+def get_generic_alternatives(drug_name: str) -> list:
+    """Find generic alternatives for a brand-name drug via openFDA."""
+    def fetch():
+        try:
+            # Try brand name first
+            r = requests.get(
+                OPENFDA_API,
+                params={"search": f'openfda.brand_name:"{drug_name}"', "limit": 5},
+                timeout=10
+            )
+            results = r.json().get("results", [])
+            if not results:
+                r2 = requests.get(
+                    OPENFDA_API,
+                    params={"search": f'openfda.generic_name:"{drug_name}"', "limit": 5},
+                    timeout=10
+                )
+                results = r2.json().get("results", [])
+
+            generics = []
+            seen = set()
+            for item in results:
+                openfda = item.get("openfda", {})
+                substance = (openfda.get("substance_name") or [""])[0]
+                generic_name = (openfda.get("generic_name") or [""])[0]
+                brand_names = openfda.get("brand_name") or []
+                if substance and substance not in seen:
+                    seen.add(substance)
+                    generics.append({
+                        "substance": substance,
+                        "generic_name": generic_name,
+                        "brand_names": brand_names[:2],
+                        "dosage_form": item.get("dosage_form", ""),
+                        "is_generic": not brand_names or generic_name.lower().startswith(substance.lower().split()[0].lower()),
+                    })
+            return generics[:3]
+        except Exception as e:
+            print(f"openFDA generic lookup error: {e}")
+            return []
+
+    return cached_call("openfda_generic", {"drug": drug_name.lower()}, fetch)
+
+
+# ─── MIPS QUALITY SCORE — CMS Provider Data Catalog ──────────────────────────
+_MIPS_DATASET = "8889d81e-3916-4369-8e45-e714e93fd06b"
+CMS_DATA_API = "https://data.cms.gov/data-api/v1/dataset"
+
+def get_doctor_quality_score(npi: str) -> dict:
+    """Get MIPS quality/performance score for a provider from CMS Provider Data Catalog."""
+    def fetch():
+        try:
+            r = requests.get(
+                f"{CMS_DATA_API}/{_MIPS_DATASET}/data",
+                params={"filter[NPI]": npi, "size": 1},
+                timeout=10
+            )
+            items = r.json()
+            if isinstance(items, list) and items:
+                item = items[0]
+                return {
+                    "found": True,
+                    "mips_score": item.get("final_score"),
+                    "payment_adjustment": item.get("payment_adjustment_percentage"),
+                    "facility": item.get("facility_name"),
+                    "telehealth": item.get("telehealth_services") == "Y",
+                    "year": item.get("year"),
+                }
+            return {"found": False}
+        except Exception as e:
+            print(f"MIPS score error: {e}")
+            return {"found": False, "error": str(e)}
+
+    return cached_call("mips_score", {"npi": str(npi)}, fetch)
+
+
+# ─── HRSA SHORTAGE AREAS ─────────────────────────────────────────────────────
+
+def check_hrsa_shortage(state: str, fips: str = "") -> dict:
+    """Check if a county is a Health Professional Shortage Area via HRSA."""
+    def fetch():
+        try:
+            r = requests.get(
+                "https://data.hrsa.gov/api/GenerateHPSAData/HPSADataType/Primary Care",
+                params={"StateAbbreviation": state.upper()},
+                timeout=12
+            )
+            data = r.json()
+            hpsas = data.get("HPSA_FullCounty", []) if isinstance(data, dict) else []
+            if fips and hpsas:
+                match = next(
+                    (h for h in hpsas if h.get("FIPS_County_CD", "").lstrip("0") == fips.lstrip("0")),
+                    None
+                )
+                if match:
+                    return {
+                        "shortage_area": True,
+                        "designation": match.get("HPSA_Status"),
+                        "score": match.get("HPSA_Score"),
+                        "message": (
+                            f"Your county is a Primary Care HPSA (score {match.get('HPSA_Score')}). "
+                            f"HMO plans may have limited in-network providers in your area."
+                        ),
+                    }
+            return {"shortage_area": False}
+        except Exception as e:
+            print(f"HRSA shortage check error: {e}")
+            return {"shortage_area": False, "error": str(e)}
+
+    return cached_call("hrsa_shortage", {"state": state.lower(), "fips": fips}, fetch)
+
+
+# ─── SEP ELIGIBILITY — pure date logic, no external API ─────────────────────
+
+_SEP_EVENTS = {
+    "job_loss": "loss of job-based coverage",
+    "marriage": "marriage",
+    "divorce": "loss of coverage through divorce or legal separation",
+    "birth": "birth of a child",
+    "adoption": "adoption or foster placement of a child",
+    "move": "moving to a new state or coverage service area",
+    "citizenship": "gaining lawful presence or US citizenship",
+    "medicaid_loss": "loss of Medicaid or CHIP eligibility",
+    "release": "release from incarceration",
+    "other": "another qualifying life event",
+}
+
+def check_sep_eligibility(event_type: str = "", event_date_str: str = "") -> dict:
+    """Check open enrollment status or Special Enrollment Period eligibility."""
+    today = date.today()
+    
+    # DEMO/TEST OVERRIDE
+    if os.getenv("FORCE_OPEN_ENROLLMENT", "").upper() == "TRUE":
+        deadline = date(today.year + (1 if today.month > 1 else 0), 1, 15)
+        return {
+            "in_open_enrollment": True,
+            "deadline": deadline.isoformat(),
+            "days_remaining": (deadline - today).days,
+            "message": "Open enrollment is active (DEMO MODE) — you can enroll in any plan now.",
+        }
+
+    year = today.year
+    oe_start = date(year, 11, 1)
+    oe_end = date(year + 1, 1, 15)
+    if today < oe_start:
+        oe_start = date(year - 1, 11, 1)
+        oe_end = date(year, 1, 15)
+
+    if oe_start <= today <= oe_end:
+        days_left = (oe_end - today).days
+        return {
+            "in_open_enrollment": True,
+            "deadline": oe_end.isoformat(),
+            "days_remaining": days_left,
+            "message": (
+                f"Open enrollment is active — {days_left} days left to enroll "
+                f"(deadline {oe_end.strftime('%B %d, %Y')})."
+            ),
+        }
+
+    if not event_type:
+        next_oe = date(today.year, 11, 1)
+        if today >= next_oe:
+            next_oe = date(today.year + 1, 11, 1)
+        days_away = (next_oe - today).days
+        return {
+            "in_open_enrollment": False,
+            "sep_eligible": False,
+            "next_open_enrollment": next_oe.isoformat(),
+            "days_to_next_oe": days_away,
+            "qualifying_events": list(_SEP_EVENTS.keys()),
+            "message": (
+                f"Open enrollment is closed. Next window opens {next_oe.strftime('%B %d, %Y')} "
+                f"({days_away} days away). You may still enroll with a qualifying life event."
+            ),
+        }
+
+    event_desc = _SEP_EVENTS.get(event_type.lower().replace(" ", "_"), event_type)
+    if event_date_str:
+        try:
+            event_date = date.fromisoformat(event_date_str)
+            deadline = event_date + timedelta(days=60)
+            days_left = (deadline - today).days
+            if days_left > 0:
+                return {
+                    "in_open_enrollment": False,
+                    "sep_eligible": True,
+                    "event_type": event_type,
+                    "event_description": event_desc,
+                    "deadline": deadline.isoformat(),
+                    "days_remaining": days_left,
+                    "message": (
+                        f"SEP eligible: {event_desc}. "
+                        f"{days_left} days left to enroll (deadline {deadline.strftime('%B %d, %Y')})."
+                    ),
+                }
+            return {
+                "in_open_enrollment": False,
+                "sep_eligible": False,
+                "expired": True,
+                "message": (
+                    f"SEP window for {event_desc} expired {abs(days_left)} days ago. "
+                    f"Contact healthcare.gov — hardship exceptions are sometimes granted."
+                ),
+            }
+        except ValueError:
+            pass
+
+    return {
+        "in_open_enrollment": False,
+        "sep_eligible": True,
+        "event_type": event_type,
+        "event_description": event_desc,
+        "window_days": 60,
+        "message": (
+            f"You may qualify for a 60-day SEP due to {event_desc}. "
+            f"Provide the date it occurred to calculate your enrollment deadline."
+        ),
+    }
+
+
+# ---------- SEARCH BY ZIP (handles PO Box ZIPs rejected by CMS) ----------
+
+def search_plans_by_zip(zip_code: str, age: int, income: float, household_size: int, tobacco_use: bool = False) -> list:
+    """Search plans using ZIP - tries nearby ZIPs if CMS rejects original."""
+    if not CMS_MARKETPLACE_KEY:
+        return []
+
+    state_exchange = get_state_exchange(zip_code)
+    if state_exchange:
+        return []
+
+    def _try_zip(z):
+        fips = get_fips_from_zip(z)
+        if not fips:
+            return None
+        state = _fips_to_state(fips)
+        if not state:
+            return None
+        body = {
+            "household": {
+                "income": income,
+                "people": [{"age": age, "aptc_eligible": True, "gender": "Male", "uses_tobacco": tobacco_use}],
+            },
+            "market": "Individual",
+            "place": {"countyfips": fips, "zipcode": z, "state": state},
+            "year": 2024,
+            "limit": 10,
+        }
+        try:
+            r = requests.post(f"{BASE_MARKETPLACE}/plans/search", params=_params(), json=body, timeout=15)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            plans = [_normalize_plan(p) for p in data.get("plans", [])]
+            if plans:
+                print(f"CMS returned {len(plans)} plans for ZIP {z}")
+            return plans if plans else None
+        except Exception as e:
+            print(f"Plan search error for {z}: {e}")
+            return None
+
+    result = _try_zip(zip_code)
+    if result:
+        return result
+
+    # Try nearby ZIPs for PO Box ZIPs
+    try:
+        num = int(zip_code)
+        for delta in [1, -1, 2, -2, 5, -5, 10, -10]:
+            nearby = str(num + delta).zfill(5)
+            if nearby[:3] == zip_code[:3]:
+                result = _try_zip(nearby)
+                if result:
+                    print(f"Used nearby ZIP {nearby} for {zip_code}")
+                    return result
+    except Exception:
+        pass
+
+    return []
