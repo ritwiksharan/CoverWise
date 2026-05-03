@@ -83,18 +83,61 @@ def check_medication_coverage(drug_names: List[str], plan_ids: List[str]) -> dic
         "generic_suggestions": generics
     }
 
-def verify_doctors(doctor_names: List[str], state: str, zip_code: str, plan_ids: List[str]) -> dict:
-    """Verify if doctors are in NPPES registry, check their MIPS quality scores, and in-network status."""
+_ISSUER_DIRECTORY_URLS: Dict[str, str] = {
+    "blue cross": "https://www.bcbs.com/find-a-doctor",
+    "bcbs": "https://www.bcbs.com/find-a-doctor",
+    "aetna": "https://www.aetna.com/individuals-families/find-a-doctor.html",
+    "cvs": "https://www.aetna.com/individuals-families/find-a-doctor.html",
+    "united": "https://www.uhc.com/find-a-doctor",
+    "unitedhealthcare": "https://www.uhc.com/find-a-doctor",
+    "cigna": "https://hcpdirectory.cigna.com/",
+    "humana": "https://www.humana.com/find-a-doctor",
+    "ambetter": "https://www.ambetterhealth.com/find-a-doctor.html",
+    "oscar": "https://www.hioscar.com/find-care",
+    "molina": "https://www.molinahealthcare.com/find-a-doctor",
+    "community health": "https://www.communityhealthchoice.org/find-a-provider/",
+    "kaiser": "https://healthy.kaiserpermanente.org/choose-a-doctor",
+    "anthem": "https://www.anthem.com/find-a-doctor/",
+    "elevance": "https://www.elevancehealth.com/find-a-doctor",
+    "centene": "https://www.centene.com/find-a-provider.html",
+}
+
+def _issuer_directory_url(issuer_name: str) -> str:
+    lower = issuer_name.lower()
+    for key, url in _ISSUER_DIRECTORY_URLS.items():
+        if key in lower:
+            return url
+    return "https://healthcare.gov/find-premium-estimates/"
+
+
+def verify_doctors(doctor_names: List[str], state: str, zip_code: str,
+                   plan_ids: List[str], plans: List[dict] = None) -> dict:
+    """Verify doctors in NPPES registry, MIPS scores, and in-network status."""
+    # Build plan_id → issuer map so we can include directory URLs
+    plan_issuer: Dict[str, str] = {}
+    plan_network_url: Dict[str, str] = {}
+    if plans:
+        for p in plans:
+            pid = p.get("id", "")
+            plan_issuer[pid] = p.get("issuer", "")
+            plan_network_url[pid] = p.get("network_url", "")
+
     results = []
     for name in doctor_names:
         nppes = lookup_npi_registry(name, state=state)
         npi = nppes.get("npi")
         quality = get_doctor_quality_score(str(npi)) if npi else {}
 
-        networks = {}
+        networks: Dict[str, Any] = {}
         if npi:
             for pid in plan_ids:
-                networks[pid] = check_doctor_in_plan_network(pid, str(npi), zip_code)
+                net = check_doctor_in_plan_network(pid, str(npi), zip_code)
+                if net.get("in_network") is None:
+                    issuer = plan_issuer.get(pid, "")
+                    dir_url = plan_network_url.get(pid) or _issuer_directory_url(issuer)
+                    net["verify_url"] = dir_url
+                    net["issuer"] = issuer
+                networks[pid] = net
 
         results.append({
             "name": nppes.get("name", name),

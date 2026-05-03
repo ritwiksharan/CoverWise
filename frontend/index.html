@@ -1315,7 +1315,9 @@ function renderResults(data) {
               const accept = net.accepting_patients === false ? ' (Not accepting)' : '';
               return `<span class="net-badge net-in" title="${planName}">✓ In-Net: ${short}${accept}</span>`;
             }
-            return `<span class="net-badge net-unknown" title="${planName}">? ${short}</span>`;
+            const verifyUrl = net.verify_url || 'https://healthcare.gov';
+            const issuerLabel = net.issuer ? ` (${net.issuer.split(' ').slice(0,3).join(' ')})` : '';
+            return `<a href="${verifyUrl}" target="_blank" class="net-badge net-unknown" title="CMS has no network data for this plan. Click to check ${net.issuer || 'insurer'} directory.">🔍 Verify${issuerLabel}</a>`;
           }).join('') : '<span style="font-size:12px;color:var(--text3)">No network data</span>'}
         </div>
       </div>`;

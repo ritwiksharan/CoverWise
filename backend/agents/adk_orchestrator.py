@@ -110,7 +110,7 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
         # Wave 2: Detailed Checks
         meds, docs, risks = await asyncio.gather(
             asyncio.to_thread(check_medication_coverage, drugs, plan_ids),
-            asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids),
+            asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids, plans[:plan_limit] if plans else []),
             asyncio.to_thread(get_market_risks, zip_code, state)
         )
 
