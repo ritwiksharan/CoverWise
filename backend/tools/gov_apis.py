@@ -325,8 +325,11 @@ def _normalize_plan(p: dict) -> dict:
     issuer = p.get("issuer", {})
     issuer_name = issuer.get("name", "") if isinstance(issuer, dict) else str(issuer)
 
-    networks = p.get("network", [])
-    network_url = networks[0].get("network_url", "") if networks else ""
+    # network_url lives at top level in plan-detail responses; inside network[] in search
+    network_url = p.get("network_url") or ""
+    if not network_url:
+        networks = p.get("network") or []
+        network_url = networks[0].get("network_url", "") if networks else ""
 
     return {
         "id": p.get("id", ""),
@@ -1123,3 +1126,94 @@ def search_hospitals(name: str, state: str, city: str = "") -> list:
             return []
 
     return cached_call("hospital_search", {"name": name.lower(), "state": state.lower()}, fetch)
+
+
+# ─── PLAN PROVIDERS — fetch plan detail + NPPES specialty search ─────────────
+
+def get_plan_providers(plan_id: str, zip_code: str, specialty: str = "Internal Medicine",
+                       limit: int = 20) -> dict:
+    """
+    Return providers for a given plan by:
+    1. Fetching the CMS plan detail for issuer name and provider directory URL.
+    2. Searching NPPES for providers of the requested specialty near the ZIP.
+    Returns the directory URL plus up to `limit` NPPES providers as a reference list
+    (network membership must be confirmed via the insurer's directory).
+    """
+    try:
+        # Step 1: Plan detail → issuer + network URL
+        r = requests.get(
+            f"{BASE_MARKETPLACE}/plans/{plan_id}",
+            params=_params({"year": 2024}),
+            timeout=10,
+        )
+        plan_meta: dict = {}
+        if r.status_code == 200:
+            raw = r.json().get("plan", {})
+            issuer_obj = raw.get("issuer") or {}
+            issuer_name = issuer_obj.get("name", "") if isinstance(issuer_obj, dict) else str(issuer_obj)
+            network_url = raw.get("network_url") or ""
+            if not network_url:
+                networks = raw.get("network") or []
+                network_url = networks[0].get("network_url", "") if networks else ""
+            plan_meta = {
+                "plan_id": plan_id,
+                "plan_name": raw.get("name", plan_id),
+                "issuer": issuer_name,
+                "metal_level": raw.get("metal_level", ""),
+                "type": raw.get("type", ""),
+                "network_url": network_url,
+            }
+
+        # Step 2: FIPS/state from ZIP
+        fips = get_fips_from_zip(zip_code)
+        state = _fips_to_state(fips) if fips else ""
+
+        # Step 3: NPPES search by specialty
+        params = {
+            "version": "2.1",
+            "enumeration_type": "NPI-1",
+            "taxonomy_description": specialty,
+            "limit": min(limit, 50),
+        }
+        if state:
+            params["state"] = state.upper()
+
+        nr = requests.get(NPPES_API, params=params, timeout=10)
+        results = nr.json().get("results", [])
+
+        providers = []
+        for item in results:
+            basic = item.get("basic") or {}
+            taxonomies = item.get("taxonomies") or [{}]
+            addresses = item.get("addresses") or [{}]
+            primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
+            addr = next(
+                (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                addresses[0],
+            )
+            providers.append({
+                "npi": item.get("number"),
+                "name": f"{basic.get('first_name', '')} {basic.get('last_name', '')}".strip()
+                        or basic.get("organization_name", ""),
+                "credential": basic.get("credential", ""),
+                "specialty": primary_tax.get("desc", specialty),
+                "city": addr.get("city", ""),
+                "state": addr.get("state", ""),
+                "phone": addr.get("telephone_number", ""),
+                "active": basic.get("status", "") == "A",
+            })
+
+        return {
+            **plan_meta,
+            "specialty_searched": specialty,
+            "zip_code": zip_code,
+            "state": state,
+            "providers_from_nppes": providers,
+            "provider_count": len(providers),
+            "note": (
+                "NPPES lists all licensed providers in this state/specialty. "
+                "Network membership must be confirmed via the insurer's provider directory below."
+            ),
+        }
+    except Exception as e:
+        return {"error": str(e), "plan_id": plan_id}

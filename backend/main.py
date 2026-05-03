@@ -98,6 +98,13 @@ class DoctorSearchRequest(BaseModel):
     zip_code: str = ""
 
 
+class PlanProvidersRequest(BaseModel):
+    plan_id: str
+    zip_code: str
+    specialty: str = "Internal Medicine"
+    limit: int = 20
+
+
 # ── ANALYSIS ──────────────────────────────────────────────────────────────────
 
 @app.post("/api/analyze")
@@ -231,6 +238,27 @@ async def doctor_search(req: DoctorSearchRequest):
             fips = get_fips_from_zip(req.zip_code)
             state = _fips_to_state(fips) if fips else ""
         result = await asyncio.to_thread(lookup_npi_registry, req.name, req.city, state)
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── PLAN PROVIDERS ────────────────────────────────────────────────────────────
+
+@app.post("/api/plan-providers")
+async def plan_providers(req: PlanProvidersRequest):
+    """
+    Return providers for a plan.
+    Fetches the plan's issuer name and provider directory URL from CMS,
+    then returns NPPES providers for the requested specialty near the ZIP.
+    Network membership must be confirmed via the insurer's directory URL.
+    """
+    try:
+        from tools.gov_apis import get_plan_providers
+        result = await asyncio.to_thread(
+            get_plan_providers, req.plan_id, req.zip_code, req.specialty, req.limit
+        )
         return result
     except Exception as e:
         traceback.print_exc()
