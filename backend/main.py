@@ -30,6 +30,20 @@ orchestrator = ADKOrchestrator()
 FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
 
 
+@app.on_event("startup")
+async def _seed_formulary_background():
+    """Pre-seed formulary RAG store for the most common issuers at startup."""
+    def _seed():
+        try:
+            from rag.formulary_store import seed_issuer
+            # BCBS IL (36096) is the highest-volume issuer with a working MRF endpoint
+            seed_issuer("36096", blocking=False)
+        except Exception as e:
+            print(f"[startup] formulary seed error: {e}")
+    import threading
+    threading.Thread(target=_seed, daemon=True).start()
+
+
 class UserProfile(BaseModel):
     user_id: str
     zip_code: str
@@ -316,6 +330,27 @@ async def get_memory(user_id: str):
 async def cache_stats():
     from cache.cache_manager import get_cache_stats
     return get_cache_stats()
+
+
+@app.get("/api/formulary/stats")
+async def formulary_stats():
+    """Return stats on the RAG formulary index."""
+    from rag.formulary_store import get_stats
+    return await asyncio.to_thread(get_stats)
+
+
+@app.post("/api/formulary/seed/{issuer_id}")
+async def formulary_seed(issuer_id: str):
+    """
+    Seed the formulary RAG store for a 5-digit issuer ID (e.g. 36096 for BCBS IL).
+    Downloads and indexes the insurer's machine-readable formulary JSON.
+    Runs in the background — check /api/formulary/stats to see progress.
+    """
+    from rag.formulary_store import seed_issuer, ISSUER_MRF_URLS
+    if issuer_id not in ISSUER_MRF_URLS:
+        raise HTTPException(status_code=404, detail=f"Issuer {issuer_id} not in known MRF index")
+    seed_issuer(issuer_id, blocking=False)
+    return {"status": "seeding_started", "issuer_id": issuer_id}
 
 
 @app.get("/api/health")

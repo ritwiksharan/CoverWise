@@ -423,8 +423,12 @@ def resolve_drug_rxcui(drug_name: str) -> Optional[dict]:
     return cached_call("rxnorm_drug_v2", {"drug": drug_name.lower()}, fetch)
 
 
-def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024) -> list:
-    """Check drug coverage — captures tier, prior_authorization, step_therapy, quantity_limit."""
+def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024,
+                        drug_names: Optional[list] = None) -> list:
+    """
+    Check drug coverage from CMS API; falls back to RAG formulary store when
+    the API returns DataNotProvided (common for many state plans).
+    """
     if not rxcui_list or not plan_ids:
         return []
 
@@ -455,8 +459,61 @@ def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024) -> l
         except Exception as e:
             print(f"Drug coverage check error: {e}")
             return []
+
     key = {"rxcuis": sorted(rxcui_list), "planids": sorted(plan_ids[:5]), "year": year}
-    return cached_call("formulary", key, fetch)
+    results = cached_call("formulary", key, fetch)
+
+    # Fall back to RAG store for any plan where all drugs returned DataNotProvided
+    try:
+        plans_missing = {
+            pid for pid in plan_ids
+            if all(
+                r.get("coverage") == "DataNotProvided"
+                for r in results if r.get("plan_id") == pid
+            )
+        }
+        if plans_missing:
+            from rag.formulary_store import lookup_drug_coverage, seed_issuers_from_plan_ids
+            seed_issuers_from_plan_ids(list(plans_missing), blocking=False)
+            names = drug_names or []
+            # Build map: queried_rxcui → RAG result (normalise rxcui to queried value
+            # so the orchestrator can match by rxcui)
+            rag_replacements: dict[tuple, dict] = {}
+            for i, queried_rxcui in enumerate(rxcui_list):
+                name = names[i] if i < len(names) else ""
+                rag_hits = lookup_drug_coverage(name, str(queried_rxcui), list(plans_missing))
+                for row in rag_hits:
+                    # Use the original queried plan_ids rather than the proxy plan
+                    target_plan_ids = (
+                        row.get("original_plan_ids") or [row["plan_id"]]
+                        if row.get("note") else [row["plan_id"]]
+                    )
+                    for tpid in target_plan_ids:
+                        rag_replacements[(str(queried_rxcui), tpid)] = {
+                            **row,
+                            "rxcui": str(queried_rxcui),   # normalise to queried RxCUI
+                            "plan_id": tpid,
+                        }
+
+            if rag_replacements:
+                updated = []
+                replaced_keys: set[tuple] = set()
+                for r in results:
+                    k = (str(r.get("rxcui")), r.get("plan_id"))
+                    if k in rag_replacements:
+                        updated.append(rag_replacements[k])
+                        replaced_keys.add(k)
+                    else:
+                        updated.append(r)
+                # Add RAG results for combos not present in original CMS response
+                for k, v in rag_replacements.items():
+                    if k not in replaced_keys and k not in {(str(r.get("rxcui")), r.get("plan_id")) for r in updated}:
+                        updated.append(v)
+                results = updated
+    except Exception as e:
+        print(f"[formulary] RAG fallback error: {e}")
+
+    return results
 
 
 # ---------- DOCTOR — CMS Order & Referring ----------

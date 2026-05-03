@@ -68,7 +68,7 @@ def check_medication_coverage(drug_names: List[str], plan_ids: List[str]) -> dic
     if not rxcui_list:
         return {"results": [], "warnings": ["Could not resolve any drug names."]}
         
-    coverage = check_drug_coverage(rxcui_list, plan_ids)
+    coverage = check_drug_coverage(rxcui_list, plan_ids, drug_names=drug_names)
     
     # Suggest generics
     generics = {}

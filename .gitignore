@@ -1,2 +1,18 @@
 .env
 backend/.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Mac
+.DS_Store
+
+# Formulary RAG data (large binary / SQLite — rebuilt at startup)
+backend/data/
+backend/rag/__pycache__/
+
+# Analysis artifacts
+analysis_result.json
