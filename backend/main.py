@@ -267,163 +267,32 @@ async def plan_providers(req: PlanProvidersRequest):
 
 # ── INSURANCE Q&A (ADK agent — Gemini decides which tools to call) ────────────
 
-def _route_insurance_question(question: str) -> tuple[str, dict]:
-    """Fallback keyword router used only when ADK is unavailable."""
-    q = question.lower()
-    if "compare" in q or " vs " in q or " versus " in q:
-        # Try to extract tickers from the question
-        import re
-        # Common ticker patterns: 2-5 uppercase letters surrounded by spaces/punctuation
-        tickers_found = re.findall(
-            r"\b(ALL|PGR|TRV|CB|MET|HIG|CI|UNH|CVS|ELV|HUM|AFL|PRU|LNC|UNM|GL|RLI|CINF|"
-            r"Allstate|Progressive|Travelers|Chubb|MetLife|Hartford|Cigna|UnitedHealth|"
-            r"Aetna|Elevance|Humana|Aflac|Prudential|Lincoln|Unum|Torchmark|RLI|Cincinnati)\b",
-            question,
-            re.IGNORECASE,
-        )
-        # Map company names to tickers
-        name_to_ticker = {
-            "allstate": "ALL", "progressive": "PGR", "travelers": "TRV",
-            "chubb": "CB", "metlife": "MET", "hartford": "HIG",
-            "cigna": "CI", "unitedhealth": "UNH", "aetna": "CVS",
-            "elevance": "ELV", "humana": "HUM", "aflac": "AFL",
-            "prudential": "PRU", "lincoln": "LNC", "unum": "UNM",
-            "torchmark": "GL", "cincinnati": "CINF",
-        }
-        resolved = []
-        for t in tickers_found:
-            upper = t.upper()
-            mapped = name_to_ticker.get(t.lower(), upper)
-            if mapped not in resolved:
-                resolved.append(mapped)
-
-        if len(resolved) < 2:
-            # Fallback: pick two common insurers
-            resolved = ["ALL", "PGR"]
-        return "compare_insurers", {"tickers": resolved[:4]}
-
-    # Financial / earnings queries
-    if any(kw in q for kw in [
-        "financial", "financials", "earnings", "revenue", "profit",
-        "ratio", "ticker", "stock", "sec", "edgar", "10-k", "annual report",
-        "net income", "assets", "liabilities",
-    ]):
-        # Extract a ticker from the question
-        import re
-        ticker_match = re.search(
-            r"\b(ALL|PGR|TRV|CB|MET|HIG|CI|UNH|CVS|ELV|HUM|AFL|PRU|LNC|UNM|GL|RLI|CINF)\b",
-            question,
-            re.IGNORECASE,
-        )
-        # Also try company names
-        name_to_ticker = {
-            "allstate": "ALL", "progressive": "PGR", "travelers": "TRV",
-            "chubb": "CB", "metlife": "MET", "hartford": "HIG",
-            "cigna": "CI", "unitedhealth": "UNH", "aetna": "CVS",
-            "elevance": "ELV", "humana": "HUM", "aflac": "AFL",
-            "prudential": "PRU", "lincoln": "LNC", "unum": "UNM",
-            "torchmark": "GL", "cincinnati": "CINF",
-        }
-        ticker = None
-        if ticker_match:
-            ticker = ticker_match.group(1).upper()
-        else:
-            for name, t in name_to_ticker.items():
-                if name in q:
-                    ticker = t
-                    break
-        ticker = ticker or "PGR"
-        return "query_insurer_financials", {"ticker": ticker, "years": 3}
-
-    # Risk / ZIP score queries
-    if any(kw in q for kw in ["risk", "zip", "score", "zipcode", "flood risk"]):
-        import re
-        zip_match = re.search(r"\b(\d{5})\b", question)
-        zip_code = zip_match.group(1) if zip_match else "77002"
-        return "risk_score", {"zip_code": zip_code}
-
-    # Flood / FEMA / disaster queries (default)
-    state_abbrevs = [
-        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN",
-        "IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
-        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN",
-        "TX","UT","VT","VA","WA","WV","WI","WY",
-    ]
-    import re
-    state = ""
-    for abbrev in state_abbrevs:
-        if re.search(r"\b" + abbrev + r"\b", question):
-            state = abbrev
-            break
-    # Also catch full state names — a small subset
-    state_names = {
-        "texas": "TX", "florida": "FL", "california": "CA",
-        "louisiana": "LA", "new york": "NY", "north carolina": "NC",
-        "south carolina": "SC", "georgia": "GA", "ohio": "OH",
-    }
-    if not state:
-        for name, abbrev in state_names.items():
-            if name in q:
-                state = abbrev
-                break
-    state = state or "TX"
-    # County extraction — naive: look for "in <County> county"
-    county_match = re.search(r"in\s+(\w+)\s+county", question, re.IGNORECASE)
-    county = county_match.group(1).upper() if county_match else ""
-    return "query_flood_claims", {"state": state, "county": county, "limit": 100}
-
-
 @app.post("/api/insurance-qa")
 async def insurance_qa(req: InsuranceQARequest):
     """
-    Answer free-form insurance questions using an ADK agent.
-    Gemini 2.0 Flash reads the question, decides which tool(s) to call
-    (flood claims, insurer financials, risk score, compare insurers),
-    calls them with the right arguments, and synthesises the answer.
+    Answer free-form health insurance questions using a Google ADK agent.
+    Gemini 2.0 Flash decides which tool(s) to call and synthesises the answer.
+    Restricted to health insurance topics only.
     """
-    import json as _json
-
     try:
         from agents.insurance_qa_agent import get_agent, ADK_AVAILABLE
 
-        if ADK_AVAILABLE:
-            agent = get_agent()
-            result = await agent.ask(req.user_id, req.question)
-
-            if result.get("error") == "adk_unavailable":
-                raise RuntimeError("ADK unavailable")
-
+        if not ADK_AVAILABLE:
             return {
-                "answer": result["answer"],
-                "tool_calls": result.get("tool_calls", []),
+                "answer": "The AI advisor is temporarily unavailable. Please try again shortly.",
+                "tool_calls": [],
                 "data": {},
-                "tool_used": ", ".join(result.get("tool_calls", [])) or "gemini",
+                "tool_used": "none",
             }
 
-        # ── Fallback: keyword router + direct Gemini synthesis ────────────────
-        tool_name, tool_kwargs = _route_insurance_question(req.question)
-        from tools import insurance_mcp_tools as _tools
-        fn = getattr(_tools, tool_name)
-        tool_result = await asyncio.to_thread(fn, **tool_kwargs)
-
-        answer_text = ""
-        try:
-            import google.genai as genai
-            client = genai.Client()
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=(
-                    "You are an insurance data analyst. Answer this question using ONLY "
-                    "the provided data. Be specific, cite numbers, use markdown.\n\n"
-                    f"Question: {req.question}\n\n"
-                    f"Data:\n{_json.dumps(tool_result, indent=2)}"
-                ),
-            )
-            answer_text = response.text
-        except Exception:
-            answer_text = f"**Data retrieved** (AI synthesis unavailable)\n\n```json\n{_json.dumps(tool_result, indent=2)}\n```"
-
-        return {"answer": answer_text, "data": tool_result, "tool_used": tool_name, "tool_calls": [tool_name]}
+        agent = get_agent()
+        result = await agent.ask(req.user_id, req.question)
+        return {
+            "answer": result["answer"],
+            "tool_calls": result.get("tool_calls", []),
+            "data": {},
+            "tool_used": ", ".join(result.get("tool_calls", [])) or "gemini",
+        }
 
     except Exception as e:
         traceback.print_exc()

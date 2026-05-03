@@ -257,30 +257,6 @@ Reduces redundant API calls by ~70–80% for overlapping ZIP codes.
 
 ---
 
-## MCP Server
-
-CoverWise ships a standalone **Model Context Protocol server** (`backend/mcp_server.py`) exposing four tools over stdio. Add it to any MCP-compatible client (Claude Code, Cursor, etc.):
-
-```json
-{
-  "mcpServers": {
-    "insurance": {
-      "command": "python3",
-      "args": ["/path/to/CoverWise/backend/mcp_server.py"],
-      "cwd": "/path/to/CoverWise/backend"
-    }
-  }
-}
-```
-
-**Tools exposed:**
-- `query_flood_claims` — FEMA NFIP flood claims by state/county
-- `query_insurer_financials` — SEC EDGAR XBRL annual financials
-- `risk_score` — ZIP-level flood risk score (0–100)
-- `compare_insurers` — side-by-side insurer comparison
-
----
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -292,7 +268,7 @@ CoverWise ships a standalone **Model Context Protocol server** (`backend/mcp_ser
 | Caching | In-process TTL dict cache |
 | Frontend | Vanilla JS + HTML/CSS (no framework) |
 | Deployment | Google Cloud Run |
-| Protocol | MCP (Model Context Protocol) via `mcp` SDK |
+| Protocol | REST (FastAPI) |
 
 ---
 
@@ -368,7 +344,6 @@ Risk flags:
 CoverWise/
 ├── backend/
 │   ├── main.py                    # FastAPI app + all endpoints
-│   ├── mcp_server.py              # MCP stdio server
 │   ├── agents/
 │   │   ├── adk_orchestrator.py    # Main analysis pipeline
 │   │   ├── insurance_qa_agent.py  # Health insurance Q&A ADK agent
@@ -376,7 +351,6 @@ CoverWise/
 │   │   └── tools.py               # Shared agent tool wrappers
 │   ├── tools/
 │   │   ├── gov_apis.py            # All government API calls
-│   │   └── insurance_mcp_tools.py # FEMA + SEC EDGAR tools for MCP
 │   ├── cache/
 │   │   └── cache_manager.py       # TTL-based caching
 │   └── memory/
