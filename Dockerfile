@@ -6,7 +6,6 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./
-COPY backend/data/ ./data/
 COPY frontend/ ./frontend/
 
 RUN mkdir -p ./data/mem0_chroma
