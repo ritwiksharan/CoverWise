@@ -16,6 +16,9 @@ try:
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
+    ToolContext = None
+    Content = None
+    Part = None
 
 from agents.tools import (
     get_location_info, get_subsidy_estimate, find_plans,
@@ -69,7 +72,7 @@ STRUCTURE & FORMATTING
 • Tone: Objective, mathematical, and authoritative.
 """
 
-async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
+async def run_full_analysis_parallel(tool_context) -> dict:
     """
     Run all domain-specific tools in parallel waves and return the consolidated data.
     """
