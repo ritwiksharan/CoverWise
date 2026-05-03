@@ -4,31 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoverWise — AI Health Insurance Advisor</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0f1e; --bg2: #111827; --bg3: #1a2235;
-    --border: #1e2d45; --border2: #263554;
-    --text: #f0f4ff; --text2: #8899bb; --text3: #4a5f80;
-    --accent: #3b82f6; --accent2: #60a5fa;
-    --green: #10b981; --yellow: #f59e0b; --red: #ef4444;
-    --orange: #f97316; --purple: #8b5cf6;
-    --gold: #fbbf24; --silver: #94a3b8;
+    --bg: #040d1a; --bg2: #071222; --bg3: #0d1f36;
+    --border: #0e2444; --border2: #163358;
+    --text: #e8f0ff; --text2: #7ea8d8; --text3: #3d6494;
+    --accent: #2563eb; --accent2: #5ba0f5;
+    --green: #0ea472; --yellow: #f59e0b; --red: #ef4444;
+    --orange: #f97316; --purple: #7c3aed;
+    --gold: #fbbf24; --silver: #8fb0cc;
     --radius: 10px; --radius-lg: 16px;
-    --display: Playfair Display, serif;
-    --body: DM Sans, sans-serif;
-    --mono: DM Mono, monospace;
+    --display: Space Grotesk, sans-serif;
+    --body: Inter, sans-serif;
+    --mono: JetBrains Mono, monospace;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:var(--body); background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
 
   .bg-grid { position:fixed; inset:0; z-index:0;
-    background-image: linear-gradient(rgba(59,130,246,.03) 1px,transparent 1px),
-                      linear-gradient(90deg,rgba(59,130,246,.03) 1px,transparent 1px);
+    background-image: linear-gradient(rgba(37,99,235,.05) 1px,transparent 1px),
+                      linear-gradient(90deg,rgba(37,99,235,.05) 1px,transparent 1px);
     background-size:40px 40px; pointer-events:none; }
   .bg-glow { position:fixed; top:-200px; left:50%; transform:translateX(-50%);
-    width:800px; height:400px;
-    background:radial-gradient(ellipse,rgba(59,130,246,.08) 0%,transparent 70%);
+    width:900px; height:500px;
+    background:radial-gradient(ellipse,rgba(37,99,235,.14) 0%,transparent 70%);
     pointer-events:none; z-index:0; }
 
   .app { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:0 24px 80px; }
@@ -36,18 +36,25 @@
   header { padding:40px 0 32px; display:flex; align-items:center; justify-content:space-between;
     border-bottom:1px solid var(--border); margin-bottom:40px; }
   .logo { display:flex; align-items:center; gap:12px; }
-  .logo-icon { width:40px; height:40px; background:linear-gradient(135deg,var(--accent),var(--purple));
-    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .logo-icon { width:40px; height:40px; background:linear-gradient(135deg,#2563eb,#7c3aed);
+    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px;
+    box-shadow:0 0 20px rgba(37,99,235,.4); }
   .logo-text { font-family:var(--display); font-size:22px; font-weight:700; }
   .logo-sub { font-size:11px; color:var(--text3); font-family:var(--mono); letter-spacing:1px; text-transform:uppercase; }
   .header-badge { font-size:11px; font-family:var(--mono); color:var(--green);
     border:1px solid var(--green); padding:4px 10px; border-radius:20px; background:rgba(16,185,129,.08); }
 
   .hero { text-align:center; margin-bottom:40px; }
-  .hero h1 { font-family:var(--display); font-size:clamp(32px,5vw,52px); font-weight:900;
-    line-height:1.1; margin-bottom:16px; }
-  .hero h1 span { color:var(--accent2); }
-  .hero p { font-size:16px; color:var(--text2); max-width:520px; margin:0 auto 24px; line-height:1.7; }
+  .hero-eyebrow { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono);
+    font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent2);
+    background:rgba(37,99,235,.12); border:1px solid rgba(91,160,245,.25);
+    padding:6px 14px; border-radius:20px; margin-bottom:20px; }
+  .hero h1 { font-family:var(--display); font-size:clamp(34px,5vw,56px); font-weight:800;
+    line-height:1.1; margin-bottom:16px; letter-spacing:-0.5px; }
+  .hero h1 span { color:var(--accent2);
+    background:linear-gradient(135deg,#5ba0f5,#7c3aed); -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:16px; color:var(--text2); max-width:540px; margin:0 auto 24px; line-height:1.8; font-weight:400; }
   .concepts { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
   .concept-tag { font-size:11px; font-family:var(--mono); padding:4px 10px; border-radius:20px;
     border:1px solid var(--border2); color:var(--text3); }
@@ -349,8 +356,9 @@
   </header>
 
   <div class="hero">
+    <div class="hero-eyebrow">⚡ AI-Powered · Live CMS Data · Multi-Agent</div>
     <h1>Find your <span>best health plan</span><br>in 30 seconds</h1>
-    <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors — then tells you exactly which plan saves you the most money.</p>
+    <p>Enter your ZIP, income, and medications. CoverWise pulls live ACA plan data, checks your drug coverage, verifies your doctors, and uses AI to rank every plan by your true annual cost — not just the premium.</p>
     <div class="concepts">
       <span class="concept-tag active">Multi-Agent Orchestration</span>
       <span class="concept-tag active">Google ADK Intake</span>
