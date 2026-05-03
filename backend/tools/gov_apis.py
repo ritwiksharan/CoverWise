@@ -573,7 +573,13 @@ def lookup_npi_registry(doctor_name: str, city: str = "", state: str = "") -> di
             if not results:
                 return {"found": False, "searched_name": doctor_name}
 
-            match = results[0]
+            # Pick the result whose last name actually matches before falling back to [0]
+            last_upper = last.upper()
+            match = next(
+                (res for res in results
+                 if res.get("basic", {}).get("last_name", "").upper() == last_upper),
+                results[0],
+            )
             basic = match.get("basic", {})
             taxonomies = match.get("taxonomies") or [{}]
             addresses = match.get("addresses") or [{}]

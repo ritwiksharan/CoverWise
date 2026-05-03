@@ -91,6 +91,13 @@ class InsuranceQARequest(BaseModel):
     is_premium: bool = False
 
 
+class DoctorSearchRequest(BaseModel):
+    name: str
+    city: str = ""
+    state: str = ""
+    zip_code: str = ""
+
+
 # ── ANALYSIS ──────────────────────────────────────────────────────────────────
 
 @app.post("/api/analyze")
@@ -203,6 +210,28 @@ async def hospital_search(req: HospitalSearchRequest):
             results.append({**h, "network_status": network_status})
 
         return {"hospitals": results}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── DOCTOR SEARCH ─────────────────────────────────────────────────────────────
+
+@app.post("/api/doctor-search")
+async def doctor_search(req: DoctorSearchRequest):
+    """
+    Look up a doctor by name via the NPPES NPI Registry.
+    Returns NPI, specialty, city/state, phone, credential, and up to 3 candidate matches.
+    Optionally pass city/state/zip to narrow results.
+    """
+    try:
+        from tools.gov_apis import lookup_npi_registry, get_fips_from_zip, _fips_to_state
+        state = req.state
+        if not state and req.zip_code:
+            fips = get_fips_from_zip(req.zip_code)
+            state = _fips_to_state(fips) if fips else ""
+        result = await asyncio.to_thread(lookup_npi_registry, req.name, req.city, state)
+        return result
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
