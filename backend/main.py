@@ -205,6 +205,30 @@ async def procedure_cost(req: ProcedureCostRequest):
 
 # ── HOSPITAL SEARCH ───────────────────────────────────────────────────────────
 
+@app.get("/api/hospitals/nearby/{zip_code}")
+async def hospitals_nearby(zip_code: str, plan_ids: str = ""):
+    """Return hospitals near a ZIP code (location-based, no name required)."""
+    try:
+        from tools.gov_apis import search_hospitals_nearby, check_doctor_in_plan_network
+        hospitals = await asyncio.to_thread(search_hospitals_nearby, zip_code)
+        pids = [p.strip() for p in plan_ids.split(",") if p.strip()][:3]
+        results = []
+        for h in hospitals:
+            npi = h.get("npi")
+            network_status = {}
+            if npi and pids:
+                for pid in pids:
+                    net = await asyncio.to_thread(
+                        check_doctor_in_plan_network, pid, str(npi), zip_code
+                    )
+                    network_status[pid] = net
+            results.append({**h, "network_status": network_status})
+        return {"hospitals": results, "zip_code": zip_code}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/hospital-search")
 async def hospital_search(req: HospitalSearchRequest):
     """Search for hospitals by name and check in-network status."""

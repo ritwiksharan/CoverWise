@@ -1109,6 +1109,63 @@ def estimate_procedure_oop(procedure_key: str, plans: list) -> dict:
     }
 
 
+def search_hospitals_nearby(zip_code: str, limit: int = 8) -> list:
+    """
+    Return hospitals near a ZIP code by resolving state from ZIP then searching
+    NPPES NPI-2 with taxonomy 'General Acute Care Hospital'.
+    No name required — purely location-based.
+    """
+    fips  = get_fips_from_zip(zip_code)
+    state = _fips_to_state(fips) if fips else ""
+
+    def fetch():
+        try:
+            # Primary search: general acute care hospitals in state
+            for taxonomy in ["General Acute Care Hospital", "Hospital"]:
+                params = {
+                    "version": "2.1",
+                    "enumeration_type": "NPI-2",
+                    "taxonomy_description": taxonomy,
+                    "limit": limit,
+                }
+                if state:
+                    params["state"] = state.upper()
+                r = requests.get(NPPES_API, params=params, timeout=12)
+                results = r.json().get("results", [])
+                if results:
+                    break
+
+            hospitals = []
+            seen = set()
+            for item in results:
+                npi = item.get("number")
+                if npi in seen:
+                    continue
+                seen.add(npi)
+                basic = item.get("basic", {})
+                addresses = item.get("addresses") or [{}]
+                addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0],
+                )
+                if basic.get("status", "") != "A":
+                    continue
+                hospitals.append({
+                    "npi":     npi,
+                    "name":    basic.get("organization_name", ""),
+                    "city":    addr.get("city", ""),
+                    "state":   addr.get("state", ""),
+                    "address": f"{addr.get('address_1','')} {addr.get('address_2','')}".strip(),
+                    "phone":   addr.get("telephone_number", ""),
+                })
+            return hospitals[:limit]
+        except Exception as e:
+            print(f"Nearby hospital search error: {e}")
+            return []
+
+    return cached_call("hospitals_nearby", {"zip": zip_code}, fetch)
+
+
 def search_hospitals(name: str, state: str, city: str = "") -> list:
     """Search NPPES for hospitals / facilities (NPI-2) by name."""
     def fetch():

@@ -1221,42 +1221,23 @@ function renderResults(data) {
     <div id="incomeSimResults"></div>
   </div>`;
 
-  // ── FEATURE: LIFE EVENT SEP WORKFLOW ──────────────────────────────────────────
-  const sepInfo = data.sep || {};
-  html += `<div class="feature-card" id="sepSection">
-    <h2>📋 Life Event — Special Enrollment Period Guide</h2>
-    <p>Lost a job? Got married? Moved? A qualifying life event gives you a 60-day window to enroll outside open enrollment.</p>
-    ${sepInfo.in_open_enrollment
-      ? `<div class="sep-alert sep-open">✅ Open enrollment is active — ${sepInfo.days_remaining || '?'} days left (deadline ${sepInfo.deadline || 'Jan 15'}). You can enroll anytime now.</div>`
-      : `<div class="sep-alert sep-closed">ℹ️ Open enrollment is currently closed. A qualifying life event lets you enroll in a new plan within 60 days.</div>`}
-    <div class="specialist-input-row" style="margin-top:12px">
-      <select class="specialist-input" id="sepEventSelect">
-        <option value="">Select a life event…</option>
-        <option value="job_loss">Lost job-based coverage (layoff, quit, COBRA expiring)</option>
-        <option value="marriage">Got married</option>
-        <option value="divorce">Got divorced or legally separated</option>
-
-        <option value="moved">Moved to a new ZIP code or state</option>
-        <option value="citizenship">Gained US citizenship or lawful presence</option>
-        <option value="income_change">Income changed significantly</option>
-        <option value="plan_ended">Your current plan was discontinued</option>
-        <option value="marketplace_error">Marketplace enrollment error</option>
-      </select>
-      <button class="specialist-btn" onclick="showSepGuide()">Show My Steps</button>
-    </div>
-    <div id="sepResults"></div>
-  </div>`;
-
   // ── FEATURE: HOSPITAL NETWORK CHECK ───────────────────────────────────────────
+  const zipForHospitals = (currentProfile || {}).zip_code || '';
+  const planIdsForHospitals = (results.plans || []).slice(0,3).map(p=>p.id).join(',');
   html += `<div class="feature-card" id="hospitalSection">
-    <h2>🏨 Hospital Network Check</h2>
-    <p>Search for a hospital or medical center by name and instantly see whether it's in-network on your plans — avoiding surprise out-of-network facility bills.</p>
-    <div class="specialist-input-row">
-      <input class="specialist-input" id="hospitalInput" placeholder="e.g. Stanford, Mayo Clinic, Cedars-Sinai…" onkeydown="if(event.key==='Enter')runHospitalSearch()">
-      <button class="specialist-btn" id="hospitalBtn" onclick="runHospitalSearch()">Check Hospital</button>
+    <h2>🏥 Hospitals Near You${zipForHospitals ? ' — ZIP ' + zipForHospitals : ''}</h2>
+    <p>Nearby hospitals and their in-network status across your top plans. Search by name below for a specific facility.</p>
+    <div id="hospitalNearby"><div class="intake-msg agent" style="margin-top:0"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>
+    <div class="specialist-input-row" style="margin-top:14px">
+      <input class="specialist-input" id="hospitalInput" placeholder="Search a specific hospital name…" onkeydown="if(event.key==='Enter')runHospitalSearch()">
+      <button class="specialist-btn" id="hospitalBtn" onclick="runHospitalSearch()">Search</button>
     </div>
     <div id="hospitalResults"></div>
   </div>`;
+  // Auto-load nearby hospitals after render
+  if (zipForHospitals) {
+    setTimeout(() => loadNearbyHospitals(zipForHospitals, planIdsForHospitals), 100);
+  }
 
   // ── DOCTOR RESULTS ──────────────────────────────────────────────────────────
   const doctorResults = doctorsData.results || [];
@@ -1688,37 +1669,50 @@ function updateIncomeSim() {
   el.innerHTML = html;
 }
 
-// ── LIFE EVENT SEP GUIDE ──────────────────────────────────────────────────────
-function showSepGuide() {
-  const event = document.getElementById('sepEventSelect').value;
-  const el = document.getElementById('sepResults');
-  if (!event || !el) return;
-  const guides = {
-    job_loss: { title:'Lost Job-Based Coverage', deadline:'60 days from loss of coverage', warning:'COBRA and SEP deadlines overlap — if you elect COBRA then drop it, you may not get another SEP.', steps:['Get a letter from employer confirming your coverage end date.','Go to healthcare.gov (or your state exchange) immediately.','Elect COBRA to keep your plan at up to 102% of full premium — compare vs marketplace subsidized plans, which are often cheaper.','Apply on healthcare.gov with proof of prior coverage loss.'] },
-    marriage: { title:'Got Married', deadline:'60 days from date of marriage', steps:['You and your spouse can enroll together on a marketplace plan.','Compare: marketplace family plan vs each on your own employer plan.','Bring your marriage certificate.','Update household size — this changes FPL% and subsidy amount significantly.'] },
-    divorce: { title:'Got Divorced / Legally Separated', deadline:'60 days from finalization', steps:['If on a spouse\'s plan, you now need your own coverage.','Go to healthcare.gov to enroll in a marketplace plan.','Update your household size — subsidy may change significantly.','Children may qualify for CHIP if income drops after divorce.'] },
-
-    moved: { title:'Moved to a New ZIP Code or State', deadline:'60 days from your move date', steps:['Plans are location-specific — your old plan may not be valid at the new address.','Re-enter your new address on healthcare.gov to see new available plans.','Your new state may have different Medicaid expansion and exchange rules.','If moving to CA, NY, WA, CO, or another state-exchange state, go to that state\'s site directly.'] },
-    citizenship: { title:'Gained US Citizenship or Lawful Presence', deadline:'60 days from when you gained status', steps:['Now eligible for marketplace plans and APTC subsidies.','Bring documentation of your immigration or citizenship status.','If income is low, check Medicaid eligibility first.'] },
-    income_change: { title:'Income Changed Significantly', deadline:'Report anytime during the year', warning:'Failing to report income changes can result in large APTC repayments at tax time.', steps:['Go to healthcare.gov → "Report a Life Change" immediately.','If income dropped below 100% FPL, check Medicaid eligibility.','If income rose above 400% FPL, your subsidy ends — plan for the cost increase.','Use the Income Simulator (above) to preview your new subsidy amount.'] },
-    plan_ended: { title:'Your Current Plan Was Discontinued', deadline:'60 days from plan end date', steps:['Your insurer must send a termination notice — save it as proof.','Go to healthcare.gov to enroll in a replacement plan.','You may receive automatic re-enrollment in a similar plan — review it before accepting.','Use this opportunity to compare all available plans fresh.'] },
-    marketplace_error: { title:'Marketplace Enrollment Error', deadline:'60 days from error notification', steps:['Call the Marketplace Call Center: 1-800-318-2596.','Document the error with screenshots and dates.','Request a SEP or dispute resolution through the marketplace.'] },
-  };
-  const g = guides[event];
-  if (!g) return;
-  el.innerHTML = `<div style="margin-top:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-    <div style="font-weight:600;font-size:14px;margin-bottom:4px">📋 ${g.title}</div>
-    <div style="font-family:var(--mono);font-size:11px;color:var(--accent2);margin-bottom:12px">⏱ Deadline: ${g.deadline}</div>
-    <ol style="padding-left:20px;font-size:13px;color:var(--text2);line-height:1.9">${g.steps.map(s=>`<li>${s}</li>`).join('')}</ol>
-    ${g.warning?`<div style="margin-top:12px;padding:8px 12px;background:rgba(239,68,68,.08);border:1px solid var(--red);border-radius:var(--radius);font-size:12px;color:var(--red)">⚠️ ${g.warning}</div>`:''}
-    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      <a href="https://www.healthcare.gov/life-changes/" target="_blank" rel="noopener" class="specialist-btn" style="text-decoration:none;font-size:12px;padding:8px 14px">healthcare.gov →</a>
-      <a href="https://www.healthcare.gov/find-assistance/" target="_blank" rel="noopener" class="specialist-btn" style="text-decoration:none;font-size:12px;padding:8px 14px;background:var(--bg3);border:1px solid var(--border)">Find Local Help →</a>
-    </div>
-  </div>`;
+// ── HOSPITAL NETWORK CHECK ────────────────────────────────────────────────────
+function renderHospitalCards(hospitals, plans, container) {
+  if (!hospitals.length) {
+    container.innerHTML = `<div style="font-size:13px;color:var(--text2);padding:12px 0">No hospitals found for this area.</div>`;
+    return;
+  }
+  container.innerHTML = `<div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">${
+    hospitals.map(h => {
+      const netStatuses = Object.entries(h.network_status || {});
+      const netHtml = netStatuses.length
+        ? netStatuses.map(([pid, net]) => {
+            const pn = (plans.find(p=>p.id===pid)||{}).name || pid;
+            const short = pn.length>22 ? pn.slice(0,20)+'…' : pn;
+            if (net.in_network === false) return `<span class="net-badge net-out">✗ OON: ${short}</span>`;
+            if (net.in_network === true)  return `<span class="net-badge net-in">✓ In-Net: ${short}</span>`;
+            return `<span class="net-badge net-unknown">? Verify: ${short}</span>`;
+          }).join('')
+        : `<span style="font-size:11px;color:var(--text3)">Network status unavailable — confirm with your insurer</span>`;
+      return `<div class="specialist-card">
+        <div class="specialist-name">🏥 ${h.name}</div>
+        <div class="specialist-sub">NPI: ${h.npi||'N/A'} · ${h.city||''}${h.state?', '+h.state:''}</div>
+        ${h.address?`<div class="specialist-sub">${h.address}</div>`:''}
+        ${h.phone?`<div class="specialist-sub">📞 ${h.phone}</div>`:''}
+        <div class="specialist-networks" style="margin-top:8px">${netHtml}</div>
+      </div>`;
+    }).join('')
+  }</div>`;
 }
 
-// ── HOSPITAL NETWORK CHECK ────────────────────────────────────────────────────
+async function loadNearbyHospitals(zipCode, planIdsCsv) {
+  const el = document.getElementById('hospitalNearby');
+  if (!el || !zipCode) return;
+  try {
+    const qs = planIdsCsv ? `?plan_ids=${encodeURIComponent(planIdsCsv)}` : '';
+    const res = await fetch(`/api/hospitals/nearby/${zipCode}${qs}`);
+    const data = await res.json();
+    const plans = (window._lastResults || {}).plans || [];
+    renderHospitalCards(data.hospitals || [], plans, el);
+  } catch(e) {
+    if (el) el.innerHTML = `<div style="color:var(--red);font-size:13px">Could not load nearby hospitals.</div>`;
+  }
+}
+
+
 async function runHospitalSearch() {
   const input = document.getElementById('hospitalInput');
   const name = input.value.trim();
@@ -1731,41 +1725,24 @@ async function runHospitalSearch() {
   const plans = (window._lastResults || {}).plans || [];
   const planIds = plans.slice(0, 3).map(p => p.id);
   try {
+    // Search nationally by name (no state filter) so e.g. "Stanford" finds CA hospitals
     const res = await fetch('/api/hospital-search', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ user_id: USER_ID, name, state: profile.state || '', city: '', zip_code: profile.zip_code || '', plan_ids: planIds })
+      body: JSON.stringify({
+        user_id: USER_ID, name,
+        state: '',           // no state restriction for named search
+        city: '',
+        zip_code: profile.zip_code || '',
+        plan_ids: planIds
+      })
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const hospitals = data.hospitals || [];
-    if (!hospitals.length) {
-      resultsEl.innerHTML = `<div style="font-size:13px;color:var(--text2);padding:12px 0">No hospitals found for "<strong>${name}</strong>". Try a shorter name (e.g. "Stanford" vs "Stanford Medical Center").</div>`;
-      return;
-    }
-    resultsEl.innerHTML = `<div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">${
-      hospitals.map(h => {
-        const netStatuses = Object.entries(h.network_status || {});
-        const netHtml = netStatuses.length
-          ? netStatuses.map(([pid, net]) => {
-              const pn = (plans.find(p=>p.id===pid)||{}).name || pid;
-              const short = pn.length>22 ? pn.slice(0,20)+'…' : pn;
-              if (net.in_network === false) return `<span class="net-badge net-out">✗ OON: ${short}</span>`;
-              if (net.in_network === true)  return `<span class="net-badge net-in">✓ In-Net: ${short}</span>`;
-              return `<span class="net-badge net-unknown">? ${short}</span>`;
-            }).join('')
-          : `<span style="font-size:11px;color:var(--text3)">Network status unavailable for your plans</span>`;
-        return `<div class="specialist-card">
-          <div class="specialist-name">🏥 ${h.name}</div>
-          <div class="specialist-sub">NPI: ${h.npi||'N/A'} · ${h.city||''}${h.state?', '+h.state:''}</div>
-          ${h.address?`<div class="specialist-sub">${h.address}</div>`:''}
-          ${h.phone?`<div class="specialist-sub">📞 ${h.phone}</div>`:''}
-          <div class="specialist-networks" style="margin-top:8px">${netHtml}</div>
-        </div>`;
-      }).join('')
-    }</div>`;
-    input.value = '';
+    renderHospitalCards(data.hospitals || [], plans, resultsEl);
+    if ((data.hospitals || []).length) input.value = '';
   } catch(e) {
     resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px">Error searching hospitals. Please try again.</div>`;
-  } finally { btn.disabled = false; btn.textContent = 'Check Hospital'; }
+  } finally { btn.disabled = false; btn.textContent = 'Search'; }
 }
 
 // ── MOCK FALLBACK ─────────────────────────────────────────────────────────────
