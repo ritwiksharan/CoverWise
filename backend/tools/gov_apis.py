@@ -499,6 +499,57 @@ def verify_doctor_cms(doctor_name: str) -> dict:
 # ─── NPPES NPI REGISTRY — proper provider identity lookup ────────────────────
 NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
 
+# ─── CONDITION → SPECIALTY TAXONOMY MAP ──────────────────────────────────────
+# Maps keywords in user's condition query to NPPES taxonomy description,
+# a human-readable specialty label, and the CMS benefit service type for copay lookup.
+CONDITION_SPECIALTY_MAP = [
+    # Cardiovascular
+    {"keywords": ["heart","cardiac","cardio","chest pain","hypertension","blood pressure","arrhythmia","coronary","atrial","palpitation"],
+     "taxonomy_desc": "Cardiovascular Disease", "specialty": "Cardiologist", "benefit_type": "Specialist Visit"},
+    # Endocrine / Diabetes
+    {"keywords": ["diabetes","diabetic","insulin","a1c","thyroid","endocrine","hormone","adrenal","thyroid"],
+     "taxonomy_desc": "Endocrinology", "specialty": "Endocrinologist", "benefit_type": "Specialist Visit"},
+    # Oncology / Cancer
+    {"keywords": ["cancer","tumor","oncology","chemotherapy","chemo","radiation","lymphoma","leukemia","melanoma","biopsy"],
+     "taxonomy_desc": "Hematology & Oncology", "specialty": "Oncologist", "benefit_type": "Specialist Visit"},
+    # Orthopedics
+    {"keywords": ["back pain","spine","joint","knee","hip","shoulder","fracture","bone","orthopedic","ortho","sports injury","tendon","ligament"],
+     "taxonomy_desc": "Orthopaedic Surgery", "specialty": "Orthopedic Surgeon", "benefit_type": "Specialist Visit"},
+    # Mental Health / Psychiatry
+    {"keywords": ["mental health","depression","anxiety","ptsd","bipolar","schizophrenia","psychiatry","psychiatric","mood","panic","ocd","adhd","therapy","therapist"],
+     "taxonomy_desc": "Psychiatry", "specialty": "Psychiatrist", "benefit_type": "Mental Health"},
+    # Neurology
+    {"keywords": ["neuro","migraine","seizure","epilepsy","parkinson","alzheimer","ms","multiple sclerosis","stroke","numbness","tremor","neuropathy"],
+     "taxonomy_desc": "Neurology", "specialty": "Neurologist", "benefit_type": "Specialist Visit"},
+    # Gastroenterology
+    {"keywords": ["stomach","gut","ibs","crohn","colitis","colon","gastro","ulcer","acid reflux","gerd","liver","hepatitis","gallbladder"],
+     "taxonomy_desc": "Gastroenterology", "specialty": "Gastroenterologist", "benefit_type": "Specialist Visit"},
+    # Pulmonology
+    {"keywords": ["lung","asthma","copd","breathing","pulmonary","respiratory","bronchitis","pneumonia","sleep apnea"],
+     "taxonomy_desc": "Pulmonary Disease", "specialty": "Pulmonologist", "benefit_type": "Specialist Visit"},
+    # Dermatology
+    {"keywords": ["skin","rash","acne","eczema","psoriasis","dermatology","mole","lesion","hives","hair loss"],
+     "taxonomy_desc": "Dermatology", "specialty": "Dermatologist", "benefit_type": "Specialist Visit"},
+    # OB/GYN
+    {"keywords": ["pregnancy","prenatal","gynecology","women","obgyn","ob/gyn","uterus","ovary","menopause","fertility"],
+     "taxonomy_desc": "Obstetrics & Gynecology", "specialty": "OB/GYN", "benefit_type": "Specialist Visit"},
+    # Urology
+    {"keywords": ["kidney","bladder","prostate","urology","urinary","erectile","incontinence"],
+     "taxonomy_desc": "Urology", "specialty": "Urologist", "benefit_type": "Specialist Visit"},
+    # Rheumatology
+    {"keywords": ["arthritis","rheumatoid","lupus","fibromyalgia","gout","autoimmune","rheumatology","joint pain"],
+     "taxonomy_desc": "Rheumatology", "specialty": "Rheumatologist", "benefit_type": "Specialist Visit"},
+    # Ophthalmology
+    {"keywords": ["eye","vision","glaucoma","cataract","retina","ophthalmology","optic","macular"],
+     "taxonomy_desc": "Ophthalmology", "specialty": "Ophthalmologist", "benefit_type": "Vision"},
+    # Allergy/Immunology
+    {"keywords": ["allergy","allergies","immunology","anaphylaxis","food allergy","asthma allergy"],
+     "taxonomy_desc": "Allergy & Immunology", "specialty": "Allergist", "benefit_type": "Specialist Visit"},
+    # General Internal Medicine (fallback)
+    {"keywords": ["internal medicine","general","primary care","checkup","physical","annual","preventive"],
+     "taxonomy_desc": "Internal Medicine", "specialty": "Internist", "benefit_type": "Primary Care Visit"},
+]
+
 def lookup_npi_registry(doctor_name: str, city: str = "", state: str = "") -> dict:
     """Look up a provider via the NPPES NPI Registry — returns NPI, specialty, address, phone."""
     clean = doctor_name.replace("Dr.", "").replace("Dr ", "").strip()
@@ -724,7 +775,10 @@ def check_sep_eligibility(event_type: str = "", event_date_str: str = "") -> dic
     today = date.today()
     
     # DEMO/TEST OVERRIDE
-    if os.getenv("FORCE_OPEN_ENROLLMENT", "").upper() == "TRUE":
+    force_oe = os.getenv("FORCE_OPEN_ENROLLMENT", "").upper()
+    print(f"DEBUG: FORCE_OPEN_ENROLLMENT is '{force_oe}'")
+    if force_oe == "TRUE":
+        print("DEBUG: Applying DEMO MODE override for Open Enrollment")
         deadline = date(today.year + (1 if today.month > 1 else 0), 1, 15)
         return {
             "in_open_enrollment": True,
@@ -811,3 +865,240 @@ def check_sep_eligibility(event_type: str = "", event_date_str: str = "") -> dic
             f"Provide the date it occurred to calculate your enrollment deadline."
         ),
     }
+
+
+# ─── SPECIALIST SEARCH ───────────────────────────────────────────────────────
+
+def map_condition_to_specialty(condition: str) -> dict:
+    """Map a free-text condition/ailment to a specialist type and NPPES taxonomy."""
+    q = condition.lower().strip()
+    for entry in CONDITION_SPECIALTY_MAP:
+        if any(kw in q for kw in entry["keywords"]):
+            return entry
+    # Fallback: treat the condition text itself as the taxonomy description keyword
+    return {
+        "taxonomy_desc": condition,
+        "specialty": f"{condition.title()} Specialist",
+        "benefit_type": "Specialist Visit",
+    }
+
+
+def search_providers_by_specialty(taxonomy_desc: str, state: str, city: str = "", limit: int = 5) -> list:
+    """Search NPPES for active individual providers by specialty (taxonomy description)."""
+    def fetch():
+        try:
+            params = {
+                "version": "2.1",
+                "enumeration_type": "NPI-1",
+                "taxonomy_description": taxonomy_desc,
+                "limit": limit,
+            }
+            if state:
+                params["state"] = state.upper()
+            if city:
+                params["city"] = city.upper()
+            r = requests.get(NPPES_API, params=params, timeout=12)
+            results = r.json().get("results", [])
+            providers = []
+            for item in results:
+                basic = item.get("basic", {})
+                taxonomies = item.get("taxonomies") or [{}]
+                addresses = item.get("addresses") or [{}]
+                primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
+                practice_addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0]
+                )
+                if basic.get("status", "") != "A":
+                    continue
+                providers.append({
+                    "npi": item.get("number"),
+                    "name": f"{basic.get('first_name','')} {basic.get('last_name','')}".strip(),
+                    "credential": basic.get("credential", ""),
+                    "specialty": primary_tax.get("desc", taxonomy_desc),
+                    "city": practice_addr.get("city", ""),
+                    "state": practice_addr.get("state", ""),
+                    "phone": practice_addr.get("telephone_number", ""),
+                    "address": f"{practice_addr.get('address_1','')} {practice_addr.get('address_2','')}".strip(),
+                })
+            return providers
+        except Exception as e:
+            print(f"NPPES specialty search error: {e}")
+            return []
+
+    return cached_call("nppes_specialty", {"taxonomy": taxonomy_desc.lower(), "state": state.lower(), "city": city.lower()}, fetch)
+
+
+def get_plan_specialist_copay(plan_id: str, benefit_type: str = "Specialist Visit") -> dict:
+    """
+    Fetch specialist copay from the CMS plan detail endpoint.
+    Falls back to metal-level estimates if the API doesn't return benefit data.
+    """
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/plans/{plan_id}",
+                params=_params({"year": 2024}),
+                timeout=12,
+            )
+            data = r.json()
+            plan_data = data.get("plan", data)
+            benefits = plan_data.get("benefits", [])
+            if benefits:
+                target = next(
+                    (b for b in benefits if benefit_type.lower() in b.get("name", "").lower()),
+                    None
+                )
+                if not target:
+                    target = next(
+                        (b for b in benefits if "specialist" in b.get("name", "").lower()),
+                        None
+                    )
+                if target:
+                    cost_sharings = target.get("cost_sharings", [{}])
+                    in_net = next(
+                        (c for c in cost_sharings if "In" in c.get("network_tier", "In")),
+                        cost_sharings[0] if cost_sharings else {}
+                    )
+                    return {
+                        "found": True,
+                        "benefit_name": target.get("name"),
+                        "covered": target.get("covered", True),
+                        "copay": in_net.get("copay_amount"),
+                        "coinsurance": in_net.get("coinsurance_rate"),
+                        "display": in_net.get("display_string", ""),
+                        "source": "cms_benefits",
+                    }
+        except Exception as e:
+            print(f"Plan benefits fetch error for {plan_id}: {e}")
+        return {"found": False, "source": "fallback"}
+
+    return cached_call("plan_benefit", {"plan_id": plan_id, "benefit": benefit_type.lower()}, fetch)
+
+
+# Metal-level copay estimates (fallback when CMS benefits API has no data)
+METAL_COPAY_ESTIMATES = {
+    "Platinum": {"copay": 20, "note": "~$20 specialist copay, no deductible first"},
+    "Gold":     {"copay": 40, "note": "~$40 specialist copay, usually no deductible"},
+    "Silver":   {"copay": 65, "note": "~$65 specialist copay, after deductible"},
+    "Bronze":   {"copay": 100, "note": "~$100 copay or 30–40% coinsurance, after deductible"},
+    "Catastrophic": {"copay": 150, "note": "Full cost until $9,450 deductible met"},
+}
+
+# Coinsurance by metal level (patient's share after deductible)
+METAL_COINSURANCE = {
+    "Platinum": 0.10, "Gold": 0.20, "Silver": 0.30,
+    "Bronze": 0.40, "Catastrophic": 1.00,
+}
+
+# ─── PROCEDURE COST CATALOG ──────────────────────────────────────────────────
+PROCEDURE_CATALOG = {
+    "knee_replacement":   {"label": "Knee Replacement",          "total_cost": 35000, "category": "Surgery"},
+    "hip_replacement":    {"label": "Hip Replacement",           "total_cost": 32000, "category": "Surgery"},
+    "appendectomy":       {"label": "Appendectomy",              "total_cost": 18000, "category": "Surgery"},
+    "gallbladder":        {"label": "Gallbladder Removal",       "total_cost": 14000, "category": "Surgery"},
+    "back_surgery":       {"label": "Spinal Fusion / Back Surgery", "total_cost": 45000, "category": "Surgery"},
+    "heart_bypass":       {"label": "Coronary Bypass Surgery",   "total_cost": 95000, "category": "Surgery"},
+    "angioplasty":        {"label": "Angioplasty / Stent",       "total_cost": 28000, "category": "Cardiac"},
+    "chemotherapy_cycle": {"label": "Chemotherapy (per cycle)",  "total_cost": 10000, "category": "Oncology"},
+    "radiation_course":   {"label": "Radiation Therapy (full course)", "total_cost": 60000, "category": "Oncology"},
+    "childbirth_vaginal": {"label": "Childbirth – Vaginal",      "total_cost": 12000, "category": "Maternity"},
+    "childbirth_csection":{"label": "Childbirth – C-Section",    "total_cost": 20000, "category": "Maternity"},
+    "colonoscopy":        {"label": "Colonoscopy",               "total_cost": 3500,  "category": "Diagnostic"},
+    "mri":                {"label": "MRI Scan",                  "total_cost": 2600,  "category": "Diagnostic"},
+    "ct_scan":            {"label": "CT Scan",                   "total_cost": 2000,  "category": "Diagnostic"},
+    "er_visit":           {"label": "Emergency Room Visit",      "total_cost": 3200,  "category": "Emergency"},
+    "ambulance":          {"label": "Ambulance Ride",            "total_cost": 1800,  "category": "Emergency"},
+    "inpatient_3day":     {"label": "3-Day Hospital Stay",       "total_cost": 22000, "category": "Inpatient"},
+    "physical_therapy":   {"label": "Physical Therapy (12 sessions)", "total_cost": 2400, "category": "Rehabilitation"},
+    "diabetes_management":{"label": "Annual Diabetes Management","total_cost": 5500,  "category": "Chronic"},
+    "mental_health_year": {"label": "Mental Health (12 months therapy)", "total_cost": 4800, "category": "Mental Health"},
+}
+
+
+def estimate_procedure_oop(procedure_key: str, plans: list) -> dict:
+    """
+    Estimate the out-of-pocket cost for a procedure on each plan.
+    Uses deductible + metal-level coinsurance up to OOP max.
+    """
+    proc = PROCEDURE_CATALOG.get(procedure_key)
+    if not proc:
+        return {"error": f"Unknown procedure: {procedure_key}"}
+
+    total_cost = proc["total_cost"]
+    results = []
+    for plan in plans:
+        deductible = plan.get("deductible", 0) or 0
+        oop_max    = plan.get("oop_max", 9450) or 9450
+        metal      = plan.get("metal_level", "Silver")
+        coinsurance = METAL_COINSURANCE.get(metal, 0.30)
+
+        # Patient pays deductible first, then coinsurance on the remainder
+        if total_cost <= deductible:
+            patient_share = total_cost
+        else:
+            patient_share = deductible + (total_cost - deductible) * coinsurance
+
+        patient_share = min(patient_share, oop_max)
+        insurance_pays = total_cost - patient_share
+
+        results.append({
+            "plan_id":       plan.get("id"),
+            "plan_name":     plan.get("name"),
+            "metal_level":   metal,
+            "net_premium":   round(plan.get("premium_w_credit", plan.get("premium", 0)), 2),
+            "patient_oop":   round(patient_share),
+            "insurance_pays": round(insurance_pays),
+            "deductible":    deductible,
+            "oop_max":       oop_max,
+            "coinsurance_pct": int(coinsurance * 100),
+        })
+
+    results.sort(key=lambda x: x["patient_oop"])
+    return {
+        "procedure": proc["label"],
+        "total_cost": total_cost,
+        "category": proc["category"],
+        "results": results,
+    }
+
+
+def search_hospitals(name: str, state: str, city: str = "") -> list:
+    """Search NPPES for hospitals / facilities (NPI-2) by name."""
+    def fetch():
+        try:
+            params = {
+                "version": "2.1",
+                "enumeration_type": "NPI-2",
+                "organization_name": name,
+                "limit": 5,
+            }
+            if state:
+                params["state"] = state.upper()
+            if city:
+                params["city"] = city.upper()
+            r = requests.get(NPPES_API, params=params, timeout=12)
+            results = r.json().get("results", [])
+            hospitals = []
+            for item in results:
+                basic = item.get("basic", {})
+                addresses = item.get("addresses") or [{}]
+                practice_addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0]
+                )
+                hospitals.append({
+                    "npi": item.get("number"),
+                    "name": basic.get("organization_name", name),
+                    "city": practice_addr.get("city", ""),
+                    "state": practice_addr.get("state", ""),
+                    "address": f"{practice_addr.get('address_1','')} {practice_addr.get('address_2','')}".strip(),
+                    "phone": practice_addr.get("telephone_number", ""),
+                    "status": basic.get("status", ""),
+                })
+            return hospitals
+        except Exception as e:
+            print(f"Hospital search error: {e}")
+            return []
+
+    return cached_call("hospital_search", {"name": name.lower(), "state": state.lower()}, fetch)

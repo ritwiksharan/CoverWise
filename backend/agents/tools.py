@@ -12,7 +12,10 @@ from tools.gov_apis import (
     resolve_drug_rxcui, check_drug_coverage, verify_doctor_cms, _fips_to_state,
     get_state_exchange, lookup_npi_registry, check_doctor_in_plan_network,
     get_generic_alternatives, get_doctor_quality_score,
-    check_sep_eligibility, check_hrsa_shortage
+    check_sep_eligibility, check_hrsa_shortage,
+    map_condition_to_specialty, search_providers_by_specialty,
+    get_plan_specialist_copay, METAL_COPAY_ESTIMATES,
+    estimate_procedure_oop, search_hospitals, PROCEDURE_CATALOG,
 )
 
 def get_location_info(zip_code: str) -> dict:
@@ -87,18 +90,27 @@ def verify_doctors(doctor_names: List[str], state: str, zip_code: str, plan_ids:
         nppes = lookup_npi_registry(name, state=state)
         npi = nppes.get("npi")
         quality = get_doctor_quality_score(str(npi)) if npi else {}
-        
+
         networks = {}
         if npi:
             for pid in plan_ids:
                 networks[pid] = check_doctor_in_plan_network(pid, str(npi), zip_code)
-        
+
         results.append({
-            "name": name,
+            "name": nppes.get("name", name),
+            "searched_name": name,
             "npi": npi,
+            "credential": nppes.get("credential", ""),
+            "specialty": nppes.get("specialty", ""),
+            "city": nppes.get("city", ""),
+            "state": nppes.get("state", ""),
+            "phone": nppes.get("phone", ""),
+            "found": nppes.get("found", False),
+            "active": nppes.get("active", True),
+            "mips_score": quality.get("mips_score"),
+            "telehealth": quality.get("telehealth", False),
             "nppes_info": nppes,
-            "quality_score": quality.get("mips_score"),
-            "network_status": networks
+            "network_status": networks,
         })
     return {"results": results}
 
@@ -108,3 +120,61 @@ def get_market_risks(zip_code: str, state: str) -> dict:
     hrsa = check_hrsa_shortage(state, fips)
     sep = check_sep_eligibility()
     return {"hrsa": hrsa, "sep": sep}
+
+
+def find_specialists_for_condition(
+    condition: str,
+    zip_code: str,
+    state: str,
+    plan_ids: List[str],
+    city: str = "",
+    limit: int = 5,
+) -> dict:
+    """
+    Find local specialists matching a condition/ailment and check their
+    network status + estimated copay across the user's current plans.
+    """
+    # 1. Map condition to specialty
+    specialty_info = map_condition_to_specialty(condition)
+    taxonomy_desc = specialty_info["taxonomy_desc"]
+    specialty_label = specialty_info["specialty"]
+    benefit_type = specialty_info.get("benefit_type", "Specialist Visit")
+
+    # 2. Search NPPES for matching providers
+    providers = search_providers_by_specialty(taxonomy_desc, state, city=city, limit=limit)
+
+    # 3. For each provider: MIPS quality + network check on top plans
+    results = []
+    for prov in providers[:limit]:
+        npi = prov.get("npi")
+        quality = get_doctor_quality_score(str(npi)) if npi else {}
+
+        network_status: Dict[str, Any] = {}
+        if npi and plan_ids:
+            for pid in plan_ids[:3]:
+                net = check_doctor_in_plan_network(pid, str(npi), zip_code)
+                network_status[pid] = net
+
+        results.append({
+            **prov,
+            "mips_score": quality.get("mips_score"),
+            "telehealth": quality.get("telehealth", False),
+            "mips_found": quality.get("found", False),
+            "network_status": network_status,
+        })
+
+    # 4. Get specialist copay for each plan (try CMS benefits, fall back to metal estimate)
+    plan_copays: Dict[str, Any] = {}
+    for pid in plan_ids[:5]:
+        copay_data = get_plan_specialist_copay(pid, benefit_type)
+        plan_copays[pid] = copay_data
+
+    return {
+        "condition": condition,
+        "specialty": specialty_label,
+        "taxonomy": taxonomy_desc,
+        "benefit_type": benefit_type,
+        "providers": results,
+        "plan_copays": plan_copays,
+        "metal_estimates": METAL_COPAY_ESTIMATES,
+    }

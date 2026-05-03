@@ -75,6 +75,7 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
     """
     profile = tool_context.state.get("profile", {})
     zip_code = profile.get("zip_code")
+    print(f"DEBUG: run_full_analysis_parallel TOOL CALLED for ZIP {zip_code}")
     income = profile.get("income", 50000)
     age = profile.get("age", 35)
     household_size = profile.get("household_size", 1)
@@ -161,6 +162,49 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
 
             processed_plans.append(p)
 
+        # Compute risk flags (needs plans + subsidy context)
+        fpl_pct = subsidy.get("fpl_percentage", 0)
+        monthly_aptc = subsidy.get("monthly_aptc", 0)
+        risk_flags = []
+
+        if any(p.get("oop_max", 0) > 8700 for p in processed_plans):
+            risk_flags.append("⚠️ Some plans have an out-of-pocket maximum above $8,700 — consider your risk tolerance for a serious health event.")
+
+        if 390 <= fpl_pct <= 410:
+            risk_flags.append(f"🚨 Subsidy cliff: Your income is within 5% of the 400% FPL cutoff. Earning ~$1,800 more could eliminate your ${monthly_aptc:,.0f}/month subsidy (${monthly_aptc*12:,.0f}/year).")
+
+        hsa_plans_list = [p for p in processed_plans if p.get("hsa_eligible")]
+        if hsa_plans_list:
+            hsa_limit = 8300 if household_size > 1 else 4150
+            tax_rate = 0.22 if income > 45000 else 0.12
+            tax_savings = round(hsa_limit * tax_rate)
+            risk_flags.append(f"💡 {len(hsa_plans_list)} HSA-eligible plan(s) available. Contributing the ${hsa_limit:,}/year max saves ~${tax_savings:,} in federal taxes. Funds grow tax-free.")
+
+        if age < 30:
+            risk_flags.append("💡 Under 30: You may qualify for a Catastrophic plan — lower premiums with a $9,450 deductible. Best if you rarely use healthcare.")
+
+        hrsa = risks.get("hrsa", {})
+        if hrsa.get("shortage_area"):
+            risk_flags.append(f"🏥 {hrsa.get('message', 'Your area is a Health Professional Shortage Area.')} Prefer PPO or EPO over HMOs.")
+
+        sep = risks.get("sep", {})
+        if sep.get("in_open_enrollment"):
+            risk_flags.append(f"📅 Open enrollment is active — {sep.get('days_remaining')} days left (deadline {sep.get('deadline')}).")
+        else:
+            risk_flags.append(f"📅 {sep.get('message', 'Open enrollment is closed.')} Qualifying life events trigger a 60-day Special Enrollment Period.")
+
+        if processed_plans and all(p.get("type", "").upper() == "HMO" for p in processed_plans):
+            risk_flags.append("ℹ️ All available plans in your area are HMO — confirm your doctors are in-network before enrolling.")
+
+        if subsidy.get("is_medicaid_eligible"):
+            risk_flags.append("🏥 Based on your income, you may qualify for Medicaid (free/near-free). Visit healthcare.gov before comparing marketplace plans.")
+
+        csr_variant = subsidy.get("csr_variant")
+        csr_deductible_ranges = {"94": "$0–$500", "87": "$500–$1,500", "73": "$1,500–$3,000"}
+        if csr_variant:
+            csr_deductible = csr_deductible_ranges.get(csr_variant, "reduced")
+            risk_flags.append(f"💡 CSR-{csr_variant} eligible: Silver plans give you dramatically lower deductibles (~{csr_deductible}) at the same Silver premium. Do NOT pick Gold or Bronze if CSR-eligible.")
+
         # Consolidate
         analysis_data = {
             "location": loc,
@@ -169,6 +213,8 @@ async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
             "medication_coverage": meds,
             "doctor_verification": docs,
             "market_risks": risks,
+            "risk_flags": risk_flags,
+            "sep": sep,
             "cache_stats": get_cache_stats(),
             "is_premium": is_premium
         }
@@ -214,18 +260,26 @@ class ADKOrchestrator:
 
         memory_context = build_memory_context(user_id) or ""
         prompt_text = (
-            f"Perform a multi-pillar insurance analysis. "
+            f"STRICT INSTRUCTION: You MUST call the `run_full_analysis_parallel` tool FIRST to get the live insurance data. "
+            f"Do not guess. Once you have the data, provide the multi-pillar analysis. "
             f"User Profile: {profile}. Context: {memory_context}"
         )
         msg = Content(role="user", parts=[Part(text=prompt_text)])
         
         reply = ""
+        print(f"DEBUG: Starting ADK run for user {user_id}")
         async for event in self._runner.run_async(user_id=user_id, session_id=session_id, new_message=msg):
+            # Log events for debugging
+            if hasattr(event, "step") and event.step:
+                print(f"DEBUG: ADK Step: {event.step.name if hasattr(event.step, 'name') else event.step}")
+            
             if hasattr(event, "is_final_response") and event.is_final_response():
                 if hasattr(event, "content") and event.content:
                     for part in event.content.parts:
                         if hasattr(part, "text") and part.text:
                             reply += part.text
+        
+        print(f"DEBUG: ADK Run complete. Reply length: {len(reply)}")
         
         session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
         data = session.state.get("analysis_data", {})
@@ -242,7 +296,7 @@ class ADKOrchestrator:
             "subsidy": data.get("subsidy", {}),
             "drugs": data.get("medication_coverage", {}),
             "doctors": data.get("doctor_verification", {}),
-            "risks": data.get("market_risks", {}),
+            "risks": {**data.get("market_risks", {}), "flags": data.get("risk_flags", [])},
             "cache_stats": data.get("cache_stats", {}),
             "memory_used": bool(memory_context)
         }
@@ -264,14 +318,65 @@ class ADKOrchestrator:
         analysis_data = session.state.get("analysis_data", {})
         user_profile = session.state.get("profile", profile or {})
 
+        # Build rich context from analysis data
+        subsidy = analysis_data.get("subsidy", {})
+        plans = analysis_data.get("plans", [])
+        meds = analysis_data.get("medication_coverage", {})
+        docs = analysis_data.get("doctor_verification", {})
+        risk_flags = analysis_data.get("risk_flags", [])
+        prior_recommendation = analysis_data.get("recommendation", "")
+
+        # Summarize plans with key financials
+        plan_summaries = []
+        for p in plans[:10]:
+            plan_summaries.append(
+                f"  • {p.get('name')} ({p.get('metal_level')}, {p.get('type','')}): "
+                f"${p.get('premium_w_credit', p.get('premium', 0)):.0f}/mo after subsidy, "
+                f"deductible ${p.get('deductible', 0):,}, OOP max ${p.get('oop_max', 0):,}, "
+                f"true annual cost ${p.get('true_annual_cost', 0):,.0f}"
+                f"{' — HSA eligible' if p.get('hsa_eligible') else ''}"
+                f"{' — ⚠ PA required for drug' if p.get('pa_warning') else ''}"
+            )
+
+        # Drug coverage per plan
+        drug_lines = []
+        cov_details = meds.get("coverage_details", [])
+        for d in meds.get("resolved_drugs", []):
+            rxcui = str(d.get("rxcui", ""))
+            plan_cov = [c for c in cov_details if str(c.get("rxcui","")) == rxcui]
+            cov_strs = []
+            for c in plan_cov[:5]:
+                pid = c.get("plan_id", "")
+                plan_name = next((p.get("name","") for p in plans if p.get("id") == pid), pid)
+                pa = " (PA required)" if c.get("prior_authorization") else ""
+                st = " (step therapy)" if c.get("step_therapy") else ""
+                cov_strs.append(f"{plan_name[:30]}: {c.get('coverage','?')} {c.get('drug_tier','')}{pa}{st}")
+            drug_lines.append(f"  • {d.get('name')} (RxCUI {rxcui}): {'; '.join(cov_strs) if cov_strs else 'no coverage data'}")
+
+        # Doctor network status
+        doc_lines = []
+        for doc in docs.get("results", [])[:5]:
+            nets = doc.get("network_status", {})
+            net_strs = []
+            for pid, net in nets.items():
+                plan_name = next((p.get("name","") for p in plans if p.get("id") == pid), pid)
+                status = "In-Network" if net.get("in_network") else ("Out-of-Network" if net.get("in_network") is False else "Unknown")
+                net_strs.append(f"{plan_name[:25]}: {status}")
+            mips = f" MIPS {doc.get('mips_score')}/100" if doc.get("mips_score") is not None else ""
+            doc_lines.append(f"  • {doc.get('name','?')} ({doc.get('specialty','')}){mips}: {'; '.join(net_strs) if net_strs else 'network not checked'}")
+
         context_msg = (
-            f"SYSTEM CONTEXT: You are helping a user with their insurance choices. "
-            f"User Profile: {user_profile}. "
-            f"Analysis Data Summary: {len(analysis_data.get('plans', []))} plans found. "
-            f"Subsidy: ${analysis_data.get('subsidy', {}).get('monthly_aptc', 0)}/mo. "
-            f"Drugs checked: {len(analysis_data.get('medication_coverage', {}).get('resolved_drugs', []))}. "
-            f"Market Risks: {analysis_data.get('market_risks', {})}. "
-            f"Please answer based on this specific data."
+            f"SYSTEM CONTEXT — CoverWise Year-Round Advisor\n\n"
+            f"USER PROFILE:\n{user_profile}\n\n"
+            f"SUBSIDY & ELIGIBILITY:\n"
+            f"  FPL: {subsidy.get('fpl_percentage', 0):.1f}%  |  Monthly APTC: ${subsidy.get('monthly_aptc', 0)}/mo  |  "
+            f"CSR: {subsidy.get('csr_variant') or 'None'}  |  Medicaid eligible: {subsidy.get('is_medicaid_eligible', False)}\n\n"
+            f"PLANS FOUND ({len(plans)} total, sorted by true annual cost):\n" + "\n".join(plan_summaries) + "\n\n"
+            + (f"DRUG COVERAGE:\n" + "\n".join(drug_lines) + "\n\n" if drug_lines else "")
+            + (f"DOCTOR NETWORK STATUS:\n" + "\n".join(doc_lines) + "\n\n" if doc_lines else "")
+            + (f"RISK FLAGS:\n" + "\n".join(f"  {f}" for f in risk_flags) + "\n\n" if risk_flags else "")
+            + (f"PRIOR AI RECOMMENDATION SUMMARY:\n{prior_recommendation[:2000]}\n\n" if prior_recommendation else "")
+            + "Answer the user's question using ONLY the above verified data. Be specific — cite plan names, dollar amounts, and drug tiers directly."
         )
 
         msg = Content(role="user", parts=[Part(text=f"{context_msg}\n\nUSER MESSAGE: {message}")])
