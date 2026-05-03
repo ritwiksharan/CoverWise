@@ -16,6 +16,15 @@ try:
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
+    # Provide stub so module-level type annotations don't raise NameError
+    class ToolContext:  # type: ignore[no-redef]
+        state: dict = {}
+    class Content:  # type: ignore[no-redef]
+        def __init__(self, **kw): pass
+    class Part:  # type: ignore[no-redef]
+        @staticmethod
+        def from_text(t): return t
+        def __init__(self, **kw): pass
 
 from agents.tools import (
     get_location_info, get_subsidy_estimate, find_plans,
