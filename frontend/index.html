@@ -561,7 +561,7 @@ function renderResults(data) {
   };
 
   // Premium badge
-  if (data.analysis && data.analysis.is_premium) {
+  if (data.is_premium) {
     const pb = document.createElement('div');
     pb.className = 'premium-badge';
     pb.textContent = '★ Premium Analysis — HSA Forecasts + 3x Detail';

@@ -258,6 +258,7 @@ class ConversationalOrchestrator:
             "metal_tier": metal,
             "recommendation": recommendation,
             "cache_stats": get_cache_stats(),
+            "is_premium": bool(profile.get("is_premium")),
         }
 
     async def _synthesize(self, profile, fpl_pct, subsidy, plans, drugs, doctors, risks, metal, memory_context):
