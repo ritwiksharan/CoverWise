@@ -85,12 +85,18 @@ PREMIUM TIER RULES (is_premium: true)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AGENTIC PLAN RANKING PROTOCOL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Do NOT simply sort by the lowest premium. Use a "Simulated Year" reasoning logic to rank the Top 3 plans:
-1. **The 'Healthy Year' (Low Use)**: Rank by [Monthly Premium * 12]. This is the "Floor" cost.
-2. **The 'Clinical Year' (Chronic Care)**: Rank by how well the plan covers the user's specific drugs/doctors. Prioritize $0 copays.
-3. **The 'Worst Case' (Catastrophic)**: Rank by [Monthly Premium * 12 + OOP Max]. This is the "Ceiling" risk.
+⚠️  RANKING OVERRIDE RULE (HIGHEST PRIORITY):
+If the data contains a section labelled "FINAL PLAN ORDER (NON-NEGOTIABLE)", you MUST present
+plans in exactly that pre-computed order. Your role in that case is ANALYSIS + EXPLANATION only —
+not re-ranking. Every table, every scenario, every recommendation paragraph must follow that order.
 
-**Final Decision**: Recommend the plan that provides the best **Expected Value** across all three scenarios. If a user is eligible for **CSR (Cost Sharing Reductions)**, you MUST prioritize **Silver** plans and explain the massive deductible drop.
+When no pre-computed ranking is provided, use the Simulated Year model:
+1. **The 'Healthy Year' (Low Use)**: Rank by [Annual Premium]. Floor cost.
+2. **The 'Clinical Year' (Chronic Care)**: Rank by [Annual Premium + Drug Costs]. Drug-adjusted cost.
+3. **The 'Worst Case' (Catastrophic)**: Rank by [Annual Premium + OOP Max]. Ceiling risk.
+4. **Expected Value** = (0.3 × Healthy) + (0.4 × Clinical) + (0.3 × Worst). Pick lowest EV.
+
+If CSR-eligible, ALWAYS override to the top Silver plan and document the deductible drop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE & FORMATTING
@@ -504,26 +510,69 @@ def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> 
     for f in flags:
         lines.append(f"  {f}")
 
-    # ── LLM Ranking Agent output ─────────────────────────────────────────────
+    # ── LLM Ranking Agent output (NON-NEGOTIABLE ORDER) ─────────────────────
     if ranking:
-        import json as _json
-        lines += ["", "LLM RANKING AGENT OUTPUT (Phase 1.5 — use this as your starting ranking)", "─" * 40]
-        top = ranking.get("top_recommendation", {})
-        if top:
-            lines.append(f"Top Recommendation: {top.get('plan_name','')} — {top.get('rationale','')}")
-        csr_ov = ranking.get("csr_override")
-        if csr_ov:
-            lines.append(f"CSR Override: {csr_ov}")
-        ev = ranking.get("expected_value_ranking", [])
+        ev      = ranking.get("expected_value_ranking", [])
+        top     = ranking.get("top_recommendation", {})
+        csr_ov  = ranking.get("csr_override")
+        rf      = ranking.get("red_flags", [])
+        r_scen  = ranking.get("rankings", {})
+
+        lines += [
+            "",
+            "╔" + "═" * 58 + "╗",
+            "║  FINAL PLAN ORDER (NON-NEGOTIABLE — PHASE 1.5 LLM RANKING) ║",
+            "╚" + "═" * 58 + "╝",
+            "YOU MUST present plans in this exact order in every table and paragraph.",
+            "Do NOT re-rank, re-sort, or reorder — your job is explanation only.",
+            "",
+        ]
+
         if ev:
-            lines += ["Expected Value Ranking:", "| Rank | Plan | EV Score | Key Reason |", "|------|------|---------|-----------|"]
+            lines += [
+                "EXPECTED VALUE RANKING (definitive order):",
+                "| EV Rank | Plan Name | EV Score | Key Reason |",
+                "|---------|-----------|---------|-----------|",
+            ]
             for r in ev:
-                lines.append(f"| {r.get('rank')} | {r.get('plan_name','')} | ${r.get('ev_score',0):,.0f} | {r.get('key_reason','')} |")
-        rf = ranking.get("red_flags", [])
+                marker = "★ #1 ← TOP PICK" if r.get("rank") == 1 else f"#{r.get('rank')}"
+                lines.append(
+                    f"| {marker} | {r.get('plan_name','')} | **${r.get('ev_score',0):,.0f}** | {r.get('key_reason','')} |"
+                )
+
+        if top:
+            lines += [
+                "",
+                f"TOP RECOMMENDATION: {top.get('plan_name','')}",
+                f"Rationale: {top.get('rationale','')}",
+            ]
+
+        if csr_ov:
+            lines.append(f"CSR OVERRIDE: Silver plan {csr_ov} must be prioritised — CSR deductible reduction applies.")
+
+        for scen_key, scen_label in [
+            ("healthy_year",  "Healthy Year"),
+            ("clinical_year", "Clinical Year"),
+            ("worst_case",    "Worst Case"),
+        ]:
+            rows = r_scen.get(scen_key, [])
+            if rows:
+                lines += [
+                    "",
+                    f"{scen_label} order:",
+                    "| Rank | Plan | Annual Cost |",
+                    "|------|------|------------|",
+                ]
+                for r in rows:
+                    lines.append(
+                        f"| #{r.get('rank')} | {r.get('plan_name','')} | **${r.get('annual_cost',0):,.0f}** |"
+                    )
+
         if rf:
-            lines.append("Red Flags from Ranking Agent:")
+            lines += ["", "Red Flags from Ranking Agent:"]
             for flag in rf:
-                lines.append(f"  • {flag}")
+                lines.append(f"  ⚠ {flag}")
+
         lines.append("")
 
     # ── Synthesis instruction ────────────────────────────────────────────────
@@ -533,15 +582,27 @@ def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> 
         "SYNTHESIS INSTRUCTION",
         "═" * 60,
         "Using ALL data above, produce a complete multi-pillar recommendation.",
-        "The LLM Ranking Agent (Phase 1.5) has already computed the plan ordering — use it as your starting point.",
-        "Follow the exact structure in your system instructions:",
-        "  1. Financial Pillar — use the scenario tables and breakeven data above.",
-        "  2. Medical Pillar — cite exact tiers, PA requirements, and real copay strings from the drug tables.",
-        "  3. Network Pillar — confirm each doctor's verified name, NPI, MIPS score, and network status.",
-        "  4. Market Pillar — cite HRSA and enrollment deadline from the data above.",
-        "Apply the Agentic Plan Ranking Protocol (Healthy / Clinical / Worst-Case scenarios) — confirm or adjust the LLM agent's ranking with your deeper analysis.",
-        f"{'Apply PREMIUM TIER RULES: 3× detail, HSA wealth forecast, side-by-side benefit table.' if is_prem else 'Free tier: focus on the top 3 plans.'}",
-        "Do NOT invent any numbers. Every dollar figure must match the tables above exactly.",
+    ]
+
+    if ranking:
+        ev_top3 = ranking.get("expected_value_ranking", [])[:3]
+        order_str = " → ".join(f"#{r.get('rank')} {r.get('plan_name','')}" for r in ev_top3)
+        lines += [
+            f"MANDATORY ORDER: {order_str}",
+            "Every section, table, and paragraph MUST follow the FINAL PLAN ORDER above — do not deviate.",
+            "Start your recommendation with a summary table matching the EV Ranking exactly.",
+        ]
+    else:
+        lines.append("No pre-computed ranking — apply the Simulated Year protocol from your system instructions.")
+
+    lines += [
+        "Follow the 4-pillar structure in your system instructions:",
+        "  1. Financial Pillar — scenario tables and breakeven data.",
+        "  2. Medical Pillar — exact tiers, PA requirements, real copay strings.",
+        "  3. Network Pillar — verified doctor names, NPI, MIPS, network status.",
+        "  4. Market Pillar — HRSA data and enrollment deadline.",
+        f"{'Apply PREMIUM TIER RULES: 3× detail, HSA wealth forecast, side-by-side benefit table.' if is_prem else 'Free tier: top 3 plans only.'}",
+        "Do NOT invent numbers. Every dollar figure must appear verbatim in the tables above.",
         "═" * 60,
     ]
 
@@ -551,26 +612,33 @@ def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> 
 # ── PHASE 1.5: LLM Ranking Agent ─────────────────────────────────────────────
 
 _RANKING_INSTRUCTION = """You are a health insurance plan ranking agent.
-Given structured plan data, rank the plans using a Simulated Year model:
-  1. Healthy Year — rank by lowest annual premium only
-  2. Clinical Year — rank by lowest (premium + estimated drug costs)
-  3. Worst Case   — rank by lowest (premium + OOP max)
-  4. Expected Value — weighted average (0.3 * healthy + 0.4 * clinical + 0.3 * worst)
+Rank ALL provided plans using the Simulated Year model:
+  1. Healthy Year  — sort ascending by annual_premium. Assign rank 1 = lowest cost.
+  2. Clinical Year — sort ascending by clinical_year (premium + drug costs). Rank 1 = lowest.
+  3. Worst Case    — sort ascending by worst_case (premium + oop_max). Rank 1 = lowest ceiling.
+  4. Expected Value (EV) = (0.3 × healthy_year) + (0.4 × clinical_year) + (0.3 × worst_case).
+     Sort ascending by EV. Rank 1 = best expected value overall.
 
-Return ONLY valid JSON matching exactly:
+Rules:
+- Include EVERY plan in every list, ranked 1..N (N = total plan count).
+- annual_cost in each scenario list must equal the exact computed value for that scenario.
+- ev_score must equal the exact EV formula result.
+- top_recommendation = the plan with EV rank 1 (or the CSR Silver override if applicable).
+- csr_override: if any Silver plan exists AND csr_variant is not null, set to that Silver plan_id.
+- red_flags: list PA/step-therapy warnings, OOP cliff risks, HMO-only network warnings.
+
+Return ONLY valid JSON, no prose, matching this schema exactly:
 {
   "rankings": {
-    "healthy_year":   [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}],
-    "clinical_year":  [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}],
-    "worst_case":     [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0, "reason": "..."}]
+    "healthy_year":  [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "..."}],
+    "clinical_year": [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "..."}],
+    "worst_case":    [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "..."}]
   },
-  "expected_value_ranking": [{"rank": 1, "plan_id": "...", "plan_name": "...", "ev_score": 0, "key_reason": "..."}],
-  "top_recommendation": {"plan_id": "...", "plan_name": "...", "rationale": "..."},
+  "expected_value_ranking": [{"rank": 1, "plan_id": "...", "plan_name": "...", "ev_score": 0.0, "key_reason": "..."}],
+  "top_recommendation": {"plan_id": "...", "plan_name": "...", "rationale": "2-3 sentence explanation citing EV score and scenario advantages"},
   "csr_override": null,
-  "red_flags": []
-}
-If a Silver plan has CSR, set csr_override to its plan_id and explain the deductible drop in rationale.
-red_flags: list any PA/step-therapy issues, OOP cliff risks, or doctor network warnings."""
+  "red_flags": ["string", "..."]
+}"""
 
 
 async def _rank_plans_with_llm(data: dict) -> dict:
@@ -586,30 +654,23 @@ async def _rank_plans_with_llm(data: dict) -> dict:
     subsidy = data.get("subsidy", {})
     flags  = data.get("risk_flags", [])
 
-    # Build compact input for the ranking agent
+    # Compact input — only the numbers needed for the EV formula.
+    # Drop drug_tiers and other verbose fields to keep the payload small.
     plan_rows = []
     for p in plans:
-        row = {
-            "plan_id":      p.get("id"),
-            "plan_name":    p.get("name"),
-            "metal_level":  p.get("metal_level"),
-            "plan_type":    p.get("type"),
-            "net_monthly":  p.get("premium_w_credit", 0),
-            "annual_premium": p.get("scenario_healthy", 0),
-            "clinical_year":  p.get("scenario_clinical", 0),
-            "worst_case":     p.get("scenario_worst", 0),
+        pa_drugs = [dd.get("name") for dd in p.get("drug_detail", []) if dd.get("pa")]
+        plan_rows.append({
+            "plan_id":       p.get("id"),
+            "plan_name":     p.get("name"),
+            "metal_level":   p.get("metal_level"),
+            "hsa_eligible":  p.get("hsa_eligible", False),
+            "annual_premium": round(p.get("scenario_healthy", 0), 2),
+            "clinical_year":  round(p.get("scenario_clinical", 0), 2),
+            "worst_case":     round(p.get("scenario_worst", 0), 2),
             "deductible":     p.get("deductible", 0),
             "oop_max":        p.get("oop_max", 0),
-            "hsa_eligible":   p.get("hsa_eligible", False),
-            "est_drug_cost_annual": p.get("est_annual_drug_cost", 0),
-            "pa_warning":     p.get("pa_warning", False),
-            "drug_tiers":     [
-                {"name": dd.get("name"), "tier": dd.get("tier"), "pa": dd.get("pa"),
-                 "st": dd.get("st"), "copay_display": dd.get("copay_display")}
-                for dd in p.get("drug_detail", [])
-            ],
-        }
-        plan_rows.append(row)
+            "pa_drugs":       pa_drugs,
+        })
 
     ranking_input = {
         "plans": plan_rows,
@@ -619,12 +680,26 @@ async def _rank_plans_with_llm(data: dict) -> dict:
         "risk_flags": flags[:5],
     }
 
-    import json
+    import json, re as _re
+
     ranking_prompt = (
-        "Rank the following insurance plans across all three Simulated Year scenarios.\n\n"
+        "Rank ALL the following insurance plans across the three Simulated Year scenarios.\n"
+        "Every plan must appear in every list ranked 1..N.\n\n"
         f"INPUT DATA:\n{json.dumps(ranking_input, indent=2)}\n\n"
-        "Return ONLY the JSON specified in your system instructions. No extra text."
+        "Return ONLY valid JSON — no prose, no markdown fences, no trailing commas, no comments."
     )
+
+    def _clean_json(text: str) -> str:
+        """Strip markdown fences, comments, and trailing commas so json.loads succeeds."""
+        # Remove ```json ... ``` or ``` ... ```
+        text = _re.sub(r"```(?:json)?\s*", "", text).strip()
+        # Remove single-line // comments
+        text = _re.sub(r"//[^\n]*", "", text)
+        # Remove /* */ block comments
+        text = _re.sub(r"/\*.*?\*/", "", text, flags=_re.DOTALL)
+        # Remove trailing commas before ] or }
+        text = _re.sub(r",\s*([\]}])", r"\1", text)
+        return text.strip()
 
     try:
         vertexai.init(project=PROJECT_ID, location=REGION)
@@ -632,19 +707,23 @@ async def _rank_plans_with_llm(data: dict) -> dict:
             "gemini-2.0-flash-001",
             system_instruction=_RANKING_INSTRUCTION,
             generation_config=GenerationConfig(
-                max_output_tokens=2048,
+                max_output_tokens=8192,
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
         )
         response = await asyncio.to_thread(model.generate_content, ranking_prompt)
-        text = response.text.strip()
-        # Strip markdown fences if present
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        return json.loads(text)
+        raw = response.text.strip()
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            cleaned = _clean_json(raw)
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError as e2:
+                print(f"[ranking_agent] JSON parse failed after cleanup: {e2}")
+                print(f"[ranking_agent] Raw response (first 500 chars): {raw[:500]}")
+                return {}
     except Exception as e:
         print(f"[ranking_agent] LLM ranking failed: {e}")
         return {}
