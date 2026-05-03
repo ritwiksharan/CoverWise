@@ -456,20 +456,20 @@
     </div>
   </div>
 
-  <!-- ── INSURANCE Q&A (always visible) ── -->
+  <!-- ── HEALTH INSURANCE Q&A (always visible) ── -->
   <div class="feature-card" id="insuranceQAStandalone" style="border-color:var(--purple)">
-    <h2>🤖 Ask Me Anything About Insurance</h2>
-    <p>Powered by live FEMA flood data, SEC EDGAR insurer financials, and Gemini AI. Ask about flood risk, insurer finances, disaster history, or anything insurance-related.</p>
+    <h2>🤖 Ask Me Anything About Health Insurance</h2>
+    <p>Powered by live CMS Marketplace data, RxNorm drug database, and Gemini AI. Ask about plan costs, drug coverage, subsidies, enrollment, or any health insurance question.</p>
     <div class="search-history" style="margin-bottom:12px">
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Flood risk for ZIP 77002</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Compare Allstate vs Progressive</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Top flood claims in Harris County TX</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Allstate financials 2024</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Disaster declarations in Florida 2024</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">What is a deductible vs out-of-pocket max?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">How does the APTC subsidy work?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">HMO vs PPO — which should I choose?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">Is Ozempic covered on Silver plans?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">What qualifies for a Special Enrollment Period?</span>
     </div>
     <div class="specialist-input-row">
       <input class="specialist-input" id="insuranceQAInputStandalone"
-        placeholder="e.g. What's the flood risk for ZIP 77002? Compare Allstate vs Progressive..."
+        placeholder="e.g. What is CSR? How much subsidy do I get at $45k income? Is Metformin covered?"
         onkeydown="if(event.key==='Enter')runInsuranceQA('standalone')">
       <button class="specialist-btn" id="insuranceQABtnStandalone"
         onclick="runInsuranceQA('standalone')"
@@ -1280,21 +1280,21 @@ function renderResults(data) {
     <div id="hospitalResults"></div>
   </div>`;
 
-  // ── FEATURE: INSURANCE Q&A (in results) ──────────────────────────────────────
+  // ── FEATURE: HEALTH INSURANCE Q&A (in results) ───────────────────────────────
   html += `
   <div class="feature-card" id="insuranceQASection" style="border-color:var(--purple)">
-    <h2>🤖 Ask Me Anything About Insurance</h2>
-    <p>Powered by live FEMA flood data, SEC EDGAR insurer financials, and Gemini AI. Ask about flood risk, insurer finances, disaster history, or anything insurance-related.</p>
+    <h2>🤖 Ask Me Anything About Health Insurance</h2>
+    <p>Powered by live CMS Marketplace data, RxNorm drug database, and Gemini AI. Ask about your plans, drug coverage, subsidies, enrollment windows, or any health insurance question.</p>
     <div class="search-history" style="margin-bottom:12px">
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Flood risk for ZIP 77002</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Compare Allstate vs Progressive</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Top flood claims in Harris County TX</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Allstate financials 2024</span>
-      <span class="history-chip" onclick="askInsurance(this.textContent)">Disaster declarations in Florida 2024</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">What is a deductible vs out-of-pocket max?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">How does the APTC subsidy work?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">HMO vs PPO — which should I choose?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">Is Ozempic covered on Silver plans?</span>
+      <span class="history-chip" onclick="askInsurance(this.textContent)">What qualifies for a Special Enrollment Period?</span>
     </div>
     <div class="specialist-input-row">
       <input class="specialist-input" id="insuranceQAInput"
-        placeholder="e.g. What's the flood risk for ZIP 77002? Compare Allstate vs Progressive..."
+        placeholder="e.g. What is CSR? How much subsidy at $45k income? Is Metformin tier 1 or 2?"
         onkeydown="if(event.key==='Enter')runInsuranceQA('results')">
       <button class="specialist-btn" id="insuranceQABtn"
         onclick="runInsuranceQA('results')"
