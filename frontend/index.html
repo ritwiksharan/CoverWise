@@ -414,13 +414,6 @@
           <label>Household Size</label>
           <input type="number" id="household" placeholder="e.g. 2" min="1" max="10" value="1">
         </div>
-        <div class="form-group">
-          <label>Tobacco User?</label>
-          <select id="tobacco_use">
-            <option value="no">No</option>
-            <option value="yes">Yes</option>
-          </select>
-        </div>
         <div class="form-group full">
           <label>Healthcare Use</label>
           <select id="utilization">
@@ -763,12 +756,11 @@ function showConfirmation(profile) {
   const labels = {
     zip_code: 'ZIP Code', age: 'Age', household_size: 'Household Size',
     income: 'Annual Income', drugs: 'Medications', doctors: 'Doctors',
-    utilization: 'Healthcare Use', tobacco_use: 'Tobacco User', is_premium: 'Service Tier'
+    utilization: 'Healthcare Use', is_premium: 'Service Tier'
   };
   const fmt = (k, v) => {
     if (k === 'is_premium') return v ? '💎 Premium' : '🔍 Free';
     if (k === 'income') return '$' + Number(v).toLocaleString();
-    if (k === 'tobacco_use') return v ? 'Yes' : 'No';
     if (Array.isArray(v)) return v.length ? v.join(', ') : 'None';
     return v;
   };
@@ -812,7 +804,6 @@ function confirmAndAnalyze() {
   const income = parseFloat(document.getElementById('income').value);
   const household = parseInt(document.getElementById('household').value);
   const utilization = document.getElementById('utilization').value;
-  const tobacco_use = document.getElementById('tobacco_use').value === 'yes';
   const drugs = document.getElementById('drugs').value.split(',').map(s=>s.trim()).filter(Boolean);
   const doctors = document.getElementById('doctors').value.split(',').map(s=>s.trim()).filter(Boolean);
 
@@ -822,7 +813,7 @@ function confirmAndAnalyze() {
   }
 
   pendingProfile = { zip_code: zip, age, income, household_size: household,
-                     utilization, tobacco_use, drugs, doctors };
+                     utilization, tobacco_use: false, drugs, doctors };
   showConfirmation(pendingProfile);
 }
 
