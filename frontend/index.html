@@ -600,9 +600,9 @@ function renderResults(data) {
 
   // Stats
   const subsidy = data.subsidy || {};
-  const monthly = subsidy.monthly_credit || 0;
-  const annual = subsidy.annual_credit || 0;
-  const fpl = data.fpl_percentage || 0;
+  const monthly = subsidy.monthly_credit || subsidy.monthly_aptc || subsidy.monthly_subsidy || 0;
+  const annual = subsidy.annual_credit || subsidy.annual_aptc || (monthly * 12) || 0;
+  const fpl = data.fpl_percentage || data.profile?.fpl_percentage || 0;
   const statsRow = document.createElement('div');
   statsRow.className = 'result-stat-row';
   statsRow.innerHTML = `
@@ -646,7 +646,7 @@ function renderResults(data) {
     body.appendChild(sub);
 
     plans.slice(0, 3).forEach(plan => {
-      const netPremium = Math.max(0, (plan.premium || 0) - monthly);
+      const netPremium = plan.premium_w_credit ?? plan.premium_after_subsidy ?? Math.max(0, (plan.premium || 0) - monthly);
       const card = document.createElement('div');
       card.className = 'plan-card';
       card.innerHTML = `
