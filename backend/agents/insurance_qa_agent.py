@@ -100,10 +100,8 @@ def tool_search_health_plans(
         tobacco_use: Whether the applicant uses tobacco (default False).
     """
     try:
-        from tools.gov_apis import (
-            get_fips_from_zip, _fips_to_state,
-            get_subsidy_estimate, search_plans,
-        )
+        from tools.gov_apis import get_fips_from_zip, _fips_to_state, search_plans
+        from agents.tools import get_subsidy_estimate
         fips = get_fips_from_zip(zip_code)
         state = _fips_to_state(fips) if fips else "US"
         subsidy = get_subsidy_estimate(income, age, household_size, zip_code, tobacco_use)
@@ -156,7 +154,7 @@ def tool_get_subsidy_info(
         tobacco_use: Whether the applicant uses tobacco.
     """
     try:
-        from tools.gov_apis import get_subsidy_estimate
+        from agents.tools import get_subsidy_estimate
         result = get_subsidy_estimate(income, age, household_size, zip_code, tobacco_use)
         # Add plain-English explanation
         fpl = result.get("fpl_percentage", 0)

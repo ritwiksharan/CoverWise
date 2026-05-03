@@ -619,21 +619,36 @@ def check_doctor_in_plan_network(plan_id: str, npi: str, zip_code: str) -> dict:
     def fetch():
         try:
             r = requests.get(
-                f"{BASE_MARKETPLACE}/plans/{plan_id}/providers",
-                params=_params({"npi": npi, "zip": zip_code}),
-                timeout=10
+                f"{BASE_MARKETPLACE}/providers/{npi}",
+                params=_params({"year": 2024}),
+                timeout=10,
             )
-            data = r.json()
-            providers = data.get("providers", [])
-            if providers:
-                p = providers[0]
+            if r.status_code == 404:
                 return {
-                    "in_network": True,
-                    "network_tier": p.get("network_tier", "In-Network"),
-                    "accepting_patients": p.get("accepting_patients", True),
-                    "provider_name": p.get("name", ""),
+                    "in_network": None,
+                    "note": "Provider not found in CMS Marketplace directory. Verify directly with the insurer.",
                 }
-            return {"in_network": False, "accepting_patients": None}
+            if r.status_code != 200:
+                return {"in_network": None, "error": f"CMS returned HTTP {r.status_code}"}
+
+            prov = r.json().get("provider", {})
+            plans = prov.get("plans") or []
+            plan_ids_in_network = [p.get("id", "") if isinstance(p, dict) else str(p) for p in plans]
+
+            if not plans:
+                return {
+                    "in_network": None,
+                    "provider_name": prov.get("name"),
+                    "accepting": prov.get("accepting", "unknown"),
+                    "note": "CMS marketplace directory has no plan-network data for this provider. "
+                            "Call the insurer's member services or use their online provider directory to confirm.",
+                }
+            in_net = any(plan_id in pid for pid in plan_ids_in_network)
+            return {
+                "in_network": in_net,
+                "provider_name": prov.get("name"),
+                "accepting": prov.get("accepting", "unknown"),
+            }
         except Exception as e:
             print(f"Plan network check error: {e}")
             return {"in_network": None, "error": str(e)}
