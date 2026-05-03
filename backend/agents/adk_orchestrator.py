@@ -1,6 +1,11 @@
 
 """
-ADK Orchestrator - Google ADK powered expert analysis.
+ADK Orchestrator — two-phase pipeline:
+  Phase 1: parallel data collection (plans, drugs, doctors, risks)
+  Phase 2: Gemini 2.0 Flash synthesis with ORCHESTRATOR_INSTRUCTION as system prompt
+
+The synthesis call receives a fully structured text document (not raw JSON) so that
+Gemini can apply the 4-pillar analysis, scenario ranking, and Markdown tables correctly.
 """
 import os
 import asyncio
@@ -16,7 +21,6 @@ try:
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
-    # Provide stub so module-level type annotations don't raise NameError
     class ToolContext:  # type: ignore[no-redef]
         state: dict = {}
     class Content:  # type: ignore[no-redef]
@@ -25,6 +29,13 @@ except ImportError:
         @staticmethod
         def from_text(t): return t
         def __init__(self, **kw): pass
+
+try:
+    import vertexai
+    from vertexai.generative_models import GenerativeModel, GenerationConfig
+    VERTEXAI_AVAILABLE = True
+except ImportError:
+    VERTEXAI_AVAILABLE = False
 
 from agents.tools import (
     get_location_info, get_subsidy_estimate, find_plans,
@@ -71,6 +82,16 @@ PREMIUM TIER RULES (is_premium: true)
 • Explain **CSR variants (73/87/94)** in detail—don't just say they qualify; show the deductible drop.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AGENTIC PLAN RANKING PROTOCOL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Do NOT simply sort by the lowest premium. Use a "Simulated Year" reasoning logic to rank the Top 3 plans:
+1. **The 'Healthy Year' (Low Use)**: Rank by [Monthly Premium * 12]. This is the "Floor" cost.
+2. **The 'Clinical Year' (Chronic Care)**: Rank by how well the plan covers the user's specific drugs/doctors. Prioritize $0 copays.
+3. **The 'Worst Case' (Catastrophic)**: Rank by [Monthly Premium * 12 + OOP Max]. This is the "Ceiling" risk.
+
+**Final Decision**: Recommend the plan that provides the best **Expected Value** across all three scenarios. If a user is eligible for **CSR (Cost Sharing Reductions)**, you MUST prioritize **Silver** plans and explain the massive deductible drop.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRUCTURE & FORMATTING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • ALWAYS use Markdown tables for comparisons. Start lines with `|`.
@@ -78,162 +99,429 @@ STRUCTURE & FORMATTING
 • Tone: Objective, mathematical, and authoritative.
 """
 
-async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
+# ── PHASE 1: Data Collection ──────────────────────────────────────────────────
+
+async def _collect_analysis_data(profile: dict) -> dict:
     """
-    Run all domain-specific tools in parallel waves and return the consolidated data.
+    Parallel data collection — three waves, no AI involved.
+    Returns structured dict consumed by _build_synthesis_prompt.
     """
-    profile = tool_context.state.get("profile", {})
-    zip_code = profile.get("zip_code")
-    print(f"DEBUG: run_full_analysis_parallel TOOL CALLED for ZIP {zip_code}")
-    income = profile.get("income", 50000)
-    age = profile.get("age", 35)
+    zip_code  = profile.get("zip_code")
+    income    = profile.get("income", 50000)
+    age       = profile.get("age", 35)
     household_size = profile.get("household_size", 1)
-    tobacco_use = profile.get("tobacco_use", False)
-    is_premium = profile.get("is_premium", False)
-    drugs = profile.get("drugs", [])
+    tobacco_use    = profile.get("tobacco_use", False)
+    is_premium     = profile.get("is_premium", False)
+    drugs   = profile.get("drugs", [])
     doctors = profile.get("doctors", [])
 
-    # Enforce Limits
     if not is_premium:
-        drugs = drugs[:1]
+        drugs   = drugs[:1]
         doctors = doctors[:1]
 
     if not zip_code:
-        return {"error": "ZIP code missing in profile state."}
+        raise ValueError("ZIP code missing in profile")
 
+    # Wave 0 — location
+    loc   = get_location_info(zip_code)
+    state = loc["state"]
+
+    # Wave 1 — subsidy + plans (parallel)
+    subsidy, plans = await asyncio.gather(
+        asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
+        asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use),
+    )
+    plan_limit = 10 if is_premium else 3
+    plan_ids   = [p["id"] for p in plans[:plan_limit]]
+
+    # Wave 2 — drugs / doctors / risks (parallel)
+    meds, docs, risks = await asyncio.gather(
+        asyncio.to_thread(check_medication_coverage, drugs, plan_ids),
+        asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids, plans[:plan_limit]),
+        asyncio.to_thread(get_market_risks, zip_code, state),
+    )
+
+    # ── Enrich plans with financial model ────────────────────────────────────
+    monthly_credit = subsidy.get("monthly_aptc", 0)
+    oop_factor = {"rarely": 0.1, "sometimes": 0.25, "frequently": 0.5, "chronic": 0.8}.get(
+        profile.get("utilization", "sometimes"), 0.25
+    )
+
+    # rxcui → coverage per plan
+    drug_coverage_map: Dict[str, Dict[str, dict]] = {}
+    for c in meds.get("coverage_details", []):
+        pid   = c.get("plan_id")
+        rxcui = str(c.get("rxcui", ""))
+        drug_coverage_map.setdefault(pid, {})[rxcui] = c
+
+    # Per-drug monthly copay lookup (tier → est. copay)
+    TIER_COPAY = {
+        "PREFERRED-GENERIC": 10, "GENERIC": 10,
+        "NON-PREFERRED-GENERIC": 20,
+        "PREFERRED-BRAND": 45, "BRAND": 45,
+        "NON-PREFERRED-BRAND": 75,
+        "PREFERRED-SPECIALTY": 100, "SPECIALTY": 100,
+        "NON-PREFERRED-SPECIALTY": 150,
+    }
+
+    processed_plans = []
+    for p in plans[:plan_limit]:
+        pid = p.get("id")
+        net_monthly = max(0, p.get("premium", 0) - monthly_credit)
+
+        est_drugs   = 0
+        pa_required = False
+        drug_detail: List[dict] = []
+
+        for d in meds.get("resolved_drugs", []):
+            rxcui = str(d.get("rxcui", ""))
+            cov   = drug_coverage_map.get(pid, {}).get(rxcui, {})
+            tier  = (cov.get("drug_tier") or "").upper()
+            copay = TIER_COPAY.get(tier, 50) if cov.get("coverage") == "Covered" else 0
+
+            if cov.get("coverage") == "Covered":
+                est_drugs += copay * 12
+                if cov.get("prior_authorization"):
+                    pa_required = True
+            elif cov.get("coverage") == "NotCovered":
+                est_drugs += 500 * 12   # full out-of-pocket estimate
+
+            drug_detail.append({
+                "name":       d.get("name", ""),
+                "rxcui":      rxcui,
+                "coverage":   cov.get("coverage", "DataNotProvided"),
+                "tier":       tier or "—",
+                "pa":         bool(cov.get("prior_authorization")),
+                "st":         bool(cov.get("step_therapy")),
+                "ql":         bool(cov.get("quantity_limit")),
+                "copay_mo":   copay,
+                "source":     cov.get("source", "cms"),
+                "note":       cov.get("note", ""),
+            })
+
+        est_oop = p.get("deductible", 0) * oop_factor
+        annual_premium = net_monthly * 12
+
+        # Scenario costs
+        healthy_year   = round(annual_premium, 2)
+        clinical_year  = round(annual_premium + est_drugs, 2)
+        worst_case     = round(annual_premium + p.get("oop_max", 0), 2)
+        true_annual    = round(annual_premium + est_oop + est_drugs, 2)
+
+        p.update({
+            "premium_w_credit":   round(net_monthly, 2),
+            "true_annual_cost":   true_annual,
+            "est_annual_drug_cost": round(est_drugs, 2),
+            "pa_warning":         pa_required,
+            "drug_detail":        drug_detail,
+            "scenario_healthy":   healthy_year,
+            "scenario_clinical":  clinical_year,
+            "scenario_worst":     worst_case,
+        })
+
+        if is_premium and p.get("hsa_eligible"):
+            hsa_limit  = 8300 if household_size > 1 else 4150
+            tax_rate   = 0.22 if income > 45000 else 0.12
+            p["hsa_tax_savings"] = round(hsa_limit * tax_rate, 2)
+            p["hsa_5yr_growth"]  = round(hsa_limit * 5 * 1.07, 2)
+
+        processed_plans.append(p)
+
+    # ── Risk flags ───────────────────────────────────────────────────────────
+    fpl_pct      = subsidy.get("fpl_percentage", 0)
+    monthly_aptc = subsidy.get("monthly_aptc", 0)
+    risk_flags   = []
+
+    if any(p.get("oop_max", 0) > 8700 for p in processed_plans):
+        risk_flags.append("⚠️ Some plans have an OOP max above $8,700 — weigh catastrophic risk carefully.")
+    if 390 <= fpl_pct <= 410:
+        risk_flags.append(f"🚨 Subsidy cliff: income within 5% of 400% FPL. ~$1,800 more income = lose ${monthly_aptc*12:,.0f}/yr subsidy.")
+
+    hsa_plans_list = [p for p in processed_plans if p.get("hsa_eligible")]
+    if hsa_plans_list:
+        hsa_limit  = 8300 if household_size > 1 else 4150
+        tax_rate   = 0.22 if income > 45000 else 0.12
+        risk_flags.append(f"💡 {len(hsa_plans_list)} HSA-eligible plan(s). Max contribution ${hsa_limit:,}/yr → ~${round(hsa_limit*tax_rate):,} federal tax savings.")
+
+    if age < 30:
+        risk_flags.append("💡 Under 30: Catastrophic plan option available — $9,450 deductible but lower premiums.")
+
+    hrsa = risks.get("hrsa", {})
+    if hrsa.get("shortage_area"):
+        risk_flags.append(f"🏥 {hrsa.get('message', 'HPSA area.')} Prefer PPO/EPO with $0 telehealth.")
+
+    sep = risks.get("sep", {})
+    if sep.get("in_open_enrollment"):
+        risk_flags.append(f"📅 Open enrollment active — {sep.get('days_remaining')} days left (deadline {sep.get('deadline')}).")
+    else:
+        risk_flags.append(f"📅 {sep.get('message', 'Open enrollment closed.')} SEP triggers on qualifying life events (60-day window).")
+
+    if processed_plans and all(p.get("type", "").upper() == "HMO" for p in processed_plans):
+        risk_flags.append("ℹ️ All plans are HMO — confirm doctors are in-network before enrolling.")
+    if subsidy.get("is_medicaid_eligible"):
+        risk_flags.append("🏥 Income suggests Medicaid eligibility — check healthcare.gov before paying marketplace premiums.")
+
+    csr_variant = subsidy.get("csr_variant")
+    if csr_variant:
+        csr_labels = {"94": "$0–$500", "87": "$500–$1,500", "73": "$1,500–$3,000"}
+        risk_flags.append(
+            f"💡 CSR-{csr_variant}: Silver plans get deductibles ~{csr_labels.get(csr_variant, 'reduced')} "
+            f"at the same premium. Do NOT choose Gold or Bronze if CSR-eligible."
+        )
+
+    return {
+        "location":           loc,
+        "subsidy":            subsidy,
+        "plans":              processed_plans,
+        "medication_coverage": meds,
+        "doctor_verification": docs,
+        "market_risks":       risks,
+        "risk_flags":         risk_flags,
+        "sep":                sep,
+        "cache_stats":        get_cache_stats(),
+        "is_premium":         is_premium,
+        "drug_coverage_map":  drug_coverage_map,
+    }
+
+
+# ADK tool wrapper — just calls _collect_analysis_data and stores state
+async def run_full_analysis_parallel(tool_context: ToolContext) -> dict:
+    """ADK tool: collect data and store in session state for chat continuity."""
+    profile = tool_context.state.get("profile", {})
+    print(f"[orchestrator] run_full_analysis_parallel called for ZIP {profile.get('zip_code')}")
     try:
-        # Wave 0: Location
-        loc = get_location_info(zip_code)
-        state = loc["state"]
-        fips = loc["fips"]
-
-        # Wave 1: Subsidy & Plans
-        subsidy, plans = await asyncio.gather(
-            asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
-            asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use)
-        )
-        # Premium shows 10, Free shows 3
-        plan_limit = 10 if is_premium else 3
-        plan_ids = [p["id"] for p in plans[:plan_limit]] if plans else []
-
-        # Wave 2: Detailed Checks
-        meds, docs, risks = await asyncio.gather(
-            asyncio.to_thread(check_medication_coverage, drugs, plan_ids),
-            asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids, plans[:plan_limit] if plans else []),
-            asyncio.to_thread(get_market_risks, zip_code, state)
-        )
-
-        # Calculate True Annual Cost & Premium Features
-        monthly_credit = subsidy.get("monthly_aptc", 0)
-        oop_weight = {"rarely": 0.1, "sometimes": 0.25, "frequently": 0.5, "chronic": 0.8}
-        oop_factor = oop_weight.get(profile.get("utilization", "sometimes"), 0.25)
-        
-        # Build plan-drug coverage map
-        drug_coverage_map = {}
-        for c in meds.get("coverage_details", []):
-            pid = c.get("plan_id")
-            rxcui = str(c.get("rxcui", ""))
-            if pid not in drug_coverage_map: drug_coverage_map[pid] = {}
-            drug_coverage_map[pid][rxcui] = c
-
-        processed_plans = []
-        for p in plans[:plan_limit]:
-            pid = p.get("id")
-            net_monthly = max(0, p.get("premium", 0) - monthly_credit)
-            annual_premiums = net_monthly * 12
-            
-            # Estimate drug costs
-            est_drugs = 0
-            pa_required = False
-            for d in meds.get("resolved_drugs", []):
-                rxcui = str(d.get("rxcui", ""))
-                c = drug_coverage_map.get(pid, {}).get(rxcui, {})
-                if c.get("coverage") == "Covered":
-                    tier = c.get("drug_tier", "Tier 1")
-                    copay = 10 if "1" in tier else 30 if "2" in tier else 60
-                    est_drugs += copay * 12
-                    if c.get("prior_authorization"): pa_required = True
-                elif c.get("coverage") == "NotCovered":
-                    est_drugs += 500 * 12
-            
-            est_oop = p.get("deductible", 0) * oop_factor
-            p["premium_w_credit"] = round(net_monthly, 2)
-            p["true_annual_cost"] = round(annual_premiums + est_oop + est_drugs, 2)
-            p["est_annual_drug_cost"] = round(est_drugs, 2)
-            p["pa_warning"] = pa_required
-
-            # HSA Tax Savings (Premium)
-            if is_premium and p.get("hsa_eligible"):
-                tax_rate = 0.22 if income > 45000 else 0.12
-                annual_tax_save = 4150 * tax_rate # Individual limit
-                p["hsa_tax_savings"] = round(annual_tax_save, 2)
-                p["hsa_5yr_growth"] = round(4150 * 5 * 1.07, 2) # Simple 7% growth
-
-            processed_plans.append(p)
-
-        # Compute risk flags (needs plans + subsidy context)
-        fpl_pct = subsidy.get("fpl_percentage", 0)
-        monthly_aptc = subsidy.get("monthly_aptc", 0)
-        risk_flags = []
-
-        if any(p.get("oop_max", 0) > 8700 for p in processed_plans):
-            risk_flags.append("⚠️ Some plans have an out-of-pocket maximum above $8,700 — consider your risk tolerance for a serious health event.")
-
-        if 390 <= fpl_pct <= 410:
-            risk_flags.append(f"🚨 Subsidy cliff: Your income is within 5% of the 400% FPL cutoff. Earning ~$1,800 more could eliminate your ${monthly_aptc:,.0f}/month subsidy (${monthly_aptc*12:,.0f}/year).")
-
-        hsa_plans_list = [p for p in processed_plans if p.get("hsa_eligible")]
-        if hsa_plans_list:
-            hsa_limit = 8300 if household_size > 1 else 4150
-            tax_rate = 0.22 if income > 45000 else 0.12
-            tax_savings = round(hsa_limit * tax_rate)
-            risk_flags.append(f"💡 {len(hsa_plans_list)} HSA-eligible plan(s) available. Contributing the ${hsa_limit:,}/year max saves ~${tax_savings:,} in federal taxes. Funds grow tax-free.")
-
-        if age < 30:
-            risk_flags.append("💡 Under 30: You may qualify for a Catastrophic plan — lower premiums with a $9,450 deductible. Best if you rarely use healthcare.")
-
-        hrsa = risks.get("hrsa", {})
-        if hrsa.get("shortage_area"):
-            risk_flags.append(f"🏥 {hrsa.get('message', 'Your area is a Health Professional Shortage Area.')} Prefer PPO or EPO over HMOs.")
-
-        sep = risks.get("sep", {})
-        if sep.get("in_open_enrollment"):
-            risk_flags.append(f"📅 Open enrollment is active — {sep.get('days_remaining')} days left (deadline {sep.get('deadline')}).")
-        else:
-            risk_flags.append(f"📅 {sep.get('message', 'Open enrollment is closed.')} Qualifying life events trigger a 60-day Special Enrollment Period.")
-
-        if processed_plans and all(p.get("type", "").upper() == "HMO" for p in processed_plans):
-            risk_flags.append("ℹ️ All available plans in your area are HMO — confirm your doctors are in-network before enrolling.")
-
-        if subsidy.get("is_medicaid_eligible"):
-            risk_flags.append("🏥 Based on your income, you may qualify for Medicaid (free/near-free). Visit healthcare.gov before comparing marketplace plans.")
-
-        csr_variant = subsidy.get("csr_variant")
-        csr_deductible_ranges = {"94": "$0–$500", "87": "$500–$1,500", "73": "$1,500–$3,000"}
-        if csr_variant:
-            csr_deductible = csr_deductible_ranges.get(csr_variant, "reduced")
-            risk_flags.append(f"💡 CSR-{csr_variant} eligible: Silver plans give you dramatically lower deductibles (~{csr_deductible}) at the same Silver premium. Do NOT pick Gold or Bronze if CSR-eligible.")
-
-        # Consolidate
-        analysis_data = {
-            "location": loc,
-            "subsidy": subsidy,
-            "plans": sorted(processed_plans, key=lambda x: x.get("true_annual_cost", 999999)),
-            "medication_coverage": meds,
-            "doctor_verification": docs,
-            "market_risks": risks,
-            "risk_flags": risk_flags,
-            "sep": sep,
-            "cache_stats": get_cache_stats(),
-            "is_premium": is_premium
-        }
-        
-        # Update state directly
-        tool_context.state["analysis_data"] = analysis_data
-        return {"status": "Analysis complete", "plan_count": len(plans), "data": analysis_data}
+        data = await _collect_analysis_data(profile)
+        tool_context.state["analysis_data"] = data
+        return {"status": "Analysis complete", "plan_count": len(data.get("plans", []))}
     except Exception as e:
         traceback.print_exc()
         return {"status": "Error", "message": str(e)}
+
+
+# ── PHASE 2: Synthesis Prompt Builder ────────────────────────────────────────
+
+def _build_synthesis_prompt(profile: dict, data: dict) -> str:
+    """
+    Convert structured analysis data into a rich, human-readable document
+    that Gemini can reason over using ORCHESTRATOR_INSTRUCTION.
+    Every number cited in the recommendation must come from this document.
+    """
+    subsidy   = data.get("subsidy", {})
+    plans     = data.get("plans", [])
+    meds      = data.get("medication_coverage", {})
+    docs      = data.get("doctor_verification", {})
+    risks     = data.get("market_risks", {})
+    flags     = data.get("risk_flags", [])
+    sep       = data.get("sep", {})
+    loc       = data.get("location", {})
+    is_prem   = data.get("is_premium", False)
+
+    income         = profile.get("income", 0)
+    age            = profile.get("age", 0)
+    household_size = profile.get("household_size", 1)
+    utilization    = profile.get("utilization", "sometimes")
+    fpl_pct        = subsidy.get("fpl_percentage", 0)
+    monthly_aptc   = subsidy.get("monthly_aptc", 0)
+    csr            = subsidy.get("csr_variant") or "None"
+    is_medicaid    = subsidy.get("is_medicaid_eligible", False)
+
+    lines = [
+        "═" * 60,
+        "CoverWise — Full Analysis Data Package",
+        "═" * 60,
+        "",
+        "USER PROFILE",
+        "─" * 40,
+        f"ZIP: {profile.get('zip_code')} ({loc.get('state','')})  |  Age: {age}  |  Income: ${income:,.0f}/yr",
+        f"Household: {household_size}  |  Utilization: {utilization.title()}  |  Premium tier: {'Yes' if is_prem else 'No'}",
+        f"Medications: {', '.join(profile.get('drugs', [])) or 'None'}",
+        f"Doctors:     {', '.join(profile.get('doctors', [])) or 'None'}",
+        "",
+        "ELIGIBILITY & SUBSIDY",
+        "─" * 40,
+        f"FPL: {fpl_pct:.1f}%  |  Monthly APTC: ${monthly_aptc:,.0f}/mo (${monthly_aptc*12:,.0f}/yr)",
+        f"CSR Variant: {csr}  |  Medicaid eligible: {is_medicaid}",
+        "",
+    ]
+
+    # ── Plans table ──────────────────────────────────────────────────────────
+    lines += [
+        f"PLANS ({len(plans)} found)",
+        "─" * 40,
+        "| # | Plan | Metal | Type | Gross $/mo | After Subsidy | Deductible | OOP Max | Est. Drug/yr | True Annual | HSA |",
+        "|---|------|-------|------|-----------|--------------|-----------|--------|------------|------------|-----|",
+    ]
+    for i, p in enumerate(plans, 1):
+        hsa = "✓" if p.get("hsa_eligible") else "—"
+        lines.append(
+            f"| {i} | {p.get('name','')} | {p.get('metal_level','')} | {p.get('type','')} "
+            f"| ${p.get('premium',0):.0f} | **${p.get('premium_w_credit',0):.0f}** "
+            f"| ${p.get('deductible',0):,} | ${p.get('oop_max',0):,} "
+            f"| ${p.get('est_annual_drug_cost',0):,.0f} | **${p.get('true_annual_cost',0):,.0f}** | {hsa} |"
+        )
+
+    # ── Scenario tables ──────────────────────────────────────────────────────
+    lines += [
+        "",
+        "SCENARIO ANALYSIS (pre-computed)",
+        "─" * 40,
+        "Healthy Year (premiums only, no healthcare use):",
+        "| Plan | Monthly | Annual Premium |",
+        "|------|---------|---------------|",
+    ]
+    for p in plans:
+        lines.append(f"| {p.get('name','')} | ${p.get('premium_w_credit',0):.0f} | ${p.get('scenario_healthy',0):,.0f} |")
+
+    lines += ["", "Clinical Year (premiums + all drug costs, no deductible hit):"]
+    lines += ["| Plan | Annual Premium | Est. Drug Cost | Total |", "|------|--------------|--------------|-------|"]
+    for p in plans:
+        lines.append(
+            f"| {p.get('name','')} | ${p.get('premium_w_credit',0)*12:.0f} "
+            f"| ${p.get('est_annual_drug_cost',0):,.0f} | **${p.get('scenario_clinical',0):,.0f}** |"
+        )
+
+    lines += ["", "Worst Case (premiums + full OOP Max):"]
+    lines += ["| Plan | Annual Premium | OOP Max | Ceiling Cost |", "|------|--------------|--------|-------------|"]
+    for p in plans:
+        lines.append(
+            f"| {p.get('name','')} | ${p.get('premium_w_credit',0)*12:.0f} "
+            f"| ${p.get('oop_max',0):,} | **${p.get('scenario_worst',0):,.0f}** |"
+        )
+
+    # ── Breakeven helper data ────────────────────────────────────────────────
+    if len(plans) >= 2:
+        p1, p2 = plans[0], plans[1]
+        premium_diff = abs(p1.get("premium_w_credit", 0) - p2.get("premium_w_credit", 0)) * 12
+        deduct_diff  = abs(p1.get("deductible", 0) - p2.get("deductible", 0))
+        lines += [
+            "",
+            "BREAKEVEN DATA (use to calculate visits-to-breakeven)",
+            "─" * 40,
+            f"Plan 1 vs Plan 2 annual premium difference: ${premium_diff:,.0f}",
+            f"Plan 1 vs Plan 2 deductible difference:     ${deduct_diff:,.0f}",
+            f"Typical specialist visit cost: ~$200–$350 out-of-pocket before deductible",
+        ]
+
+    # ── Drug coverage detail ─────────────────────────────────────────────────
+    lines += ["", "DRUG COVERAGE DETAIL", "─" * 40]
+    resolved = meds.get("resolved_drugs", [])
+    cov_list = meds.get("coverage_details", [])
+    generics = meds.get("generic_suggestions", {})
+
+    for drug in resolved:
+        rxcui = str(drug.get("rxcui", ""))
+        lines += [
+            f"{drug.get('name','')} — RxCUI {rxcui}  |  "
+            f"Route: {drug.get('route','')}  |  Strength: {drug.get('strength','')}",
+            "| Plan | Coverage | Tier | Prior Auth | Step Therapy | Qty Limit | Est. Copay/mo | Source |",
+            "|------|----------|------|-----------|-------------|---------|-------------|--------|",
+        ]
+        for p in plans:
+            pid   = p.get("id")
+            cov   = next((c for c in cov_list if str(c.get("rxcui","")) == rxcui and c.get("plan_id") == pid), {})
+            pname = p.get("name", "")[:35]
+            tier  = cov.get("drug_tier") or "—"
+            pa    = "YES ⚠" if cov.get("prior_authorization") else "no"
+            st    = "YES" if cov.get("step_therapy") else "no"
+            ql    = "YES" if cov.get("quantity_limit") else "no"
+            # find pre-computed copay from plan drug_detail
+            dd    = next((x for x in p.get("drug_detail",[]) if x.get("rxcui") == rxcui), {})
+            copay = f"${dd.get('copay_mo',0)}/mo" if dd.get("coverage") == "Covered" else "—"
+            src   = "RAG✓" if cov.get("source") == "rag_formulary" else "CMS"
+            note  = " ⚡proxy" if cov.get("note") else ""
+            lines.append(f"| {pname} | {cov.get('coverage','—')} | {tier} | {pa} | {st} | {ql} | {copay} | {src}{note} |")
+
+        gen = generics.get(drug.get("name",""), [])
+        if gen:
+            lines.append(f"  Generic alternatives: {', '.join(gen)}")
+        lines.append("")
+
+    # ── Doctor verification ──────────────────────────────────────────────────
+    lines += ["DOCTOR VERIFICATION", "─" * 40]
+    for doc in docs.get("results", []):
+        mips  = f"MIPS {doc.get('mips_score')}/100" if doc.get("mips_score") is not None else "MIPS: not available"
+        lines += [
+            f"Searched: {doc.get('searched_name','')}",
+            f"  Verified: {doc.get('name','')}  |  NPI: {doc.get('npi','')}",
+            f"  Specialty: {doc.get('specialty','')}  |  {doc.get('city','')}, {doc.get('state','')}",
+            f"  Phone: {doc.get('phone','')}  |  Credential: {doc.get('credential','')}  |  Active: {doc.get('active',True)}",
+            f"  {mips}  |  Telehealth: {doc.get('telehealth', False)}",
+            "  Network status:",
+        ]
+        for pid, net in doc.get("network_status", {}).items():
+            pname = next((p.get("name","") for p in plans if p.get("id") == pid), pid)
+            status = "In-Network ✓" if net.get("in_network") else ("Out-of-Network ✗" if net.get("in_network") is False else "Unknown")
+            url_note = f"  → verify: {net.get('verify_url','')}" if net.get("verify_url") else ""
+            lines.append(f"    • {pname[:40]}: {status}{url_note}")
+        lines.append("")
+
+    # ── Market / HRSA / SEP ──────────────────────────────────────────────────
+    hrsa = risks.get("hrsa", {})
+    lines += [
+        "MARKET & RISK DATA",
+        "─" * 40,
+        f"HRSA shortage area: {hrsa.get('shortage_area', False)}  |  {hrsa.get('message','')}",
+        f"Enrollment: {'Open — ' + str(sep.get('days_remaining','')) + ' days left (deadline ' + str(sep.get('deadline','')) + ')' if sep.get('in_open_enrollment') else sep.get('message','Closed')}",
+        f"Actuarial values: Bronze=60% | Silver=70% | Gold=80% | Platinum=90%",
+        f"CSR-94 deductible range: $0–$500  |  CSR-87: $500–$1,500  |  CSR-73: $1,500–$3,000",
+        "",
+        "RISK FLAGS",
+        "─" * 40,
+    ]
+    for f in flags:
+        lines.append(f"  {f}")
+
+    # ── Synthesis instruction ────────────────────────────────────────────────
+    lines += [
+        "",
+        "═" * 60,
+        "SYNTHESIS INSTRUCTION",
+        "═" * 60,
+        "Using ALL data above, produce a complete multi-pillar recommendation.",
+        "Follow the exact structure in your system instructions:",
+        "  1. Financial Pillar — use the scenario tables and breakeven data above.",
+        "  2. Medical Pillar — cite exact tiers, PA requirements, and copay estimates from the drug tables.",
+        "  3. Network Pillar — confirm each doctor's verified name, NPI, MIPS score, and network status.",
+        "  4. Market Pillar — cite HRSA and enrollment deadline from the data above.",
+        "Then apply the Agentic Plan Ranking Protocol (Healthy / Clinical / Worst-Case scenarios).",
+        f"{'Apply PREMIUM TIER RULES: 3× detail, HSA wealth forecast, side-by-side benefit table.' if is_prem else 'Free tier: focus on the top 3 plans.'}",
+        "Do NOT invent any numbers. Every dollar figure must match the tables above exactly.",
+        "═" * 60,
+    ]
+
+    return "\n".join(lines)
+
+
+# ── PHASE 2: Gemini Direct Synthesis ─────────────────────────────────────────
+
+async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = False) -> str:
+    """
+    Call Gemini 2.0 Flash directly with ORCHESTRATOR_INSTRUCTION as system prompt
+    and the full structured data document as the user turn.
+    Falls back to a data-only summary if Vertex AI is unavailable.
+    """
+    if not VERTEXAI_AVAILABLE:
+        return (
+            "**AI synthesis unavailable** (Vertex AI not configured locally). "
+            "The full plan, drug, and doctor data is available in the structured sections above."
+        )
+
+    try:
+        vertexai.init(project=PROJECT_ID, location=REGION)
+        model = GenerativeModel(
+            "gemini-2.0-flash-001",
+            system_instruction=ORCHESTRATOR_INSTRUCTION,
+            generation_config=GenerationConfig(
+                max_output_tokens=8192,
+                temperature=0.2,
+            ),
+        )
+        response = await asyncio.to_thread(model.generate_content, synthesis_prompt)
+        return response.text
+    except Exception as e:
+        traceback.print_exc()
+        return f"**Synthesis error**: {e}\n\nRaw data has been returned in the structured fields."
+
 
 class ADKOrchestrator:
     def __init__(self):
@@ -254,168 +542,105 @@ class ADKOrchestrator:
         self._runner = Runner(agent=agent, app_name=APP_NAME, session_service=self._session_service)
 
     async def analyze(self, profile: dict) -> dict:
-        self._ensure_runner()
+        """
+        Two-phase pipeline:
+          Phase 1 — collect all data (parallel waves, no AI)
+          Phase 2 — build rich synthesis prompt, call Gemini with ORCHESTRATOR_INSTRUCTION
+        """
         user_id = profile.get("user_id", "anonymous")
-        session_id = user_id
-        
-        try:
-            await self._session_service.create_session(
-                app_name=APP_NAME, user_id=user_id, session_id=session_id,
-                state={"profile": profile}
-            )
-        except Exception:
-            session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
-            session.state["profile"] = profile
+        print(f"[orchestrator] analyze() start — user={user_id} ZIP={profile.get('zip_code')}")
 
-        memory_context = build_memory_context(user_id) or ""
-        prompt_text = (
-            f"STRICT INSTRUCTION: You MUST call the `run_full_analysis_parallel` tool FIRST to get the live insurance data. "
-            f"Do not guess. Once you have the data, provide the multi-pillar analysis. "
-            f"User Profile: {profile}. Context: {memory_context}"
-        )
-        msg = Content(role="user", parts=[Part(text=prompt_text)])
-        
-        reply = ""
-        print(f"DEBUG: Starting ADK run for user {user_id}")
-        async for event in self._runner.run_async(user_id=user_id, session_id=session_id, new_message=msg):
-            # Log events for debugging
-            if hasattr(event, "step") and event.step:
-                print(f"DEBUG: ADK Step: {event.step.name if hasattr(event.step, 'name') else event.step}")
-            
-            if hasattr(event, "is_final_response") and event.is_final_response():
-                if hasattr(event, "content") and event.content:
-                    for part in event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            reply += part.text
-        
-        print(f"DEBUG: ADK Run complete. Reply length: {len(reply)}")
-        
-        session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
-        data = session.state.get("analysis_data", {})
-        store_user_profile(user_id, profile)
-        
-        return {
-            "route": data.get("subsidy", {}).get("is_medicaid_eligible") and "medicaid" or "subsidized",
-            "profile": {
-                "fpl_percentage": data.get("subsidy", {}).get("fpl_percentage"),
-                "route_reason": "Based on income and location analysis."
-            },
-            "recommendation": reply,
-            "plans": data.get("plans", []),
-            "subsidy": data.get("subsidy", {}),
-            "drugs": data.get("medication_coverage", {}),
-            "doctors": data.get("doctor_verification", {}),
-            "risks": {**data.get("market_risks", {}), "flags": data.get("risk_flags", [])},
-            "cache_stats": data.get("cache_stats", {}),
-            "memory_used": bool(memory_context)
-        }
+        # ── Phase 1: data collection ─────────────────────────────────────────
+        data = await _collect_analysis_data(profile)
 
-    async def chat(self, user_id: str, message: str, profile: Optional[dict] = None) -> dict:
-        self._ensure_runner()
-        session_id = user_id
-        
-        try:
-            await self._session_service.create_session(
-                app_name=APP_NAME, user_id=user_id, session_id=session_id,
-                state={"profile": profile or {}}
-            )
-        except Exception:
-            pass
+        # ── Phase 2: synthesis ───────────────────────────────────────────────
+        synthesis_prompt = _build_synthesis_prompt(profile, data)
+        print(f"[orchestrator] synthesis prompt built ({len(synthesis_prompt)} chars) — calling Gemini")
+        recommendation = await _synthesize_with_gemini(synthesis_prompt, data.get("is_premium", False))
+        print(f"[orchestrator] recommendation received ({len(recommendation)} chars)")
 
-        # Retrieve context from previous analysis
-        session = await self._session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=session_id)
-        analysis_data = session.state.get("analysis_data", {})
-        user_profile = session.state.get("profile", profile or {})
+        data["recommendation"] = recommendation
 
-        # If no prior analysis in session but profile is available, fetch plans + subsidy on the fly
-        if not analysis_data.get("plans") and (profile or user_profile):
-            p = profile or user_profile
-            zip_code = p.get("zip_code", "")
-            age = p.get("age", 30)
-            income = p.get("income", 40000)
-            household_size = p.get("household_size", 1)
-            tobacco_use = p.get("tobacco_use", False)
-            if zip_code:
+        # Store in ADK session for chat follow-ups
+        if ADK_AVAILABLE and self._session_service:
+            self._ensure_runner()
+            try:
+                await self._session_service.create_session(
+                    app_name=APP_NAME, user_id=user_id, session_id=user_id,
+                    state={"profile": profile, "analysis_data": data}
+                )
+            except Exception:
                 try:
-                    live_sub, live_plans = await asyncio.gather(
-                        asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
-                        asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use),
+                    session = await self._session_service.get_session(
+                        app_name=APP_NAME, user_id=user_id, session_id=user_id
                     )
-                    analysis_data = {"subsidy": live_sub, "plans": live_plans[:10],
-                                     "medication_coverage": {}, "doctor_verification": {},
-                                     "risk_flags": [], "recommendation": ""}
+                    session.state["profile"] = profile
+                    session.state["analysis_data"] = data
                 except Exception:
                     pass
 
-        # Build rich context from analysis data
-        subsidy = analysis_data.get("subsidy", {})
-        plans = analysis_data.get("plans", [])
-        meds = analysis_data.get("medication_coverage", {})
-        docs = analysis_data.get("doctor_verification", {})
-        risk_flags = analysis_data.get("risk_flags", [])
-        prior_recommendation = analysis_data.get("recommendation", "")
+        store_user_profile(user_id, profile)
 
-        # Summarize plans with key financials
-        plan_summaries = []
-        for p in plans[:10]:
-            plan_summaries.append(
-                f"  • {p.get('name')} ({p.get('metal_level')}, {p.get('type','')}): "
-                f"${p.get('premium_w_credit', p.get('premium', 0)):.0f}/mo after subsidy, "
-                f"deductible ${p.get('deductible', 0):,}, OOP max ${p.get('oop_max', 0):,}, "
-                f"true annual cost ${p.get('true_annual_cost', 0):,.0f}"
-                f"{' — HSA eligible' if p.get('hsa_eligible') else ''}"
-                f"{' — ⚠ PA required for drug' if p.get('pa_warning') else ''}"
-            )
+        sub = data.get("subsidy", {})
+        return {
+            "route": "medicaid" if sub.get("is_medicaid_eligible") else "subsidized",
+            "profile": {
+                "fpl_percentage": sub.get("fpl_percentage"),
+                "route_reason":   "Based on income and location analysis.",
+            },
+            "recommendation":       recommendation,
+            "synthesis_prompt_len": len(synthesis_prompt),
+            "plans":     data.get("plans", []),
+            "subsidy":   sub,
+            "drugs":     data.get("medication_coverage", {}),
+            "doctors":   data.get("doctor_verification", {}),
+            "risks":     {**data.get("market_risks", {}), "flags": data.get("risk_flags", [])},
+            "cache_stats": data.get("cache_stats", {}),
+            "medication_coverage": data.get("medication_coverage", {}),
+        }
 
-        # Drug coverage per plan
-        drug_lines = []
-        cov_details = meds.get("coverage_details", [])
-        for d in meds.get("resolved_drugs", []):
-            rxcui = str(d.get("rxcui", ""))
-            plan_cov = [c for c in cov_details if str(c.get("rxcui","")) == rxcui]
-            cov_strs = []
-            for c in plan_cov[:5]:
-                pid = c.get("plan_id", "")
-                plan_name = next((p.get("name","") for p in plans if p.get("id") == pid), pid)
-                pa = " (PA required)" if c.get("prior_authorization") else ""
-                st = " (step therapy)" if c.get("step_therapy") else ""
-                cov_strs.append(f"{plan_name[:30]}: {c.get('coverage','?')} {c.get('drug_tier','')}{pa}{st}")
-            drug_lines.append(f"  • {d.get('name')} (RxCUI {rxcui}): {'; '.join(cov_strs) if cov_strs else 'no coverage data'}")
+    async def chat(self, user_id: str, message: str, profile: Optional[dict] = None) -> dict:
+        """
+        Follow-up chat: loads prior analysis from session, builds context,
+        calls Gemini directly with ORCHESTRATOR_INSTRUCTION + user question.
+        """
+        # ── Load prior analysis data ──────────────────────────────────────────
+        analysis_data: dict = {}
+        user_profile  = profile or {}
 
-        # Doctor network status
-        doc_lines = []
-        for doc in docs.get("results", [])[:5]:
-            nets = doc.get("network_status", {})
-            net_strs = []
-            for pid, net in nets.items():
-                plan_name = next((p.get("name","") for p in plans if p.get("id") == pid), pid)
-                status = "In-Network" if net.get("in_network") else ("Out-of-Network" if net.get("in_network") is False else "Unknown")
-                net_strs.append(f"{plan_name[:25]}: {status}")
-            mips = f" MIPS {doc.get('mips_score')}/100" if doc.get("mips_score") is not None else ""
-            doc_lines.append(f"  • {doc.get('name','?')} ({doc.get('specialty','')}){mips}: {'; '.join(net_strs) if net_strs else 'network not checked'}")
+        if ADK_AVAILABLE and self._session_service:
+            self._ensure_runner()
+            try:
+                session = await self._session_service.get_session(
+                    app_name=APP_NAME, user_id=user_id, session_id=user_id
+                )
+                analysis_data = session.state.get("analysis_data", {})
+                user_profile  = session.state.get("profile", profile or {})
+            except Exception:
+                pass
 
-        context_msg = (
-            f"SYSTEM CONTEXT — CoverWise Year-Round Advisor\n\n"
-            f"USER PROFILE:\n{user_profile}\n\n"
-            f"SUBSIDY & ELIGIBILITY:\n"
-            f"  FPL: {subsidy.get('fpl_percentage', 0):.1f}%  |  Monthly APTC: ${subsidy.get('monthly_aptc', 0)}/mo  |  "
-            f"CSR: {subsidy.get('csr_variant') or 'None'}  |  Medicaid eligible: {subsidy.get('is_medicaid_eligible', False)}\n\n"
-            f"PLANS FOUND ({len(plans)} total, sorted by true annual cost):\n" + "\n".join(plan_summaries) + "\n\n"
-            + (f"DRUG COVERAGE:\n" + "\n".join(drug_lines) + "\n\n" if drug_lines else "")
-            + (f"DOCTOR NETWORK STATUS:\n" + "\n".join(doc_lines) + "\n\n" if doc_lines else "")
-            + (f"RISK FLAGS:\n" + "\n".join(f"  {f}" for f in risk_flags) + "\n\n" if risk_flags else "")
-            + (f"PRIOR AI RECOMMENDATION SUMMARY:\n{prior_recommendation[:2000]}\n\n" if prior_recommendation else "")
-            + "Answer the user's question using ONLY the above verified data. Be specific — cite plan names, dollar amounts, and drug tiers directly."
-        )
+        # If no prior analysis, collect minimal data (plans + subsidy only)
+        if not analysis_data.get("plans") and user_profile.get("zip_code"):
+            try:
+                analysis_data = await _collect_analysis_data(user_profile)
+            except Exception:
+                pass
 
-        msg = Content(role="user", parts=[Part(text=f"{context_msg}\n\nUSER MESSAGE: {message}")])
-        
-        reply = ""
-        async for event in self._runner.run_async(user_id=user_id, session_id=session_id, new_message=msg):
-            if hasattr(event, "is_final_response") and event.is_final_response():
-                if hasattr(event, "content") and event.content:
-                    for part in event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            reply += part.text
-        
-        return {"reply": reply, "memory_used": False}
+        # ── Build chat context from synthesis prompt + user question ──────────
+        data_doc = _build_synthesis_prompt(user_profile, analysis_data) if analysis_data else ""
+        prior_rec = (analysis_data.get("recommendation") or "")[:3000]
+
+        chat_prompt = "\n".join([
+            data_doc,
+            "",
+            "─" * 60,
+            f"PRIOR RECOMMENDATION SUMMARY:\n{prior_rec}" if prior_rec else "",
+            "─" * 60,
+            f"USER FOLLOW-UP QUESTION: {message}",
+            "",
+            "Answer using ONLY the verified data above. Cite exact plan names, dollar amounts, tiers, "
+            "and doctor names. Be concise and direct.",
+        ])
+
+        reply = await _synthesize_with_gemini(chat_prompt)
+        return {"reply": reply, "memory_used": bool(prior_rec)}
