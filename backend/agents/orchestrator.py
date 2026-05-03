@@ -24,14 +24,17 @@ model = GenerativeModel("gemini-2.0-flash")
 
 INTAKE_SYSTEM = (
     "You are CoverWise, a friendly AI health insurance advisor. "
-    "Collect the user profile through natural conversation. "
-    "You need: zip_code, age, annual_income, household_size, medications (optional), doctors (optional), "
-    "utilization (rarely/sometimes/frequently/chronic - how often they use healthcare), "
-    "tobacco_use (yes/no), is_premium (yes/no - premium users get deeper HSA forecasts and 3x more detail). "
-    "Ask one question at a time. Be warm and conversational. Keep responses to 1-2 sentences. "
-    "Ask utilization as: How often do you typically use healthcare? (rarely/sometimes/frequently/chronic) "
-    "Ask premium as: Would you like our premium deep analysis with HSA wealth forecasts and detailed benefit comparisons? (free/premium) "
-    "Once you have all required fields output EXACTLY this on its own line with no extra text: "
+    "Collect ALL of these fields through natural conversation - you MUST ask every single one: "
+    "1) zip_code, 2) age, 3) annual_income, 4) household_size, "
+    "5) medications - ALWAYS ask this even if you think they have none, "
+    "6) doctors - ALWAYS ask this even if you think they have none, "
+    "7) utilization (rarely/sometimes/frequently/chronic), "
+    "8) tobacco_use (yes/no), "
+    "9) is_premium (free/premium). "
+    "Ask ONE question at a time. Be warm and brief (1-2 sentences). "
+    "You MUST ask about medications and doctors - do not skip them. "
+    "Only output PROFILE_COMPLETE after asking ALL 9 questions. "
+    "Once you have all fields output EXACTLY this on its own line: "
     'PROFILE_COMPLETE:{"zip_code":"77001","age":34,"income":52000,"household_size":2,"drugs":[],"doctors":[],"utilization":"sometimes","tobacco_use":false,"is_premium":false}'
 )
 
@@ -230,11 +233,26 @@ class ConversationalOrchestrator:
             from agents.adk_orchestrator import ADKOrchestrator, ADK_AVAILABLE
             if ADK_AVAILABLE:
                 adk = ADKOrchestrator()
-                result = await adk.analyze(profile)
+                # Ensure all fields are present
+                full_profile = {
+                    "zip_code": str(profile.get("zip_code", "")),
+                    "age": int(profile.get("age", 30)),
+                    "income": float(profile.get("income", 50000)),
+                    "household_size": int(profile.get("household_size", 1)),
+                    "drugs": profile.get("drugs", []),
+                    "doctors": profile.get("doctors", []),
+                    "utilization": profile.get("utilization", "sometimes"),
+                    "tobacco_use": bool(profile.get("tobacco_use", False)),
+                    "is_premium": bool(profile.get("is_premium", False)),
+                    "user_id": str(profile.get("user_id", "anonymous")),
+                }
+                result = await adk.analyze(full_profile)
                 result["fpl_percentage"] = fpl_pct
+                result["is_premium"] = full_profile["is_premium"]
                 return result
         except Exception as e:
             print("ADK analysis failed, falling back to basic: " + str(e))
+            import traceback; traceback.print_exc()
 
         # Fallback: basic parallel sub-agents
         wave1 = await asyncio.gather(subsidy_agent(profile, fpl_pct), plan_search_agent(profile), doctor_check_agent(profile))

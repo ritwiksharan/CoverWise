@@ -600,9 +600,9 @@ function renderResults(data) {
 
   // Stats
   const subsidy = data.subsidy || {};
-  const monthly = subsidy.monthly_credit || subsidy.monthly_aptc || subsidy.monthly_subsidy || 0;
-  const annual = subsidy.annual_credit || subsidy.annual_aptc || (monthly * 12) || 0;
-  const fpl = data.fpl_percentage || data.profile?.fpl_percentage || 0;
+  const monthly = subsidy.monthly_credit || subsidy.monthly_aptc || subsidy.monthly_subsidy || subsidy.aptc_monthly || 0;
+  const annual = subsidy.annual_credit || subsidy.annual_aptc || subsidy.aptc_annual || (monthly * 12) || 0;
+  const fpl = data.fpl_percentage || (data.profile && data.profile.fpl_percentage) || (data.subsidy && data.subsidy.fpl_percentage) || 0;
   const statsRow = document.createElement('div');
   statsRow.className = 'result-stat-row';
   statsRow.innerHTML = `
@@ -620,7 +620,7 @@ function renderResults(data) {
     </div>
     <div class="result-stat">
       <div class="result-stat-label">Best Plan From</div>
-      <div class="result-stat-val green">${monthly >= 189 ? 'Subsidy covers premium' : '$' + Math.max(0, (data.plans?.[0]?.premium || 0) - monthly).toFixed(0) + '/mo'}</div>
+      <div class="result-stat-val green">${plans.length > 0 ? '$' + Math.max(0, (plans[0].premium_w_credit || plans[0].premium_after_subsidy || Math.max(0, (plans[0].premium || 0) - monthly))).toFixed(0) + '/mo' : monthly > 0 ? 'Subsidy: $' + monthly.toFixed(0) + '/mo' : 'See chat'}</div>
     </div>`;
   body.appendChild(statsRow);
 
@@ -634,7 +634,7 @@ function renderResults(data) {
   }
 
   // Plans
-  const plans = data.plans || [];
+  const plans = (data.plans || []).filter(p => p.name && p.premium);
   if (plans.length) {
     const header = document.createElement('div');
     header.style.cssText = 'font-family:"Instrument Serif",serif;font-size:16px;font-weight:400;margin-bottom:4px;';

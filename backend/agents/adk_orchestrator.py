@@ -103,7 +103,7 @@ async def run_full_analysis_parallel(tool_context) -> dict:
         # Wave 1: Subsidy & Plans
         subsidy, plans = await asyncio.gather(
             asyncio.to_thread(get_subsidy_estimate, income, age, household_size, zip_code, tobacco_use),
-            asyncio.to_thread(find_plans, zip_code, age, income, tobacco_use)
+            asyncio.to_thread(find_plans, zip_code, age, income, household_size, tobacco_use)
         )
         # Premium shows 10, Free shows 3
         plan_limit = 10 if is_premium else 3
@@ -167,7 +167,7 @@ async def run_full_analysis_parallel(tool_context) -> dict:
         # Consolidate
         analysis_data = {
             "location": loc,
-            "subsidy": subsidy,
+            "subsidy": {**subsidy, "monthly_credit": subsidy.get("monthly_aptc", 0), "annual_credit": subsidy.get("monthly_aptc", 0) * 12},
             "plans": sorted(processed_plans, key=lambda x: x.get("true_annual_cost", 999999)),
             "medication_coverage": meds,
             "doctor_verification": docs,
