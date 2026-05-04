@@ -4,564 +4,1890 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoverWise — AI Health Insurance Advisor</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#030b18;--bg2:#071020;--bg3:#0c1a30;--border:#0d2040;--border2:#153060;--text:#ddeeff;--text2:#6a9ac4;--text3:#2d5070;--accent:#1d6cf0;--accent2:#5da8ff;--green:#0dc47a;--yellow:#f59e0b;--red:#f04040;--orange:#f97316;--purple:#7c3aed;--gold:#fbbf24;--r:10px;--r2:16px;--ff:'Outfit',sans-serif;--fd:'Syne',sans-serif;--fm:'JetBrains Mono',monospace}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--ff);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(29,108,240,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(29,108,240,.04) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
-.bg-glow{position:fixed;top:-300px;left:50%;transform:translateX(-50%);width:1200px;height:600px;background:radial-gradient(ellipse,rgba(29,108,240,.12) 0%,transparent 65%);pointer-events:none;z-index:0}
-.app{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:0 24px 80px}
-header{padding:32px 0 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);margin-bottom:36px}
-.logo{display:flex;align-items:center;gap:12px}
-.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,#1d6cf0,#7c3aed);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 0 24px rgba(29,108,240,.35)}
-.logo-name{font-family:var(--fd);font-size:20px;font-weight:700}
-.logo-sub{font-size:10px;color:var(--text3);font-family:var(--fm);letter-spacing:1.2px;text-transform:uppercase}
-.hdr-right{display:flex;align-items:center;gap:10px}
-.hbadge{font-size:11px;font-family:var(--fm);padding:4px 12px;border-radius:20px;border:1px solid;cursor:pointer;transition:all .2s}
-.hbadge.live{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.07)}
-.hbadge.live::before{content:'● ';font-size:8px}
-.hbadge.reset{color:var(--text3);border-color:var(--border2);background:none}
-.hbadge.reset:hover{color:var(--text2);border-color:var(--accent)}
-.hbadge.prem{color:var(--gold);border-color:var(--gold);background:rgba(251,191,36,.08)}
-.hero{text-align:center;margin-bottom:36px}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--fm);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent2);background:rgba(29,108,240,.1);border:1px solid rgba(93,168,255,.2);padding:5px 14px;border-radius:20px;margin-bottom:18px}
-.hero h1{font-family:var(--fd);font-size:clamp(32px,5vw,54px);font-weight:800;line-height:1.1;margin-bottom:14px}
-.hero h1 em{font-style:normal;background:linear-gradient(135deg,#5da8ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero p{font-size:15px;color:var(--text2);max-width:520px;margin:0 auto 20px;line-height:1.8}
-.tags{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
-.tag{font-size:10px;font-family:var(--fm);padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:var(--text3)}
-.tag.on{color:var(--accent2);border-color:var(--accent);background:rgba(29,108,240,.08)}
-.tabs{display:flex;margin-bottom:20px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
-.tab{flex:1;padding:13px 20px;background:none;border:none;color:var(--text2);font-family:var(--ff);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;text-align:center}
-.tab.on{background:rgba(29,108,240,.1);color:var(--accent2);border-bottom:2px solid var(--accent)}
-.tab:hover:not(.on){background:rgba(255,255,255,.03)}
-.intake{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:28px}
-.intake-hdr{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.ai-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
-.intake-title{font-family:var(--fd);font-size:15px;font-weight:700}
-.intake-sub{font-size:11px;color:var(--text3)}
-.msgs{padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-height:180px;max-height:360px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.msg{padding:11px 15px;border-radius:var(--r);font-size:13px;line-height:1.65;max-width:88%}
-.msg.agent{background:var(--bg3);border:1px solid var(--border);align-self:flex-start;color:var(--text2)}
-.msg.user{background:rgba(29,108,240,.14);border:1px solid rgba(29,108,240,.3);align-self:flex-end;color:var(--text)}
-.msg.sys{background:rgba(13,196,122,.07);border:1px solid rgba(13,196,122,.2);align-self:center;color:var(--green);font-size:11px;font-family:var(--fm)}
-.inp-row{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:10px}
-.inp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;transition:border-color .2s}
-.inp:focus{border-color:var(--accent)}
-.inp::placeholder{color:var(--text3)}
-.sbtn{background:var(--accent);color:white;border:none;border-radius:var(--r);padding:9px 18px;font-size:13px;cursor:pointer;font-family:var(--ff);font-weight:600}
-.sbtn:hover{opacity:.9}.sbtn:disabled{opacity:.4;cursor:not-allowed}
-.dots{display:inline-flex;gap:4px;padding:2px 0}
-.dots span{width:5px;height:5px;background:var(--text3);border-radius:50%;animation:bounce .9s infinite}
-.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
-@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
-.form-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:28px;margin-bottom:28px}
-.form-ttl{font-family:var(--fd);font-size:18px;font-weight:700;margin-bottom:4px}
-.form-sub{font-size:12px;color:var(--text2);margin-bottom:24px}
-.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.fg{display:flex;flex-direction:column;gap:5px}
-.fg.full{grid-column:1/-1}
-label{font-size:11px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-input,select{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;transition:border-color .2s;width:100%}
-input:focus,select:focus{border-color:var(--accent)}
-input::placeholder{color:var(--text3)}
-select option{background:var(--bg2)}
-.btn{background:linear-gradient(135deg,var(--accent),var(--purple));color:white;border:none;border-radius:var(--r);padding:13px 24px;font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:6px;transition:opacity .2s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px}
-.btn:hover{opacity:.9}.btn:active{transform:scale(.99)}.btn:disabled{opacity:.5;cursor:not-allowed}
-.confirm{background:var(--bg2);border:2px solid var(--accent);border-radius:var(--r2);padding:26px;margin-bottom:28px;animation:fadeIn .4s ease}
-.confirm h3{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:5px;color:var(--accent2)}
-.confirm p{font-size:12px;color:var(--text2);margin-bottom:18px}
-.ctable{width:100%;border-collapse:collapse;margin-bottom:18px}
-.ctable tr td{padding:7px 11px;font-size:12px;border-bottom:1px solid var(--border)}
-.ctable tr td:first-child{color:var(--text3);font-family:var(--fm);font-size:10px;text-transform:uppercase;width:38%}
-.ctable tr td:last-child{color:var(--text);font-weight:500}
-.cactions{display:flex;gap:10px}
-.cbtn-yes{background:linear-gradient(135deg,var(--green),#059669);color:white;border:none;border-radius:var(--r);padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff)}
-.cbtn-no{background:none;color:var(--text2);border:1px solid var(--border2);border-radius:var(--r);padding:11px 22px;font-size:13px;cursor:pointer;font-family:var(--ff)}
-.loading{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:36px 28px;text-align:center;margin-bottom:28px}
-.loading.on{display:block}
-.spinner{width:38px;height:38px;margin:0 auto 18px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.agent-rows{display:flex;flex-direction:column;gap:7px;max-width:300px;margin:14px auto 0}
-.agent-row{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--text2);animation:fadeIn .4s ease both}
-.adot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.results{display:none}.results.on{display:block;animation:fadeIn .5s ease}
-.rbadge{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;font-size:12px;font-family:var(--fm);margin-bottom:20px}
-.rbadge.subsidized{background:rgba(13,196,122,.09);border:1px solid var(--green);color:var(--green)}
-.rbadge.marketplace{background:rgba(29,108,240,.09);border:1px solid var(--accent);color:var(--accent2)}
-.rbadge.medicaid{background:rgba(124,58,237,.09);border:1px solid var(--purple);color:var(--purple)}
-.rbadge.state_exchange{background:rgba(124,58,237,.09);border:1px solid var(--purple);color:var(--purple)}
-.rbadge.full_price{background:rgba(245,158,11,.09);border:1px solid var(--yellow);color:var(--yellow)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
-.stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
-.stat-l{font-size:10px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
-.stat-v{font-family:var(--fd);font-size:22px;font-weight:700}
-.stat-v.g{color:var(--green)}.stat-v.b{color:var(--accent2)}.stat-v.y{color:var(--gold)}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:24px;margin-bottom:20px}
-.card h2{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.card-body{font-size:13px;line-height:1.8;color:var(--text2)}
-.plans-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
-.plans-grid.wide{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-.pcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px;transition:border-color .2s}
-.pcard.best{border-color:var(--accent);background:rgba(29,108,240,.04)}
-.phdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.metal{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:6px;border:1px solid;font-weight:500}
-.metal.Gold{color:var(--gold);border-color:var(--gold);background:rgba(251,191,36,.09)}
-.metal.Silver{color:#8fb0cc;border-color:#8fb0cc;background:rgba(143,176,204,.09)}
-.metal.Bronze{color:#d97706;border-color:#d97706;background:rgba(161,98,7,.09)}
-.metal.Platinum{color:#e879f9;border-color:#e879f9;background:rgba(232,121,249,.09)}
-.prank{font-size:10px;font-family:var(--fm);color:var(--text3);margin-bottom:3px}
-.pname{font-family:var(--fd);font-size:14px;font-weight:700;margin-bottom:3px}
-.pissuer{font-size:11px;color:var(--text3);margin-bottom:12px}
-.pprice{font-family:var(--fm);font-size:21px;color:var(--accent2);margin-bottom:2px}
-.pprice span{font-size:13px;color:var(--text3)}
-.plbl{font-size:10px;color:var(--text3);margin-bottom:10px}
-.pdets{display:flex;flex-direction:column}
-.pdet{display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-top:1px solid var(--border)}
-.pdetl{color:var(--text3)}.pdetv{color:var(--text2);font-family:var(--fm)}
-.tac-b{font-size:10px;font-family:var(--fm);color:var(--text2);padding:2px 7px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid var(--border2)}
-.warn-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-bottom:20px}
-.warn-card h2{font-family:var(--fd);font-size:16px;font-weight:700;margin-bottom:12px}
-.wi{font-size:12px;color:var(--text2);line-height:1.65;padding:9px 0;border-bottom:1px solid var(--border)}
-.wi:last-child{border-bottom:none;padding-bottom:0}
-.wi.alert{color:var(--red)}.wi.tip{color:var(--green)}
-.cache-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text3);margin-bottom:20px;font-family:var(--fm);flex-wrap:wrap}
-.cache-bar em{font-style:normal;color:var(--green)}
-.drug-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
-.drug-row:last-child{border-bottom:none}
-.dname{color:var(--text);font-weight:500}
-.dbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.tier{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;border:1px solid}
-.t1{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.09)}
-.t2{color:var(--accent2);border-color:var(--accent);background:rgba(29,108,240,.09)}
-.t3{color:var(--yellow);border-color:var(--yellow);background:rgba(245,158,11,.09)}
-.t4{color:var(--orange);border-color:var(--orange);background:rgba(249,115,22,.09)}
-.t5{color:var(--red);border-color:var(--red);background:rgba(240,64,64,.09)}
-.pa-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--red);border:1px solid var(--red);background:rgba(240,64,64,.09)}
-.st-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--orange);border:1px solid var(--orange);background:rgba(249,115,22,.09)}
-.gen-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--green);border:1px solid var(--green);background:rgba(13,196,122,.09)}
-.doc-row{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
-.doc-row:last-child{border-bottom:none}
-.doc-info{flex:1;min-width:200px}
-.dname2{font-weight:600;color:var(--text);font-size:13px}
-.dmeta{font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:3px}
-.dnets{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
-.net{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:5px;border:1px solid;white-space:nowrap;text-decoration:none}
-.net.in{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.09)}
-.net.out{color:var(--red);border-color:var(--red);background:rgba(240,64,64,.09)}
-.net.unk{color:var(--text3);border-color:var(--border2);background:var(--bg3)}
-.mips{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:5px;border:1px solid var(--purple);color:var(--purple);background:rgba(124,58,237,.09)}
-.prem-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--fm);color:var(--gold);padding:4px 10px;border-radius:20px;background:rgba(251,191,36,.09);border:1px solid var(--gold);margin-bottom:12px}
-.mem-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--fm);color:var(--purple);padding:4px 10px;border-radius:20px;background:rgba(124,58,237,.09);border:1px solid var(--purple);margin-bottom:12px}
-.chat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-top:20px}
-.chat-card h2{font-family:var(--fd);font-size:16px;font-weight:700;margin-bottom:14px}
-.chat-msgs{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;max-height:280px;overflow-y:auto}
-.cmsg{padding:9px 13px;border-radius:var(--r);font-size:12px;line-height:1.6;max-width:84%}
-.cmsg.user{background:rgba(29,108,240,.14);border:1px solid rgba(29,108,240,.3);align-self:flex-end;color:var(--text)}
-.cmsg.ai{background:var(--bg3);border:1px solid var(--border);align-self:flex-start;color:var(--text2)}
-.chat-inp-row{display:flex;gap:9px}
-.chat-inp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;width:auto}
-.chat-inp:focus{border-color:var(--accent)}
-.chat-btn{background:var(--accent);color:white;border:none;border-radius:var(--r);padding:9px 16px;font-size:13px;cursor:pointer;font-family:var(--ff);font-weight:600}
-.tbl-wrap{overflow-x:auto;margin:12px 0;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.05)}
-.tbl-wrap table{width:100%;border-collapse:collapse;font-size:12px}
-.tbl-wrap th{padding:9px 11px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:500}
-.tbl-wrap td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--border)}
-.tbl-wrap tr:last-child td{border-bottom:none}
-.tbl-wrap tr:hover td{background:rgba(255,255,255,.02)}
-.hsa-t{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-.hsa-t th{padding:8px;text-align:center;background:var(--bg3);font-family:var(--fm);font-size:10px;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
-.hsa-t td{padding:8px;text-align:center;border-bottom:1px solid var(--border);font-family:var(--fm)}
-.hsa-t tr:last-child td{border-bottom:none;font-weight:600;color:var(--green)}
-.spec-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-bottom:20px}
-.spec-card h2{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:5px}
-.spec-row{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px}
-.spec-inp{flex:1;min-width:180px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;width:auto}
-.spec-inp:focus{border-color:var(--accent)}
-.spec-btn{background:linear-gradient(135deg,var(--accent),var(--purple));color:white;border:none;border-radius:var(--r);padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);white-space:nowrap}
-.spec-btn:disabled{opacity:.5;cursor:not-allowed}
-.scard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-top:10px}
-.sname{font-weight:600;font-size:13px;color:var(--text)}
-.ssub{font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:2px}
-.sim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.sim-stat{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center}
-.sim-lbl{font-size:10px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;margin-bottom:3px}
-.sim-val{font-size:18px;font-weight:700;font-family:var(--fm)}
-.sim-val.g{color:var(--green)}.sim-val.y{color:var(--yellow)}.sim-val.r{color:var(--red)}
-.ab{padding:10px 13px;border-radius:var(--r);font-size:12px;border:1px solid;margin-top:10px}
-.ab.open{background:rgba(13,196,122,.07);border-color:var(--green);color:var(--green)}
-.ab.warn{background:rgba(240,64,64,.07);border-color:var(--red);color:var(--red)}
-.ab.info{background:rgba(255,255,255,.03);border-color:var(--border2);color:var(--text2)}
-.upsell{border:2px dashed var(--accent);background:rgba(29,108,240,.04);border-radius:var(--r2);padding:22px;margin-top:20px}
-.upsell h2{font-family:var(--fd);font-size:17px;color:var(--accent2);margin-bottom:12px}
-#landingScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;position:relative;z-index:1}
-.lflow{display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;max-width:720px}
-.lcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:28px;text-align:center;cursor:pointer;transition:transform .2s,border-color .2s;position:relative;overflow:hidden}
-.lcard:hover{transform:translateY(-4px);border-color:var(--accent)}
-.lcard.prem{border-color:rgba(93,168,255,.35);background:rgba(29,108,240,.04)}
-.lbadge{position:absolute;top:10px;right:10px;font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:10px}
-.lb-free{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
-.lb-paid{background:rgba(29,108,240,.1);color:var(--accent2);border:1px solid var(--accent)}
-.licon{font-size:30px;margin-bottom:14px;display:block}
-.lcard h3{font-family:var(--fd);font-size:22px;font-weight:700;margin-bottom:8px}
-.lcard p{font-size:12px;color:var(--text3);line-height:1.6}
-@media print{.bg-grid,.bg-glow,.hero,.tabs,.intake,.form-card,.loading,button,.chat-card,.spec-card,.upsell,#landingScreen{display:none!important}body{background:white!important;color:black!important}.app{max-width:100%!important;padding:0!important}.card,.pcard,.warn-card{border:1px solid #ccc!important;page-break-inside:avoid}}
-@media(max-width:700px){.fgrid,.stats{grid-template-columns:1fr 1fr}.plans-grid{grid-template-columns:1fr}.sim-grid{grid-template-columns:1fr 1fr}.lflow{grid-template-columns:1fr}}
+  :root {
+    --bg: #040d1a; --bg2: #071222; --bg3: #0d1f36;
+    --border: #0e2444; --border2: #163358;
+    --text: #e8f0ff; --text2: #7ea8d8; --text3: #3d6494;
+    --accent: #2563eb; --accent2: #5ba0f5;
+    --green: #0ea472; --yellow: #f59e0b; --red: #ef4444;
+    --orange: #f97316; --purple: #7c3aed;
+    --gold: #fbbf24; --silver: #8fb0cc;
+    --radius: 10px; --radius-lg: 16px;
+    --display: Space Grotesk, sans-serif;
+    --body: Inter, sans-serif;
+    --mono: JetBrains Mono, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--body); background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+  .bg-grid { position:fixed; inset:0; z-index:0;
+    background-image: linear-gradient(rgba(37,99,235,.05) 1px,transparent 1px),
+                      linear-gradient(90deg,rgba(37,99,235,.05) 1px,transparent 1px);
+    background-size:40px 40px; pointer-events:none; }
+  .bg-glow { position:fixed; top:-200px; left:50%; transform:translateX(-50%);
+    width:900px; height:500px;
+    background:radial-gradient(ellipse,rgba(37,99,235,.14) 0%,transparent 70%);
+    pointer-events:none; z-index:0; }
+
+  .app { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:0 24px 80px; }
+
+  header { padding:40px 0 32px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); margin-bottom:40px; }
+  .logo { display:flex; align-items:center; gap:12px; }
+  .logo-icon { width:40px; height:40px; background:linear-gradient(135deg,#2563eb,#7c3aed);
+    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px;
+    box-shadow:0 0 20px rgba(37,99,235,.4); }
+  .logo-text { font-family:var(--display); font-size:22px; font-weight:700; }
+  .logo-sub { font-size:11px; color:var(--text3); font-family:var(--mono); letter-spacing:1px; text-transform:uppercase; }
+  .header-badge { font-size:11px; font-family:var(--mono); color:var(--green);
+    border:1px solid var(--green); padding:4px 10px; border-radius:20px; background:rgba(16,185,129,.08); }
+
+  .hero { text-align:center; margin-bottom:40px; }
+  .hero-eyebrow { display:inline-flex; align-items:center; gap:8px; font-family:var(--mono);
+    font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent2);
+    background:rgba(37,99,235,.12); border:1px solid rgba(91,160,245,.25);
+    padding:6px 14px; border-radius:20px; margin-bottom:20px; }
+  .hero h1 { font-family:var(--display); font-size:clamp(34px,5vw,56px); font-weight:800;
+    line-height:1.1; margin-bottom:16px; letter-spacing:-0.5px; }
+  .hero h1 span { color:var(--accent2);
+    background:linear-gradient(135deg,#5ba0f5,#7c3aed); -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent; background-clip:text; }
+  .hero p { font-size:16px; color:var(--text2); max-width:540px; margin:0 auto 24px; line-height:1.8; font-weight:400; }
+  .concepts { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .concept-tag { font-size:11px; font-family:var(--mono); padding:4px 10px; border-radius:20px;
+    border:1px solid var(--border2); color:var(--text3); }
+  .concept-tag.active { color:var(--accent2); border-color:var(--accent); background:rgba(59,130,246,.08); }
+
+  /* ── LANDING ── */
+  .landing-flow { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:40px; }
+  .landing-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:32px; text-align:center; cursor:pointer;
+    transition:transform .2s,border-color .2s; position:relative; overflow:hidden; }
+  .landing-card:hover { transform:translateY(-4px); border-color:var(--accent); }
+  .landing-card h3 { font-family:var(--display); font-size:24px; font-weight:700; margin-bottom:8px; }
+  .landing-card p { font-size:14px; color:var(--text2); margin-bottom:0; }
+  .landing-card .badge { position:absolute; top:12px; right:12px; font-size:10px;
+    font-family:var(--mono); padding:2px 8px; border-radius:10px; }
+  .badge-free { background:rgba(255,255,255,0.05); color:var(--text3); border:1px solid var(--border); }
+  .badge-premium { background:rgba(59,130,246,0.1); color:var(--accent2); border:1px solid var(--accent); }
+  .landing-icon { font-size:32px; margin-bottom:16px; display:block; }
+
+  /* ── MODE TABS ── */
+  .mode-tabs { display:flex; gap:0; margin-bottom:24px; border:1px solid var(--border);
+    border-radius:var(--radius-lg); overflow:hidden; }
+  .mode-tab { flex:1; padding:14px 20px; background:transparent; border:none; color:var(--text2);
+    font-family:var(--body); font-size:14px; font-weight:500; cursor:pointer;
+    transition:background .2s,color .2s; text-align:center; }
+  .mode-tab.active { background:rgba(59,130,246,.12); color:var(--accent2);
+    border-bottom:2px solid var(--accent); }
+  .mode-tab:hover:not(.active) { background:rgba(255,255,255,.03); }
+
+  /* ── FORM ── */
+  .form-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:32px; margin-bottom:32px; }
+  .form-title { font-family:var(--display); font-size:20px; font-weight:700; margin-bottom:6px; }
+  .form-subtitle { font-size:13px; color:var(--text2); margin-bottom:28px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:1/-1; }
+  label { font-size:12px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; letter-spacing:.5px; }
+  input, textarea, select {
+    background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius);
+    padding:10px 14px; color:var(--text); font-family:var(--body); font-size:14px;
+    outline:none; transition:border-color .2s; }
+  input:focus, textarea:focus, select:focus { border-color:var(--accent); }
+  input::placeholder { color:var(--text3); }
+  textarea { resize:none; height:60px; }
+  select option { background:var(--bg2); }
+
+  .btn { background:linear-gradient(135deg,var(--accent),var(--purple));
+    color:white; border:none; border-radius:var(--radius);
+    padding:14px 28px; font-family:var(--body); font-size:15px; font-weight:600;
+    cursor:pointer; width:100%; margin-top:8px;
+    transition:opacity .2s,transform .1s;
+    display:flex; align-items:center; justify-content:center; gap:8px; }
+  .btn:hover { opacity:.9; }
+  .btn:active { transform:scale(.99); }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  @media print {
+    .bg-grid, .bg-glow, .hero, .mode-tabs, .form-card, .intake-card, .agent-status, .chat-card, button, .rec-card button { display:none !important; }
+    body { background: white !important; color: black !important; }
+    .app { max-width: 100% !important; padding: 0 !important; }
+    .rec-card, .results-card, .plan-card { border: 1px solid #ccc !important; page-break-inside: avoid; }
+    .metal-badge { border: 1px solid #000 !important; }
+    .true-annual-badge { background: #eee !important; color: #000 !important; }
+  }
+
+  /* ── CONVERSATIONAL INTAKE ── */
+  .intake-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:0; margin-bottom:32px; overflow:hidden; }
+  .intake-header { padding:20px 24px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:12px; }
+  .intake-header .ai-avatar { width:36px; height:36px; border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--purple));
+    display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .intake-title { font-family:var(--display); font-size:16px; font-weight:700; }
+  .intake-sub { font-size:12px; color:var(--text3); }
+  .intake-messages { padding:20px 24px; display:flex; flex-direction:column; gap:12px;
+    min-height:200px; max-height:380px; overflow-y:auto; }
+  .intake-msg { padding:12px 16px; border-radius:var(--radius); font-size:14px;
+    line-height:1.6; max-width:88%; }
+  .intake-msg.agent { background:var(--bg3); border:1px solid var(--border);
+    align-self:flex-start; color:var(--text2); }
+  .intake-msg.user { background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.3);
+    align-self:flex-end; color:var(--text); }
+  .intake-msg.system { background:rgba(16,185,129,.08); border:1px solid rgba(16,185,129,.2);
+    align-self:center; color:var(--green); font-size:12px; font-family:var(--mono); }
+  .intake-input-row { padding:16px 24px; border-top:1px solid var(--border);
+    display:flex; gap:10px; }
+  .intake-input { flex:1; background:var(--bg3); border:1px solid var(--border2);
+    border-radius:var(--radius); padding:10px 14px; color:var(--text);
+    font-family:var(--body); font-size:14px; outline:none; }
+  .intake-input:focus { border-color:var(--accent); }
+  .intake-send { background:var(--accent); color:white; border:none; border-radius:var(--radius);
+    padding:10px 18px; font-size:14px; cursor:pointer; font-family:var(--body); font-weight:600; }
+  .intake-send:hover { opacity:.9; }
+  .intake-send:disabled { opacity:.4; cursor:not-allowed; }
+  .typing-dots { display:inline-flex; gap:4px; padding:2px 0; }
+  .typing-dots span { width:6px; height:6px; background:var(--text3); border-radius:50%;
+    animation:bounce .9s infinite; }
+  .typing-dots span:nth-child(2) { animation-delay:.15s; }
+  .typing-dots span:nth-child(3) { animation-delay:.3s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+  /* ── PROFILE CONFIRMATION GATE ── */
+  .confirm-card { background:var(--bg2); border:2px solid var(--accent);
+    border-radius:var(--radius-lg); padding:28px; margin-bottom:32px;
+    animation:fadeIn .4s ease; }
+  .confirm-card h3 { font-family:var(--display); font-size:18px; font-weight:700;
+    margin-bottom:6px; color:var(--accent2); }
+  .confirm-card p { font-size:13px; color:var(--text2); margin-bottom:20px; }
+  .confirm-table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  .confirm-table tr td { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--border); }
+  .confirm-table tr td:first-child { color:var(--text3); font-family:var(--mono);
+    font-size:11px; text-transform:uppercase; width:40%; }
+  .confirm-table tr td:last-child { color:var(--text); font-weight:500; }
+  .confirm-actions { display:flex; gap:12px; }
+  .btn-confirm { background:linear-gradient(135deg,var(--green),#059669);
+    color:white; border:none; border-radius:var(--radius); padding:12px 24px;
+    font-size:14px; font-weight:600; cursor:pointer; font-family:var(--body); }
+  .btn-edit { background:transparent; color:var(--text2); border:1px solid var(--border2);
+    border-radius:var(--radius); padding:12px 24px; font-size:14px; cursor:pointer;
+    font-family:var(--body); }
+
+  /* ── LOADING ── */
+  .loading { display:none; background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:40px 32px; text-align:center; margin-bottom:32px; }
+  .loading.active { display:block; }
+  .spinner { width:40px; height:40px; margin:0 auto 20px; border:3px solid var(--border2);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .agent-status { display:flex; flex-direction:column; gap:8px; max-width:320px; margin:16px auto 0; }
+  .agent-row { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text2);
+    animation:fadeIn .4s ease both; }
+  .agent-dot { width:6px; height:6px; border-radius:50%; background:var(--accent);
+    animation:pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+  /* ── RESULTS ── */
+  .results { display:none; animation:fadeIn .5s ease; }
+  .results.active { display:block; }
+
+  .route-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 16px;
+    border-radius:20px; font-size:13px; font-family:var(--mono); margin-bottom:24px; }
+  .route-badge.subsidized { background:rgba(16,185,129,.1); border:1px solid var(--green); color:var(--green); }
+  .route-badge.medicaid { background:rgba(139,92,246,.1); border:1px solid var(--purple); color:var(--purple); }
+  .route-badge.marketplace { background:rgba(59,130,246,.1); border:1px solid var(--accent); color:var(--accent2); }
+  .route-badge.full_price { background:rgba(245,158,11,.1); border:1px solid var(--yellow); color:var(--yellow); }
+  .route-badge.state_exchange { background:rgba(139,92,246,.1); border:1px solid var(--purple); color:var(--purple); }
+
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+  .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+  .stat-label { font-size:11px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .stat-value { font-family:var(--display); font-size:24px; font-weight:700; }
+  .stat-value.green { color:var(--green); }
+  .stat-value.blue { color:var(--accent2); }
+  .stat-value.yellow { color:var(--gold); }
+
+  .rec-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:28px; margin-bottom:24px; }
+  .rec-card h2 { font-family:var(--display); font-size:18px; font-weight:700;
+    margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .table-container { overflow-x: auto; margin: 16px 0; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,0.05); }
+  .rec-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .rec-body th { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+    background: var(--bg3); font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--text3); font-weight: 500; }
+  .rec-body td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  .rec-body tr:last-child td { border-bottom: none; }
+  .rec-body tr:hover td { background: rgba(255,255,255,0.02); }
+  .rec-body { font-size:14px; line-height:1.8; color:var(--text2); }
+
+  .plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px; }
+  .plan-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:20px; transition:border-color .2s; }
+  .plan-card.best { border-color:var(--accent); background:rgba(59,130,246,.04); }
+  .plan-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .metal-badge { font-size:10px; font-family:var(--mono); padding:3px 8px;
+    border-radius:8px; border:1px solid; font-weight:500; }
+  .metal-badge.Gold { color:var(--gold); border-color:var(--gold); background:rgba(251,191,36,.1); }
+  .metal-badge.Silver { color:var(--silver); border-color:var(--silver); background:rgba(148,163,184,.1); }
+  .metal-badge.Bronze { color:#d97706; border-color:#d97706; background:rgba(161,98,7,.1); }
+  .plan-name { font-family:var(--display); font-size:15px; font-weight:700; margin-bottom:4px; }
+  .plan-issuer { font-size:12px; color:var(--text3); margin-bottom:14px; }
+  .plan-price { font-family:var(--mono); font-size:22px; font-weight:500;
+    color:var(--accent2); margin-bottom:2px; }
+  .plan-price-label { font-size:11px; color:var(--text3); margin-bottom:12px; }
+  .plan-details { display:flex; flex-direction:column; gap:6px; }
+  .plan-detail { display:flex; justify-content:space-between; font-size:12px;
+    padding:4px 0; border-top:1px solid var(--border); }
+  .plan-detail-label { color:var(--text3); }
+  .plan-detail-val { color:var(--text2); font-family:var(--mono); }
+
+  .warnings-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:24px; margin-bottom:24px; }
+  .warnings-card h2 { font-family:var(--display); font-size:16px; font-weight:700; margin-bottom:14px; }
+  .warning-item { font-size:13px; color:var(--text2); line-height:1.6;
+    padding:10px 0; border-bottom:1px solid var(--border); }
+  .warning-item:last-child { border-bottom:none; padding-bottom:0; }
+  .warning-item.alert { color:var(--red); }
+  .warning-item.tip { color:var(--green); }
+
+  .cache-bar { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius);
+    padding:12px 16px; display:flex; align-items:center; gap:16px; font-size:12px;
+    color:var(--text3); margin-bottom:24px; font-family:var(--mono); }
+  .cache-bar span { color:var(--green); }
+
+  .memory-badge { display:inline-flex; align-items:center; gap:6px; font-size:11px;
+    font-family:var(--mono); color:var(--purple); padding:4px 10px; border-radius:20px;
+    background:rgba(139,92,246,.1); border:1px solid var(--purple); margin-bottom:16px; }
+
+  /* Drug display with tier badges */
+  .drug-row { display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; gap:8px; }
+  .drug-row:last-child { border-bottom:none; }
+  .drug-name { color:var(--text); font-weight:500; }
+  .drug-badges { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+  .tier-badge { font-size:10px; font-family:var(--mono); padding:2px 7px; border-radius:6px; border:1px solid; }
+  .tier-1 { color:var(--green); border-color:var(--green); background:rgba(16,185,129,.1); }
+  .tier-2 { color:var(--accent2); border-color:var(--accent); background:rgba(59,130,246,.1); }
+  .tier-3 { color:var(--yellow); border-color:var(--yellow); background:rgba(245,158,11,.1); }
+  .tier-4 { color:var(--orange); border-color:var(--orange); background:rgba(249,115,22,.1); }
+  .tier-5 { color:var(--red); border-color:var(--red); background:rgba(239,68,68,.1); }
+  .pa-badge { font-size:10px; font-family:var(--mono); padding:2px 7px; border-radius:6px;
+    color:var(--red); border:1px solid var(--red); background:rgba(239,68,68,.1); }
+  .st-badge { font-size:10px; font-family:var(--mono); padding:2px 7px; border-radius:6px;
+    color:var(--orange); border:1px solid var(--orange); background:rgba(249,115,22,.1); }
+  .generic-badge { font-size:10px; font-family:var(--mono); padding:2px 7px; border-radius:6px;
+    color:var(--green); border:1px solid var(--green); background:rgba(16,185,129,.1); }
+
+  /* Follow-up chat */
+  .chat-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:24px; margin-top:24px; }
+  .chat-card h2 { font-family:var(--display); font-size:16px; font-weight:700; margin-bottom:16px; }
+  .chat-messages { display:flex; flex-direction:column; gap:12px; margin-bottom:16px;
+    max-height:300px; overflow-y:auto; }
+  .chat-msg { padding:10px 14px; border-radius:var(--radius); font-size:13px;
+    line-height:1.6; max-width:85%; }
+  .chat-msg.user { background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.3);
+    align-self:flex-end; color:var(--text); }
+  .chat-msg.ai { background:var(--bg3); border:1px solid var(--border);
+    align-self:flex-start; color:var(--text2); }
+  .chat-input-row { display:flex; gap:10px; }
+  .chat-input { flex:1; background:var(--bg3); border:1px solid var(--border2);
+    border-radius:var(--radius); padding:10px 14px; color:var(--text);
+    font-family:var(--body); font-size:14px; outline:none; }
+  .chat-input:focus { border-color:var(--accent); }
+  .chat-btn { background:var(--accent); color:white; border:none; border-radius:var(--radius);
+    padding:10px 18px; font-size:14px; cursor:pointer; font-family:var(--body); font-weight:600; }
+
+  @media (max-width:700px) {
+    .form-grid { grid-template-columns:1fr; }
+    .plans-grid { grid-template-columns:1fr; }
+    .stats-row { grid-template-columns:1fr 1fr; }
+    .mode-tabs { flex-direction:column; }
+  }
 </style>
 </head>
 <body>
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
+<!-- Auth / Login Screen -->
+<div id="loginScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);color:var(--text);padding:24px;">
 
-<div id="landingScreen">
-  <div class="logo" style="margin-bottom:40px">
-    <div class="logo-icon">🛡️</div>
-    <div><div class="logo-name" style="font-size:28px">CoverWise</div><div class="logo-sub">AI Insurance Advisor</div></div>
-  </div>
-  <div style="text-align:center;margin-bottom:32px;max-width:520px">
-    <h1 style="font-family:var(--fd);font-size:clamp(28px,5vw,46px);font-weight:800;line-height:1.15;margin-bottom:12px">Find your <em style="font-style:normal;background:linear-gradient(135deg,#5da8ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">best health plan</em> in 30 seconds</h1>
-    <p style="font-size:14px;color:var(--text2);line-height:1.7">Live CMS data. Real plans. Your medications, your doctors, your subsidy — ranked by true annual cost.</p>
-  </div>
-  <div class="lflow">
-    <div class="lcard" onclick="startFlow(false)">
-      <span class="lbadge lb-free">No Credit Card</span>
-      <span class="licon">🔍</span>
-      <h3>Find my plan — Free</h3>
-      <p style="margin-top:6px">One-time plan recommendation.<br>Basic drug & doctor check.</p>
-    </div>
-    <div class="lcard prem" onclick="startFlow(true)">
-      <span class="lbadge lb-paid">Unlimited Access</span>
-      <span class="licon">🪄</span>
-      <h3>Year-round advisor — $19/mo</h3>
-      <p style="margin-top:6px">HSA forecasts, unlimited checks,<br>saved profile & advisor access.</p>
+  <div class="logo" style="margin-bottom:36px;flex-direction:column;align-items:center;gap:10px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="logo-icon">🛡️</div>
+      <div>
+        <div class="logo-text" style="font-size:28px;">CoverWise</div>
+        <div class="logo-sub">AI Health Insurance Advisor</div>
+      </div>
     </div>
   </div>
+
+  <!-- Step 1: Auth panel -->
+  <div id="authPanel" style="width:100%;max-width:420px;">
+    <!-- Tabs -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:24px;">
+      <button id="tabSignin" onclick="switchAuthTab('signin')"
+        style="flex:1;padding:11px;font-family:var(--display);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:background .15s;background:var(--accent);color:#fff;">
+        Sign In
+      </button>
+      <button id="tabSignup" onclick="switchAuthTab('signup')"
+        style="flex:1;padding:11px;font-family:var(--display);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:background .15s;background:var(--bg3);color:var(--text2);">
+        Create Account
+      </button>
+    </div>
+
+    <!-- Sign In form -->
+    <div id="formSignin">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">USERNAME</label>
+        <input id="siUsername" type="text" placeholder="your_username" autocomplete="username"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignin()">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">PASSWORD</label>
+        <input id="siPassword" type="password" placeholder="••••••••" autocomplete="current-password"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignin()">
+      </div>
+      <div id="siError" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.08);border-radius:var(--radius);border:1px solid rgba(239,68,68,.2);"></div>
+      <button onclick="doSignin()" id="siBtn"
+        style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--display);font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s;">
+        Sign In →
+      </button>
+    </div>
+
+    <!-- Create Account form -->
+    <div id="formSignup" style="display:none;">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">FULL NAME</label>
+        <input id="suName" type="text" placeholder="Your name" autocomplete="name"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">USERNAME</label>
+        <input id="suUsername" type="text" placeholder="choose_a_username" autocomplete="username"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">PASSWORD <span style="color:var(--text3)">(min 8 chars)</span></label>
+        <input id="suPassword" type="password" placeholder="Choose a password" autocomplete="new-password"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignup()">
+      </div>
+      <div id="suError" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.08);border-radius:var(--radius);border:1px solid rgba(239,68,68,.2);"></div>
+      <button onclick="doSignup()" id="suBtn"
+        style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--display);font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s;">
+        Create Account →
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 2: Tier selection (shown after auth) -->
+  <div id="tierPanel" style="display:none;width:100%;max-width:680px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div id="tierWelcome" style="font-family:var(--display);font-size:22px;font-weight:700;margin-bottom:6px;"></div>
+      <div style="font-size:13px;color:var(--text3);">Choose how you'd like to use CoverWise</div>
+    </div>
+    <div class="landing-flow">
+      <div class="landing-card" onclick="startFlow(false)">
+        <span class="badge badge-free">No Credit Card</span>
+        <span class="landing-icon">🔍</span>
+        <h3>Find my plan — Free</h3>
+        <p style="color:var(--text3);font-size:12px;margin-top:8px;">One-time plan recommendation.<br>Basic drug &amp; doctor check.</p>
+      </div>
+      <div class="landing-card" onclick="startFlow(true)" style="border-color:var(--accent2);background:rgba(59,130,246,0.05);">
+        <span class="badge badge-premium">Unlimited Access</span>
+        <span class="landing-icon">🪄</span>
+        <h3>Year-round advisor — $19/mo</h3>
+        <p style="color:var(--text3);font-size:12px;margin-top:8px;">Unlimited checks, saved profile,<br>and HSA/CSR deep analysis.</p>
+      </div>
+    </div>
+  </div>
+
 </div>
 
-<div class="app" id="mainApp" style="display:none">
+<div class="app" id="mainApp" style="display:none;">
+
+
   <header>
     <div class="logo">
       <div class="logo-icon">🛡️</div>
-      <div><div class="logo-name">CoverWise</div><div class="logo-sub">AI Insurance Advisor</div></div>
+      <div>
+        <div class="logo-text">CoverWise</div>
+        <div class="logo-sub">AI Insurance Advisor</div>
+      </div>
     </div>
-    <div class="hdr-right">
-      <span class="hbadge live" id="liveBadge">All APIs Free</span>
-      <span class="hbadge reset" onclick="resetApp()">New Analysis</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="header-badge">● All APIs Free</div>
+      <div id="headerUser" style="display:flex;align-items:center;"></div>
     </div>
   </header>
+
   <div class="hero">
-    <div class="eyebrow">⚡ AI-Powered · Live CMS Data · Multi-Agent</div>
-    <h1>Find your <em>best health plan</em><br>in 30 seconds</h1>
-    <p>Enter your ZIP, income, and medications. CoverWise pulls live ACA data, checks drug coverage, verifies doctors, and ranks every plan by true annual cost.</p>
-    <div class="tags">
-      <span class="tag on">Multi-Agent Orchestration</span><span class="tag on">Google ADK</span><span class="tag on">mem0 Memory</span><span class="tag on">TTL Caching</span><span class="tag on">Human-in-Loop</span><span class="tag on">Parallel Execution</span>
+    <div class="hero-eyebrow">⚡ AI-Powered · Live CMS Data · Multi-Agent</div>
+    <h1>Find your <span>best health plan</span><br>in 30 seconds</h1>
+    <p>Enter your ZIP, income, and medications. CoverWise pulls live ACA plan data, checks your drug coverage, verifies your doctors, and uses AI to rank every plan by your true annual cost — not just the premium.</p>
+    <div class="concepts">
+      <span class="concept-tag active">Multi-Agent Orchestration</span>
+      <span class="concept-tag active">Google ADK Intake</span>
+      <span class="concept-tag active">mem0 Memory</span>
+      <span class="concept-tag active">TTL Caching</span>
+      <span class="concept-tag active">Human-in-Loop Gate</span>
+      <span class="concept-tag active">Parallel Execution</span>
     </div>
   </div>
-  <div class="tabs">
-    <button class="tab on" id="tabChat" onclick="switchTab('chat')">💬 Chat Intake <span style="font-size:10px;color:var(--green);margin-left:4px">Recommended</span></button>
-    <button class="tab" id="tabForm" onclick="switchTab('form')">📋 Quick Form</button>
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabChat" onclick="switchTab('chat')">
+      💬 Chat Intake <span style="font-size:11px;color:var(--green);margin-left:4px">Recommended</span>
+    </button>
+    <button class="mode-tab" id="tabForm" onclick="switchTab('form')">
+      📋 Quick Form
+    </button>
   </div>
+
+  <!-- ── CHAT INTAKE (ADK) ── -->
   <div id="panelChat">
-    <div class="intake">
-      <div class="intake-hdr">
-        <div class="ai-av">🤖</div>
-        <div><div class="intake-title">CoverWise Assistant</div><div class="intake-sub">Powered by Google ADK · ~90 seconds</div></div>
+    <div class="intake-card">
+      <div class="intake-header">
+        <div class="ai-avatar">🤖</div>
+        <div>
+          <div class="intake-title">CoverWise Assistant</div>
+          <div class="intake-sub">Powered by Google ADK · ~90 seconds</div>
+        </div>
       </div>
-      <div class="msgs" id="msgs"><div class="msg sys">Starting session...</div></div>
-      <div class="inp-row">
-        <input class="inp" id="chatIn" placeholder="Type your answer..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" disabled>
-        <button class="sbtn" id="chatSend" onclick="sendChat()" disabled>Send</button>
+      <div class="intake-messages" id="intakeMessages">
+        <div class="intake-msg system">Starting session...</div>
+      </div>
+      <div class="intake-input-row">
+        <input class="intake-input" id="intakeInput" placeholder="Type your answer..."
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendIntake()}" disabled>
+        <button class="intake-send" id="intakeSend" onclick="sendIntake()" disabled>Send</button>
       </div>
     </div>
   </div>
+
+  <!-- ── QUICK FORM ── -->
   <div id="panelForm" style="display:none">
     <div class="form-card">
-      <div class="form-ttl">Your Profile</div>
-      <div class="form-sub">All data stays local. Used only to find your best plan.</div>
-      <div class="fgrid">
-        <div class="fg"><label>ZIP Code</label><input type="text" id="fzip" placeholder="e.g. 77001" maxlength="5"></div>
-        <div class="fg"><label>Age</label><input type="number" id="fage" placeholder="e.g. 34" min="18" max="64"></div>
-        <div class="fg"><label>Annual Household Income ($)</label><input type="number" id="fincome" placeholder="e.g. 52000"></div>
-        <div class="fg"><label>Household Size</label><input type="number" id="fhh" placeholder="1" min="1" max="10" value="1"></div>
-        <div class="fg full"><label>Healthcare Use</label>
-          <select id="futil"><option value="rarely">Rarely (0–1 visits/year)</option><option value="sometimes" selected>Sometimes (2–4 visits/year)</option><option value="frequently">Frequently (5+ visits/year)</option><option value="chronic">Chronic conditions — ongoing care</option></select>
+      <div class="form-title">Your Profile</div>
+      <div class="form-subtitle">All data stays local. Used only to find your best plan.</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>ZIP Code</label>
+          <input type="text" id="zip" placeholder="e.g. 77001" maxlength="5">
         </div>
-        <div class="fg full"><label>Medications (comma-separated)</label><input type="text" id="fdrugs" placeholder="e.g. Ozempic, Metformin, Lisinopril"></div>
-        <div class="fg full"><label>Doctors to keep (comma-separated)</label><input type="text" id="fdocs" placeholder="e.g. Dr. Sarah Chen, Dr. James Park"></div>
+        <div class="form-group">
+          <label>Age</label>
+          <input type="number" id="age" placeholder="e.g. 34" min="18" max="64">
+        </div>
+        <div class="form-group">
+          <label>Annual Household Income ($)</label>
+          <input type="number" id="income" placeholder="e.g. 52000">
+        </div>
+        <div class="form-group">
+          <label>Household Size</label>
+          <input type="number" id="household" placeholder="e.g. 2" min="1" max="10" value="1">
+        </div>
+        <div class="form-group full">
+          <label>Healthcare Use</label>
+          <select id="utilization">
+            <option value="rarely">Rarely (0–1 doctor visits/year)</option>
+            <option value="sometimes" selected>Sometimes (2–4 visits/year)</option>
+            <option value="frequently">Frequently (5+ visits/year)</option>
+            <option value="chronic">Chronic conditions — ongoing care</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Medications (comma-separated)</label>
+          <input type="text" id="drugs" placeholder="e.g. Ozempic, Metformin, Lisinopril">
+        </div>
+        <div class="form-group full">
+          <label>Doctors to keep (comma-separated)</label>
+          <input type="text" id="doctors" placeholder="e.g. Dr. Sarah Chen, Dr. James Park">
+        </div>
       </div>
-      <button class="btn" id="analyzeBtn" onclick="formAnalyze()">🔍 Analyze My Coverage Options</button>
+      <button class="btn" id="analyzeBtn" onclick="confirmAndAnalyze()">
+        <span>🔍</span> Analyze My Coverage Options
+      </button>
     </div>
   </div>
-  <div class="confirm" id="confirmCard" style="display:none">
+
+  <!-- ── PROFILE CONFIRMATION GATE ── -->
+  <div class="confirm-card" id="confirmCard" style="display:none">
     <h3>✅ Confirm Your Profile</h3>
-    <p>Verify this is correct — one wrong income digit can change your subsidy by thousands of dollars.</p>
-    <table class="ctable" id="confirmTbl"></table>
-    <div class="cactions">
-      <button class="cbtn-yes" onclick="doAnalyze()">Looks correct — Find my plans</button>
-      <button class="cbtn-no" onclick="editProfile()">Edit</button>
+    <p>Please verify this is correct — one wrong income digit can change your subsidy by thousands of dollars.</p>
+    <table class="confirm-table" id="confirmTable"></table>
+    <div class="confirm-actions">
+      <button class="btn-confirm" onclick="runAnalysis()">Looks correct — Find my plans</button>
+      <button class="btn-edit" onclick="editProfile()">Edit</button>
     </div>
   </div>
+
+
+  <!-- ── LOADING ── -->
   <div class="loading" id="loading">
     <div class="spinner"></div>
-    <div style="font-family:var(--fd);font-size:17px;margin-bottom:6px">Analyzing your options...</div>
-    <div style="font-size:12px;color:var(--text2)">Running 7 specialized agents in parallel</div>
-    <div class="agent-rows" id="agentRows"></div>
+    <div style="font-family:var(--display);font-size:18px;margin-bottom:8px">Analyzing your options...</div>
+    <div style="font-size:13px;color:var(--text2)">Running 7 specialized agents in parallel</div>
+    <div class="agent-status" id="agentStatus"></div>
   </div>
+
+  <!-- ── RESULTS ── -->
   <div class="results" id="results"></div>
+
 </div>
 
+<style>
+  /* ── DOCTOR SECTION ── */
+  .doctor-row { display:flex; justify-content:space-between; align-items:flex-start;
+    padding:12px 0; border-bottom:1px solid var(--border); gap:12px; flex-wrap:wrap; }
+  .doctor-row:last-child { border-bottom:none; }
+  .doctor-info { flex:1; min-width:200px; }
+  .doctor-name { font-weight:600; color:var(--text); font-size:14px; }
+  .doctor-meta { font-size:11px; color:var(--text3); font-family:var(--mono); margin-top:3px; }
+  .doctor-networks { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .net-badge { font-size:10px; font-family:var(--mono); padding:2px 8px; border-radius:6px;
+    border:1px solid; white-space:nowrap; }
+  .net-in { color:var(--green); border-color:var(--green); background:rgba(16,185,129,.1); }
+  .net-out { color:var(--red); border-color:var(--red); background:rgba(239,68,68,.1); }
+  .net-unknown { color:var(--text3); border-color:var(--border2); background:var(--bg3); }
+  .mips-badge { font-size:10px; font-family:var(--mono); padding:2px 8px; border-radius:6px;
+    border:1px solid var(--purple); color:var(--purple); background:rgba(139,92,246,.1); }
+
+  /* ── COMPARISON TABLE ── */
+  .compare-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:12px; }
+  .compare-table th { background:var(--bg3); padding:8px 10px; text-align:left;
+    font-family:var(--mono); font-size:10px; color:var(--text3); text-transform:uppercase;
+    letter-spacing:.5px; border-bottom:1px solid var(--border); }
+  .compare-table td { padding:8px 10px; border-bottom:1px solid var(--border);
+    vertical-align:middle; }
+  .compare-table tr:last-child td { border-bottom:none; }
+  .compare-table tr:hover td { background:rgba(255,255,255,.02); }
+
+  /* ── TRUE ANNUAL BADGE ── */
+  .true-annual-badge { font-size:10px; font-family:var(--mono); color:var(--text2);
+    padding:2px 8px; border-radius:8px; background:rgba(255,255,255,0.06); border:1px solid var(--border2); }
+  .pa-plan-badge { font-size:10px; font-family:var(--mono); padding:2px 6px; border-radius:6px;
+    color:var(--red); border:1px solid var(--red); background:rgba(239,68,68,.1); }
+
+  /* ── HSA FORECAST ── */
+  .hsa-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+  .hsa-table th { padding:8px; text-align:center; background:var(--bg3); font-family:var(--mono);
+    font-size:10px; color:var(--text3); text-transform:uppercase; border-bottom:1px solid var(--border); }
+  .hsa-table td { padding:8px; text-align:center; border-bottom:1px solid var(--border); font-family:var(--mono); }
+  .hsa-table tr:last-child td { border-bottom:none; font-weight:600; color:var(--green); }
+
+  /* ── PLAN GRID RESPONSIVE ── */
+  .plans-grid-premium { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+    gap:16px; margin-bottom:24px; }
+  .plan-rank { font-size:10px; font-family:var(--mono); color:var(--text3); margin-bottom:4px; }
+
+  /* ── CHAT PREMIUM GATE ── */
+  .chat-gate { background:rgba(59,130,246,.06); border:1px dashed var(--accent);
+    border-radius:var(--radius); padding:16px; text-align:center; margin-top:8px; }
+  .chat-gate p { font-size:13px; color:var(--text2); margin-bottom:10px; }
+
+  /* ── SPECIALIST SEARCH ── */
+  .specialist-search { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:24px; margin-bottom:24px; }
+  .specialist-search h2 { font-family:var(--display); font-size:18px; font-weight:700;
+    margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+  .specialist-search p { font-size:13px; color:var(--text2); margin-bottom:16px; }
+  .specialist-input-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .specialist-input { flex:1; min-width:200px; background:var(--bg3); border:1px solid var(--border2);
+    border-radius:var(--radius); padding:10px 14px; color:var(--text);
+    font-family:var(--body); font-size:14px; outline:none; }
+  .specialist-input:focus { border-color:var(--accent); }
+  .specialist-btn { background:linear-gradient(135deg,var(--accent),var(--purple));
+    color:white; border:none; border-radius:var(--radius); padding:10px 20px;
+    font-size:14px; font-weight:600; cursor:pointer; font-family:var(--body); white-space:nowrap; }
+  .specialist-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .specialist-results { display:flex; flex-direction:column; gap:12px; margin-top:12px; }
+  .specialist-card { background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px; }
+  .specialist-header { display:flex; align-items:flex-start; justify-content:space-between;
+    gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .specialist-name { font-weight:600; font-size:14px; color:var(--text); }
+  .specialist-sub { font-size:11px; color:var(--text3); font-family:var(--mono); margin-top:2px; }
+  .specialist-networks { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .copay-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .copay-badge { font-size:11px; font-family:var(--mono); padding:3px 10px; border-radius:6px;
+    background:rgba(59,130,246,.1); border:1px solid var(--accent); color:var(--accent2); }
+  .spec-tag { display:inline-block; font-size:10px; font-family:var(--mono);
+    padding:2px 8px; border-radius:10px; background:rgba(139,92,246,.1);
+    border:1px solid var(--purple); color:var(--purple); }
+  .search-history { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .history-chip { font-size:11px; font-family:var(--mono); padding:3px 10px; border-radius:12px;
+    background:var(--bg3); border:1px solid var(--border2); color:var(--text3);
+    cursor:pointer; }
+  .history-chip:hover { border-color:var(--accent); color:var(--accent2); }
+
+  /* ── NEW FEATURE CARDS ── */
+  .feature-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:24px; margin-bottom:24px; }
+  .feature-card h2 { font-family:var(--display); font-size:18px; font-weight:700;
+    margin-bottom:6px; }
+  .feature-card p { font-size:13px; color:var(--text2); margin-bottom:16px; }
+  .employer-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px; }
+  @media(max-width:600px) { .employer-grid { grid-template-columns:1fr; } }
+  .sep-alert { padding:10px 14px; border-radius:var(--radius); font-size:13px; border:1px solid; }
+  .sep-open { background:rgba(16,185,129,.08); border-color:var(--green); color:var(--green); }
+  .sep-closed { background:rgba(255,255,255,.04); border-color:var(--border2); color:var(--text2); }
+
+  /* ── INSURANCE Q&A ── */
+  .qa-answer { background:var(--bg3); border:1px solid var(--border2);
+    border-radius:var(--radius); padding:18px 20px; margin-top:14px;
+    font-size:14px; line-height:1.8; color:var(--text2); }
+  .qa-answer h2, .qa-answer h3, .qa-answer h4 { color:var(--text); margin:10px 0 4px; }
+  .qa-answer strong { color:var(--text); }
+  .qa-answer code { background:var(--bg2); padding:1px 5px; border-radius:4px;
+    font-size:12px; font-family:var(--mono); }
+  .qa-tool-badge { display:inline-flex; align-items:center; gap:6px; font-size:11px;
+    font-family:var(--mono); color:var(--purple); padding:3px 10px;
+    border-radius:12px; background:rgba(139,92,246,.1);
+    border:1px solid var(--purple); margin-bottom:10px; }
+  .qa-data-toggle { font-size:11px; font-family:var(--mono); color:var(--text3);
+    cursor:pointer; padding:4px 10px; border:1px solid var(--border2);
+    border-radius:8px; background:var(--bg3); margin-top:10px;
+    display:inline-block; }
+  .qa-data-toggle:hover { border-color:var(--accent); color:var(--accent2); }
+</style>
+
 <script>
-const USER_ID='user_'+Math.random().toString(36).substr(2,9);
-let currentProfile=null,pendingProfile=null,isPremium=false,specCount=0;
-const AGENTS=["Profile agent → routing by income & FPL","Subsidy agent → calculating APTC credit","Plan search agent → querying CMS Marketplace","Drug agent → resolving RxCUI, tier, PA, step therapy","Doctor agent → NPPES NPI Registry + MIPS quality","Risk agent → SEP check, HRSA shortage, gaps","Metal tier agent → Bronze/Silver/Gold analysis","Recommendation agent → synthesizing with Gemini"];
+// ── Auth state ────────────────────────────────────────────────────────────────
+let USER_ID = null;
+let authUser = null;   // { user_id, username, name, token }
+const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9);
+let currentProfile = null;
+let pendingProfile = null;
+let isPremium = false;
 
-function startFlow(p){
-  isPremium=p;
-  document.getElementById('landingScreen').style.display='none';
-  document.getElementById('mainApp').style.display='block';
-  if(isPremium){const b=document.getElementById('liveBadge');b.className='hbadge prem';b.textContent='Premium Advisor';}
-  initIntake();
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+function saveAuth(data) {
+  authUser = data;
+  USER_ID  = data.user_id;
+  localStorage.setItem('cw_token',   data.token);
+  localStorage.setItem('cw_user_id', data.user_id);
+  localStorage.setItem('cw_name',    data.name);
+  localStorage.setItem('cw_username', data.username);
 }
-function switchTab(t){
-  document.getElementById('panelChat').style.display=t==='chat'?'':'none';
-  document.getElementById('panelForm').style.display=t==='form'?'':'none';
-  document.getElementById('tabChat').classList.toggle('on',t==='chat');
-  document.getElementById('tabForm').classList.toggle('on',t==='form');
-}
-async function initIntake(){
-  try{
-    const r=await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID})});
-    const d=await r.json();clearSys();
-    if(d.returning_user){addMsg('agent',d.reply);addMsg('sys','🧠 mem0 — returning user profile loaded');}
-    else addMsg('agent',d.reply||"Hi! I'm CoverWise. What's your ZIP code?");
-    enableIn();
-  }catch(e){clearSys();addMsg('agent',"Hi! I'm CoverWise. What's your ZIP code?");enableIn();}
-}
-async function sendChat(){
-  const inp=document.getElementById('chatIn');const msg=inp.value.trim();if(!msg)return;
-  addMsg('user',msg);inp.value='';disableIn();
-  const tid='t'+Date.now();addTyping(tid);
-  try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:msg})});
-    const d=await r.json();removeTyping(tid);
-    if(d.state==='confirm'&&d.profile){addMsg('agent',d.reply);pendingProfile={...d.profile,is_premium:isPremium};setTimeout(()=>showConfirm(pendingProfile),400);}
-    else if(d.state==='complete'&&d.analysis){addMsg('agent',(d.reply||'').split('\n')[0]||'Analysis complete!');renderResults(d.analysis);}
-    else{addMsg('agent',d.reply||'No response.');enableIn();}
-  }catch(e){removeTyping(tid);addMsg('agent','Something went wrong. Please try again.');enableIn();}
-}
-function addMsg(role,text){const el=document.getElementById('msgs');const d=document.createElement('div');d.className='msg '+role;d.innerHTML=fmt(text);el.appendChild(d);el.scrollTop=el.scrollHeight;}
-function addTyping(id){const el=document.getElementById('msgs');const d=document.createElement('div');d.className='msg agent';d.id=id;d.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';el.appendChild(d);el.scrollTop=el.scrollHeight;}
-function removeTyping(id){const e=document.getElementById(id);if(e)e.remove();}
-function clearSys(){const e=document.querySelector('.msg.sys');if(e)e.remove();}
-function enableIn(){document.getElementById('chatIn').disabled=false;document.getElementById('chatSend').disabled=false;document.getElementById('chatIn').focus();}
-function disableIn(){document.getElementById('chatIn').disabled=true;document.getElementById('chatSend').disabled=true;}
-function fmt(t){return(t||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');}
-function formAnalyze(){
-  const zip=document.getElementById('fzip').value.trim(),age=parseInt(document.getElementById('fage').value),income=parseFloat(document.getElementById('fincome').value),hh=parseInt(document.getElementById('fhh').value),util=document.getElementById('futil').value;
-  const drugs=document.getElementById('fdrugs').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const docs=document.getElementById('fdocs').value.split(',').map(s=>s.trim()).filter(Boolean);
-  if(!zip||!age||!income||!hh){alert('Please fill in ZIP, age, income, and household size.');return;}
-  pendingProfile={zip_code:zip,age,income,household_size:hh,utilization:util,tobacco_use:false,drugs,doctors:docs,is_premium:isPremium};
-  showConfirm(pendingProfile);
-}
-function showConfirm(p){
-  p={...p,is_premium:isPremium};
-  const labels={zip_code:'ZIP Code',age:'Age',income:'Annual Income',household_size:'Household Size',drugs:'Medications',doctors:'Doctors',utilization:'Healthcare Use',tobacco_use:'Tobacco',is_premium:'Service Tier'};
-  const fmt2=(k,v)=>{if(k==='is_premium')return v?'💎 Premium':'🔍 Free';if(k==='income')return'$'+Number(v).toLocaleString();if(k==='tobacco_use')return v?'Yes':'No';if(Array.isArray(v))return v.length?v.join(', '):'None';return v;};
-  document.getElementById('confirmTbl').innerHTML=Object.entries(labels).filter(([k])=>p[k]!==undefined).map(([k,l])=>`<tr><td>${l}</td><td>${fmt2(k,p[k])}</td></tr>`).join('');
-  document.getElementById('confirmCard').style.display='';
-  document.getElementById('confirmCard').scrollIntoView({behavior:'smooth',block:'center'});
-}
-function editProfile(){
-  document.getElementById('confirmCard').style.display='none';
-  if(pendingProfile){switchTab('form');const p=pendingProfile;if(p.zip_code)document.getElementById('fzip').value=p.zip_code;if(p.age)document.getElementById('fage').value=p.age;if(p.income)document.getElementById('fincome').value=p.income;if(p.household_size)document.getElementById('fhh').value=p.household_size;if(p.drugs)document.getElementById('fdrugs').value=p.drugs.join(', ');if(p.doctors)document.getElementById('fdocs').value=p.doctors.join(', ');}
-}
-async function doAnalyze(){
-  const profile=pendingProfile||currentProfile;if(!profile)return;
-  document.getElementById('confirmCard').style.display='none';
-  currentProfile={...profile,user_id:USER_ID,is_premium:isPremium};
-  startLoading();
-  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:'yes'})});const d=await r.json();if(d.analysis){stopLoading();renderResults(d.analysis);return;}}catch(e){}
-  try{const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(currentProfile)});const d=await r.json();stopLoading();renderResults(d);}
-  catch(e){stopLoading();renderResults(getMock(currentProfile));}
-}
-function startLoading(){
-  document.getElementById('loading').classList.add('on');document.getElementById('results').classList.remove('on');
-  const el=document.getElementById('agentRows');el.innerHTML='';
-  AGENTS.forEach((msg,i)=>setTimeout(()=>{const r=document.createElement('div');r.className='agent-row';r.style.animationDelay=`${i*0.1}s`;r.innerHTML=`<div class="adot"></div><span>${msg}</span>`;el.appendChild(r);},i*600));
-}
-function stopLoading(){document.getElementById('loading').classList.remove('on');}
-function fmtMd(text){
-  if(!text)return'';const lines=text.split('\n');let inT=false;const out=[];
-  for(const raw of lines){const t=raw.trim();
-    if(t.startsWith('|')){if(!inT){inT=true;out.push('<div class="tbl-wrap"><table>');}if(/^\|[\s\-:|]+\|$/.test(t))continue;const cells=t.split('|').filter((_,i,a)=>i>0&&i<a.length-1);out.push(`<tr>${cells.map(c=>`<td>${fmtI(c.trim())}</td>`).join('')}</tr>`);continue;}
-    if(inT){inT=false;out.push('</table></div>');}
-    if(/^#{3,}\s/.test(t))out.push(`<h4 style="margin-top:14px;color:var(--accent2)">${fmtI(t.replace(/^#+\s*/,''))}</h4>`);
-    else if(t.startsWith('## '))out.push(`<h3 style="margin-top:18px;color:var(--text)">${fmtI(t.slice(3))}</h3>`);
-    else if(t.startsWith('# '))out.push(`<h2 style="margin-top:22px;color:var(--text)">${fmtI(t.slice(2))}</h2>`);
-    else if(/^[-─]{3,}$/.test(t))out.push('<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">');
-    else if(t==='')out.push('<br>');
-    else out.push(fmtI(raw)+'<br>');
-  }
-  if(inT)out.push('</table></div>');return out.join('');
-}
-function fmtI(t){return(t||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`(.*?)`/g,'<code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11px">$1</code>');}
-function buildDM(details){const m={};(details||[]).forEach(c=>{const k=String(c.rxcui||'');if(!m[k])m[k]={};m[k][c.plan_id]=c;});return m;}
-function tClass(tier){const t=(tier||'').toLowerCase();if(t.includes('1'))return't1';if(t.includes('2'))return't2';if(t.includes('3'))return't3';if(t.includes('4'))return't4';return't5';}
-function tCost(tier){const t=(tier||'').toLowerCase();if(t.includes('1'))return'$10';if(t.includes('2'))return'$30';if(t.includes('3'))return'$60';if(t.includes('4'))return'$90';return'$130+';}
 
-function renderResults(data){
-  const el=document.getElementById('results');
-  const route=data.route||'marketplace';const subsidy=data.subsidy||{};
-  const plans=(data.plans||[]).filter(p=>p.name&&(p.premium||p.premium_w_credit));
-  const drugs=data.drugs||{};const doctors=data.doctors||{};const risks=data.risks||{};
-  const cache=data.cache_stats||{};const flags=risks.flags||[];const memUsed=data.memory_used;
-  const rL={state_exchange:'→ State-Based Exchange',subsidized:'✓ Subsidy-Eligible Route',medicaid:'✓ Medicaid Route',marketplace:'→ Full Marketplace',full_price:'→ Full Price Route'};
-  let html='';
-  if(memUsed)html+=`<div class="mem-badge">🧠 mem0 — returning user profile loaded</div><br>`;
-  if(isPremium)html+=`<div class="prem-badge">★ Premium Analysis — HSA Forecasts + 3x Detail + Year-Round Advisor</div><br>`;
-  if(route==='state_exchange'&&data.state_exchange){
-    const ex=data.state_exchange;
-    html+=`<div class="rbadge state_exchange">→ ${ex.state} State Exchange</div><div class="card"><h2>🏛️ ${ex.state} State Exchange</h2><p style="font-size:13px;color:var(--text2);margin-bottom:14px">${ex.message}</p><a href="${ex.exchange_url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--accent),var(--purple));color:white;text-decoration:none;padding:10px 18px;border-radius:var(--r);font-size:13px;font-weight:600">🔗 Visit ${ex.exchange_name} →</a></div>`;
-    el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});return;
-  }
-  if(route==='medicaid'){
-    html+=`<div class="rbadge medicaid">✓ Medicaid Route</div><div class="card"><h2>🏥 Medicaid Eligible</h2><p style="font-size:13px;color:var(--text2)">${(data.medicaid||{}).message||'You may qualify for free or near-free Medicaid coverage.'}</p></div>`;
-    el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});return;
-  }
-  html+=`<div class="rbadge ${route}">${rL[route]||route}</div>`;
-  const monthly=subsidy.monthly_credit||subsidy.monthly_aptc||0;
-  const annual=subsidy.annual_credit||subsidy.annual_aptc||(monthly*12)||0;
-  const fpl=data.fpl_percentage||subsidy.fpl_percentage||0;
-  const lowest=plans.length?Math.min(...plans.map(p=>p.premium_w_credit??Math.max(0,(p.premium||0)-monthly))):0;
-  html+=`<div class="stats"><div class="stat"><div class="stat-l">Monthly Subsidy</div><div class="stat-v g">$${monthly.toFixed(0)}</div></div><div class="stat"><div class="stat-l">Annual Credit</div><div class="stat-v b">$${annual.toFixed(0)}</div></div><div class="stat"><div class="stat-l">FPL %</div><div class="stat-v y">${Number(fpl).toFixed(0)}%</div></div><div class="stat"><div class="stat-l">Best Plan From</div><div class="stat-v g">${lowest<=0?'Subsidy covers it':'$'+lowest.toFixed(0)+'/mo'}</div></div></div>`;
-  if(cache.total_calls>0)html+=`<div class="cache-bar">⚡ Cache: <em>${cache.hits} hits</em> / ${cache.total_calls} calls — <em>${cache.hit_rate_pct}% hit rate</em> | <em>${cache.hits} API calls saved</em></div>`;
-  if(plans.length){
-    html+=`<div style="font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:6px">${isPremium?'Top '+plans.length+' Ranked Plans':'Top 3 Ranked Plans'}</div><div style="font-size:11px;color:var(--text3);margin-bottom:14px;font-family:var(--fm)">Ranked by True Annual Cost</div><div class="plans-grid${isPremium?' wide':''}">`;
-    plans.slice(0,isPremium?10:3).forEach((plan,i)=>{
-      const net=plan.premium_w_credit??Math.max(0,(plan.premium||0)-monthly);
-      const rank=i===0?'🏆 Best Value':i===1?'2nd':i===2?'3rd':'#'+(i+1);
-      // Compute true annual cost if not provided by backend
-      const util=(currentProfile&&currentProfile.utilization)||'sometimes';
-      const oopW={rarely:0.1,sometimes:0.25,frequently:0.5,chronic:0.8};
-      const oopFactor=oopW[util]||0.25;
-      const computedTAC=plan.true_annual_cost||(Math.round(net*12+(plan.deductible||0)*oopFactor+(plan.est_annual_drug_cost||0)));
-      html+=`<div class="pcard${i===0?' best':''}"><div class="prank">${rank}</div><div class="phdr"><span class="metal ${plan.metal_level}">${plan.metal_level||'—'}</span><span class="tac-b">$${computedTAC.toLocaleString()}/yr</span></div><div class="pname">${plan.name}</div><div class="pissuer">${plan.issuer}${plan.type?' · '+plan.type:''}</div><div class="pprice">$${net.toFixed(0)}<span>/mo</span></div><div class="plbl">after $${monthly.toFixed(0)} APTC subsidy</div><div class="pdets"><div class="pdet"><span class="pdetl">Deductible</span><span class="pdetv">$${(plan.deductible||0).toLocaleString()}</span></div><div class="pdet"><span class="pdetl">OOP Max</span><span class="pdetv">$${(plan.oop_max||0).toLocaleString()}</span></div>${plan.est_annual_drug_cost?`<div class="pdet"><span class="pdetl">Est. Drug Cost</span><span class="pdetv">$${plan.est_annual_drug_cost.toLocaleString()}/yr</span></div>`:''}${plan.quality_rating?`<div class="pdet"><span class="pdetl">Quality</span><span class="pdetv">${plan.quality_rating}★</span></div>`:''}${plan.hsa_eligible?`<div class="pdet"><span class="pdetl">HSA</span><span class="pdetv" style="color:var(--green)">Eligible ✓</span></div>`:''}${plan.pa_warning?`<div class="pdet"><span class="pdetl" style="color:var(--red)">⚠ PA Required</span><span class="pdetv" style="color:var(--red)">Your drug</span></div>`:''}</div>${isPremium&&plan.hsa_eligible&&plan.hsa_tax_savings?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);font-size:10px;color:var(--green)">💡 HSA saves ~$${plan.hsa_tax_savings}/yr · 5yr ~$${plan.hsa_5yr_growth}</div>`:''}</div>`;
+function loadAuthFromStorage() {
+  const token = localStorage.getItem('cw_token');
+  if (!token) return false;
+  authUser = {
+    token:   token,
+    user_id: localStorage.getItem('cw_user_id') || '',
+    name:    localStorage.getItem('cw_name')    || '',
+    username: localStorage.getItem('cw_username') || '',
+  };
+  USER_ID = authUser.user_id;
+  return true;
+}
+
+function clearAuth() {
+  authUser = null; USER_ID = null;
+  ['cw_token','cw_user_id','cw_name','cw_username'].forEach(k => localStorage.removeItem(k));
+}
+
+async function verifyStoredToken() {
+  if (!authUser?.token) return false;
+  try {
+    const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + authUser.token } });
+    return r.ok;
+  } catch { return false; }
+}
+
+// ── Auth UI ───────────────────────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  const isSignin = tab === 'signin';
+  document.getElementById('formSignin').style.display = isSignin ? '' : 'none';
+  document.getElementById('formSignup').style.display = isSignin ? 'none' : '';
+  document.getElementById('tabSignin').style.background = isSignin ? 'var(--accent)' : 'var(--bg3)';
+  document.getElementById('tabSignin').style.color      = isSignin ? '#fff' : 'var(--text2)';
+  document.getElementById('tabSignup').style.background = isSignin ? 'var(--bg3)' : 'var(--accent)';
+  document.getElementById('tabSignup').style.color      = isSignin ? 'var(--text2)' : '#fff';
+}
+
+function setAuthError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = msg ? '' : 'none';
+}
+
+async function doSignin() {
+  const username = document.getElementById('siUsername').value.trim();
+  const pass     = document.getElementById('siPassword').value;
+  setAuthError('siError', '');
+  if (!username || !pass) { setAuthError('siError', 'Please enter your username and password.'); return; }
+  const btn = document.getElementById('siBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, password: pass }),
     });
-    html+='</div>';
+    const data = await r.json();
+    if (!r.ok) { setAuthError('siError', data.detail || 'Sign in failed.'); return; }
+    saveAuth(data);
+    showTierPanel();
+  } catch(e) { setAuthError('siError', 'Network error — please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Sign In →'; }
+}
+
+async function doSignup() {
+  const name     = document.getElementById('suName').value.trim();
+  const username = document.getElementById('suUsername').value.trim();
+  const pass     = document.getElementById('suPassword').value;
+  setAuthError('suError', '');
+  if (!name)     { setAuthError('suError', 'Please enter your name.'); return; }
+  if (!username) { setAuthError('suError', 'Please enter a username.'); return; }
+  if (pass.length < 8) { setAuthError('suError', 'Password must be at least 8 characters.'); return; }
+  const btn = document.getElementById('suBtn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try {
+    const r = await fetch('/api/auth/signup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username, password: pass, name }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setAuthError('suError', data.detail || 'Sign up failed.'); return; }
+    saveAuth(data);
+    showTierPanel();
+  } catch(e) { setAuthError('suError', 'Network error — please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Create Account →'; }
+}
+
+function showTierPanel() {
+  document.getElementById('authPanel').style.display = 'none';
+  document.getElementById('tierPanel').style.display = '';
+  document.getElementById('tierWelcome').textContent =
+    'Welcome, ' + (authUser?.name?.split(' ')[0] || 'there') + ' 👋';
+}
+
+async function doLogout() {
+  if (authUser?.token) {
+    fetch('/api/auth/logout', { method:'POST', headers:{ Authorization: 'Bearer '+authUser.token } }).catch(()=>{});
   }
-  if(isPremium&&subsidy.csr_eligible&&subsidy.csr_variant){
-    const cv=subsidy.csr_variant;const cm={'94':{label:'CSR-94 (100–150% FPL)',ded:'~$300',cop:'~$5–$15',oop:'~$1,000',tier:'Platinum-equivalent'},'87':{label:'CSR-87 (150–200% FPL)',ded:'~$900',cop:'~$15–$30',oop:'~$2,500',tier:'Gold-equivalent'},'73':{label:'CSR-73 (200–250% FPL)',ded:'~$2,500',cop:'~$25–$45',oop:'~$5,000',tier:'Silver-plus'}};const c=cm[cv]||{};
-    html+=`<div class="card" style="border-color:var(--green)"><h2>💡 CSR Cost-Sharing Reduction — ${c.label}</h2><p style="font-size:12px;color:var(--text2);margin-bottom:12px">You qualify for CSR. Only applies to Silver plans. Choosing Gold or Bronze forfeits thousands in benefits.</p><div class="tbl-wrap"><table><tr><th>Metric</th><th>Standard Silver</th><th>Your CSR-${cv} Silver</th></tr><tr><td>Deductible</td><td>~$4,500</td><td style="color:var(--green)">${c.ded}</td></tr><tr><td>Primary Care Copay</td><td>~$40–$65</td><td style="color:var(--green)">${c.cop}</td></tr><tr><td>OOP Max</td><td>~$9,000</td><td style="color:var(--green)">${c.oop}</td></tr><tr><td>Actuarial Value</td><td>Silver (70%)</td><td style="color:var(--green)">${c.tier}</td></tr></table></div></div>`;
-  }
-  if(isPremium){
-    const hsaP=plans.filter(p=>p.hsa_eligible);
-    if(hsaP.length){const p2=currentProfile||{};const hhSz=p2.household_size||1;const inc=p2.income||50000;const hsaLim=hhSz>1?8300:4150;let taxR=inc>100525?0.24:inc>47150?0.22:inc>11600?0.12:0.10;const annTax=Math.round(hsaLim*taxR);
-      html+=`<div class="card" style="border-color:var(--purple)"><h2>💰 HSA 5-Year Wealth Forecast</h2><p style="font-size:12px;color:var(--text2);margin-bottom:12px">Contributing IRS max (${hhSz>1?'family':'individual'}: $${hsaLim.toLocaleString()}/yr) at your ${Math.round(taxR*100)}% bracket. Assumes 7% annual growth.</p><div class="tbl-wrap"><table class="hsa-t"><tr><th>Year</th><th>Contributed</th><th>Tax Saved</th><th>Balance (7% growth)</th></tr>${[1,2,3,4,5].map(yr=>{const c=hsaLim*yr,tx=annTax*yr,b=Math.round(hsaLim*((Math.pow(1.07,yr)-1)/0.07));return`<tr><td>Year ${yr}</td><td>$${c.toLocaleString()}</td><td style="color:var(--green)">$${tx.toLocaleString()}</td><td style="color:var(--accent2)">$${b.toLocaleString()}</td></tr>`;}).join('')}</table></div><p style="font-size:10px;color:var(--text3);margin-top:7px">HSA funds roll over indefinitely. Medical withdrawals are tax-free at any age.</p></div>`;
+  clearAuth();
+  localStorage.removeItem('coverwise_profile');
+  localStorage.removeItem('coverwise_results');
+  location.reload();
+}
+
+function updateHeaderUser() {
+  const el = document.getElementById('headerUser');
+  if (!el || !authUser) return;
+  el.innerHTML = `<span style="font-size:13px;color:var(--text2);font-family:var(--mono)">${authUser.name}</span>
+    <button onclick="doLogout()" style="margin-left:10px;font-size:11px;font-family:var(--mono);padding:4px 10px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text3);cursor:pointer;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">Sign out</button>`;
+}
+
+// ── On page load: check for existing session ──────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  if (loadAuthFromStorage()) {
+    const valid = await verifyStoredToken();
+    if (valid) {
+      showTierPanel();
+      updateHeaderUser();
+    } else {
+      clearAuth();
     }
   }
-  if(data.recommendation)html+=`<div class="card"><h2>🤖 AI Recommendation${isPremium?' (ADK Expert)':''}</h2><div class="card-body">${fmtMd(data.recommendation)}</div></div>`;
-  if(flags.length)html+=`<div class="warn-card"><h2>⚠️ Risk Analysis & Flags</h2>${flags.map(w=>`<div class="wi ${w.startsWith('🚨')?'alert':(w.startsWith('💡')||w.startsWith('📅')||w.startsWith('🏥'))?'tip':''}">${w}</div>`).join('')}</div>`;
-  const rD=drugs.resolved_drugs||[];const cD=drugs.coverage_details||[];const gens=drugs.generic_suggestions||{};const dM=buildDM(cD);const tP=plans.slice(0,isPremium?5:3).map(p=>p.id);
-  if(rD.length){
-    html+=`<div class="card"><h2>💊 Medication Coverage${!isPremium?' (1 drug — free tier)':''}</h2>`;
-    rD.forEach(d=>{const rx=String(d.rxcui||'');const pm=dM[rx]||{};const g=gens[d.name]||[];
-      html+=`<div class="drug-row"><div style="flex:1"><div class="dname">${d.name}${d.full_name&&d.full_name!==d.name?` <span style="color:var(--text3);font-size:10px">(${d.full_name})</span>`:''}</div><div style="font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:2px">RxCUI: ${rx}${d.strength?' · '+d.strength:''}</div></div><div class="dbs">${tP.map(pid=>{const c=pm[pid];if(!c)return'';if(c.coverage==='NotCovered')return`<span class="tier t5">Not Covered</span>`;if(c.drug_tier){const tc=tClass(c.drug_tier);return`<span class="tier ${tc}">${c.drug_tier} ~${tCost(c.drug_tier)}</span>${c.prior_authorization?'<span class="pa-b">PA</span>':''}${c.step_therapy?'<span class="st-b">ST</span>':''}`;}return`<span class="tier" style="color:var(--text3);border-color:var(--border2)">N/A</span>`;}).join('')}${g.length?`<span class="gen-b">💊 Generic: ${g[0]}</span>`:''}</div></div>`;
-    });
-    html+='</div>';
+});
+
+// ── Start the app after tier selection ────────────────────────────────────────
+function startFlow(premium) {
+  isPremium = premium;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  updateHeaderUser();
+  if (isPremium) {
+    document.querySelector('.header-badge').textContent = '● Premium Advisor';
+    document.querySelector('.header-badge').style.color = 'var(--accent2)';
+    document.querySelector('.header-badge').style.borderColor = 'var(--accent2)';
   }
-  const dR=(doctors.results||[]);
-  if(dR.length){
-    html+=`<div class="card"><h2>🏥 Doctor & Provider Check${!isPremium?' (1 doctor — free tier)':''}</h2>`;
-    dR.forEach(doc=>{const nets=Object.entries(doc.network_status||{});
-      html+=`<div class="doc-row"><div class="doc-info"><div class="dname2">${doc.name}${doc.credential?', '+doc.credential:''}</div><div class="dmeta">NPI: ${doc.npi||'Not found'} · ${doc.specialty||''} · ${doc.city||''}${doc.state?', '+doc.state:''}</div>${doc.mips_score!=null?`<div style="margin-top:3px"><span class="mips">MIPS: ${doc.mips_score}/100</span>${doc.telehealth?' <span class="mips" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>':''}</div>`:''}</div><div class="dnets">${nets.length?nets.map(([pid,net])=>{const pn=(plans.find(p=>p.id===pid)||{}).name||pid;const sh=pn.length>20?pn.slice(0,18)+'…':pn;if(net.in_network===false)return`<span class="net out">✗ OON: ${sh}</span>`;if(net.in_network===true)return`<span class="net in">✓ In-Net: ${sh}</span>`;return`<span class="net unk">? ${sh}</span>`;}).join(''):'<span style="font-size:10px;color:var(--text3)">No network data</span>'}</div></div>`;
+  initIntake();
+}
+
+const AGENT_MESSAGES = [
+  "Profile agent → routing by income & FPL",
+  "Subsidy agent → calculating APTC credit",
+  "Plan search agent → querying CMS Marketplace",
+  "Drug agent → resolving RxCUI, tier, PA, step therapy",
+  "Doctor agent → NPPES NPI Registry + MIPS quality",
+  "Risk agent → SEP check, HRSA shortage, coverage gaps",
+  "Metal tier agent → Bronze/Silver/Gold analysis",
+  "Recommendation agent → synthesizing with Gemini",
+];
+
+// ── TAB SWITCHER ──────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('panelChat').style.display = tab === 'chat' ? '' : 'none';
+  document.getElementById('panelForm').style.display = tab === 'form' ? '' : 'none';
+  document.getElementById('tabChat').classList.toggle('active', tab === 'chat');
+  document.getElementById('tabForm').classList.toggle('active', tab === 'form');
+}
+
+// ── ADK INTAKE ────────────────────────────────────────────────────────────────
+async function initIntake() {
+  try {
+    const res = await fetch('/api/intake/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: USER_ID, session_id: SESSION_ID })
     });
-    html+='</div>';
+    const data = await res.json();
+    removeSystemMsg();
+    appendIntakeMsg('agent', data.message || "Hi! I'm CoverWise. What's your ZIP code?");
+    enableIntakeInput();
+  } catch (e) {
+    removeSystemMsg();
+    appendIntakeMsg('agent', "Hi! I'm CoverWise. I'll help you find the best health plan. What's your ZIP code? (Note: using form mode — ADK not available)");
+    enableIntakeInput();
   }
-  html+=`<div class="spec-card"><h2>🔬 Find a Specialist</h2><p style="font-size:12px;color:var(--text2);margin-bottom:8px">Type a condition or specialty — finds local providers, checks network status, shows copays.</p>${!isPremium?'<p style="font-size:10px;color:var(--text3);margin-bottom:12px">Free tier: 1 search per session.</p>':'<p style="font-size:10px;color:var(--green);margin-bottom:12px">💎 Premium: unlimited searches</p>'}<div class="spec-row"><input class="spec-inp" id="condIn" placeholder="e.g. diabetes, cardiology, back pain…" onkeydown="if(event.key==='Enter')runSpec()"><button class="spec-btn" id="specBtn" onclick="runSpec()">Find Specialists</button></div><div id="specRes"></div></div>`;
-  html+=`<div class="card"><h2>🩺 Procedure Cost Estimator</h2><p style="font-size:12px;color:var(--text2);margin-bottom:14px">Select a procedure to see what you'd pay on each plan.</p><div class="spec-row"><select class="spec-inp" id="procSel" style="flex:1"><option value="">Select a procedure…</option><optgroup label="Surgery"><option value="knee_replacement">Knee Replacement (~$35,000)</option><option value="hip_replacement">Hip Replacement (~$32,000)</option><option value="appendectomy">Appendectomy (~$18,000)</option><option value="back_surgery">Spinal Fusion (~$45,000)</option><option value="heart_bypass">Coronary Bypass (~$95,000)</option></optgroup><optgroup label="Diagnostic"><option value="colonoscopy">Colonoscopy (~$3,500)</option><option value="mri">MRI Scan (~$2,600)</option><option value="ct_scan">CT Scan (~$2,000)</option></optgroup><optgroup label="Emergency"><option value="er_visit">ER Visit (~$3,200)</option><option value="ambulance">Ambulance (~$1,800)</option></optgroup><optgroup label="Maternity"><option value="childbirth_vaginal">Vaginal Birth (~$12,000)</option><option value="childbirth_csection">C-Section (~$20,000)</option></optgroup><optgroup label="Inpatient"><option value="inpatient_3day">3-Day Hospital Stay (~$22,000)</option></optgroup></select><button class="spec-btn" id="procBtn" onclick="runProc()">Estimate My Cost</button></div><div id="procRes"></div></div>`;
-  const simInc=(currentProfile&&currentProfile.income)||55000;
-  const simHH=(currentProfile&&currentProfile.household_size)||1;
-  html+=`<div class="card"><h2>📊 Income Change Simulator</h2><p style="font-size:12px;color:var(--text2);margin-bottom:16px">Drag to see how income changes affect your subsidy. Watch for the 400% FPL cliff.</p><div style="margin:12px 0"><label style="font-size:11px;color:var(--text3);font-family:var(--fm)">Simulated Annual Income: <strong id="simLbl" style="color:var(--accent2)">$${Number(simInc).toLocaleString()}</strong></label><input type="range" id="simSlider" min="10000" max="150000" step="1000" value="${simInc}" data-hh="${simHH}" style="width:100%;margin-top:8px;accent-color:var(--accent)" oninput="updateSim()"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:3px"><span>$10k</span><span>$40k</span><span>$80k</span><span>$120k</span><span>$150k+</span></div></div><div id="simRes"></div></div>`;
-  if(isPremium){html+=`<div class="chat-card"><h2>💬 Year-Round Advisor — Ask Anything</h2><p style="font-size:12px;color:var(--text3);margin-bottom:12px">Ask about plan changes, life events, employer coverage, or anything insurance-related.</p><div class="chat-msgs" id="chatMsgs"></div><div class="chat-inp-row"><input class="chat-inp" id="chatFollowIn" placeholder="e.g. My employer offered coverage — is it better?" onkeydown="if(event.key==='Enter')sendFollowUp()"><button class="chat-btn" onclick="sendFollowUp()">Ask</button></div></div>`;}
-  else{html+=`<div class="chat-card"><h2>💬 Ask a Follow-Up Question</h2><div class="chat-msgs" id="chatMsgs"></div><div class="chat-inp-row"><input class="chat-inp" id="chatFollowIn" placeholder="e.g. Which plan covers Ozempic best?" onkeydown="if(event.key==='Enter')sendFollowUp()"><button class="chat-btn" onclick="sendFollowUp()">Ask</button></div></div>`;}
-  if(!isPremium){html+=`<div class="upsell"><h2>🪄 Unlock the Full Analysis</h2><p style="font-size:13px;color:var(--text2);margin-bottom:14px">Premium unlocks unlimited drug & doctor checks, HSA wealth calculator, CSR deductible table, 10-plan comparison, year-round advisor access, and PDF export.</p><div class="tbl-wrap"><table><tr><th>Feature</th><th>Free</th><th style="color:var(--accent2)">Premium $19/mo</th></tr>${[['Plans compared','3','10'],['Drug checks','1 medication','All meds'],['Doctor checks','1 doctor','All doctors'],['CSR explanation','Flag only','Full table'],['HSA forecast','Flag only','5-yr calc'],['Year-round advisor','—','✓'],['PDF export','—','✓']].map(([f,fr,p])=>`<tr><td>${f}</td><td style="color:var(--text3)">${fr}</td><td style="color:var(--green)">${p}</td></tr>`).join('')}</table></div><button class="btn" onclick="location.reload()" style="max-width:280px;margin:14px auto 0">Upgrade to Premium — $19/mo</button></div>`;}
-  else{html+=`<div class="card" style="text-align:center;background:var(--bg3);margin-top:16px"><h2 style="justify-content:center">📄 Download PDF Report</h2><p style="font-size:12px;color:var(--text2);margin-bottom:14px">Generate a clean PDF to share with a financial advisor or family member.</p><button class="btn" onclick="window.print()" style="max-width:240px;margin:0 auto">Print / Save as PDF</button></div>`;}
-  window._lastResults=data;el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});
-  setTimeout(()=>{if(document.getElementById('simSlider'))updateSim();},50);
 }
 
-async function sendFollowUp(){
-  const inp=document.getElementById('chatFollowIn');const msg=inp.value.trim();if(!msg)return;
-  const msgs=document.getElementById('chatMsgs');const u=document.createElement('div');u.className='cmsg user';u.textContent=msg;msgs.appendChild(u);inp.value='';
-  const ld=document.createElement('div');ld.className='cmsg ai';ld.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';msgs.appendChild(ld);msgs.scrollTop=msgs.scrollHeight;
-  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:msg})});const d=await r.json();ld.innerHTML=fmtMd(d.reply||'No response.');msgs.scrollTop=msgs.scrollHeight;}
-  catch(e){ld.textContent='Sorry, something went wrong.';}
+async function sendIntake() {
+  const input = document.getElementById('intakeInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  appendIntakeMsg('user', msg);
+  input.value = '';
+  disableIntakeInput();
+
+  // Show typing indicator
+  const typingId = 'typing_' + Date.now();
+  appendTyping(typingId);
+
+  try {
+    const res = await fetch('/api/intake/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: USER_ID, session_id: SESSION_ID, message: msg })
+    });
+    const data = await res.json();
+    removeTyping(typingId);
+    appendIntakeMsg('agent', data.message);
+
+    if (data.profile_ready && data.profile) {
+      // Show profile confirmation gate
+      pendingProfile = data.profile;
+      appendIntakeMsg('system', '→ Profile complete. Showing confirmation...');
+      setTimeout(() => showConfirmation(data.profile), 600);
+    } else {
+      enableIntakeInput();
+    }
+  } catch (e) {
+    removeTyping(typingId);
+    appendIntakeMsg('agent', 'Sorry, something went wrong. Please try again.');
+    enableIntakeInput();
+  }
 }
 
-async function runSpec(){
-  const inp=document.getElementById('condIn');const condition=inp.value.trim();if(!condition)return;
-  if(!isPremium&&specCount>=1){document.getElementById('specRes').innerHTML=`<div style="padding:14px;background:rgba(29,108,240,.06);border:1px dashed var(--accent);border-radius:var(--r);text-align:center;font-size:12px;color:var(--text2)">Free tier limit reached. <a href="#" onclick="location.reload();return false" style="color:var(--accent2)">Upgrade to Premium</a> for unlimited searches.</div>`;return;}
-  const btn=document.getElementById('specBtn'),el=document.getElementById('specRes');
-  btn.disabled=true;btn.textContent='Searching…';el.innerHTML=`<div class="msg agent" style="margin-top:8px"><div class="dots"><span></span><span></span><span></span></div></div>`;
-  const profile=currentProfile||{};const plans=(window._lastResults||{}).plans||[];const planIds=plans.slice(0,isPremium?5:3).map(p=>p.id);
-  try{
-    const r=await fetch('/api/specialty-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,condition,zip_code:profile.zip_code||'',state:'',plan_ids:planIds,is_premium:isPremium})});
-    const data=await r.json();specCount++;inp.value='';const providers=data.providers||[];
-    if(!providers.length){el.innerHTML=`<div style="font-size:12px;color:var(--text2);padding:10px 0">No providers found for "${condition}". Try a different condition name.</div>`;}
-    else{el.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${providers.length} provider${providers.length!==1?'s':''} found — specialty: ${data.specialty||condition}</div>`+providers.map((p,i)=>{const nets=Object.entries(p.network_status||{});return`<div class="scard"><div class="sname">${p.name}${p.credential?', '+p.credential:''} ${i===0?'<span style="font-size:10px;color:var(--green)">● Top Match</span>':''}</div><div class="ssub">NPI: ${p.npi||'N/A'} · ${p.specialty||''} · ${p.city||''}${p.state?', '+p.state:''}</div>${p.address?`<div class="ssub">${p.address}</div>`:''}${p.phone?`<div class="ssub">📞 ${p.phone}</div>`:''}${p.mips_score!=null?`<div style="margin-top:6px"><span class="mips">MIPS: ${p.mips_score}/100</span>${p.telehealth?' <span class="mips" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>':''}</div>`:''}<div class="dnets" style="margin-top:8px">${nets.length?nets.map(([pid,net])=>{const pn=(plans.find(pl=>pl.id===pid)||{}).name||pid;const sh=pn.length>20?pn.slice(0,18)+'…':pn;if(net.in_network===false)return`<span class="net out">✗ OON: ${sh}</span>`;if(net.in_network===true)return`<span class="net in">✓ In-Net: ${sh}</span>`;return`<span class="net unk">? ${sh}</span>`;}).join(''):'<span style="font-size:10px;color:var(--text3)">Network not verified</span>'}</div></div>`;}).join('');}
-  }catch(e){el.innerHTML=`<div style="color:var(--red);font-size:12px">Error. Please try again.</div>`;}
-  finally{btn.disabled=false;btn.textContent='Find Specialists';}
+function appendIntakeMsg(role, text) {
+  const el = document.getElementById('intakeMessages');
+  const div = document.createElement('div');
+  div.className = `intake-msg ${role}`;
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
 }
 
-async function runProc(){
-  const key=document.getElementById('procSel').value;if(!key){alert('Please select a procedure.');return;}
-  const btn=document.getElementById('procBtn'),el=document.getElementById('procRes');
-  btn.disabled=true;btn.textContent='Calculating…';el.innerHTML=`<div class="msg agent" style="margin-top:8px"><div class="dots"><span></span><span></span><span></span></div></div>`;
-  const plans=(window._lastResults||{}).plans||[];
-  try{
-    const r=await fetch('/api/procedure-cost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,procedure_key:key,plans})});
-    const data=await r.json();if(data.error){el.innerHTML=`<div style="color:var(--red);font-size:12px">${data.error}</div>`;return;}
-    const results=data.results||[];
-    el.innerHTML=`<div style="margin:12px 0 8px;font-size:12px;color:var(--text2)"><strong style="color:var(--text)">${data.procedure}</strong> · National avg: <strong style="color:var(--accent2)">$${(data.total_cost||0).toLocaleString()}</strong></div><div class="tbl-wrap"><table><tr><th>Plan</th><th>Metal</th><th>Net Premium</th><th>Deductible</th><th>You Pay</th><th>Insurance Pays</th></tr>${results.map((r,i)=>`<tr${i===0?' style="background:rgba(13,196,122,.04)"':''}><td>${(r.plan_name||'').length>22?(r.plan_name||'').slice(0,20)+'…':(r.plan_name||'—')}${i===0?' <span style="font-size:10px;color:var(--green)">● Best</span>':''}</td><td><span class="metal ${r.metal_level}" style="font-size:10px">${r.metal_level}</span></td><td style="font-family:var(--fm)">$${r.net_premium}/mo</td><td style="font-family:var(--fm)">$${(r.deductible||0).toLocaleString()}</td><td style="font-family:var(--fm);color:${i===0?'var(--green)':'var(--yellow)'}"><strong>$${(r.patient_oop||0).toLocaleString()}</strong></td><td style="font-family:var(--fm);color:var(--text3)">$${(r.insurance_pays||0).toLocaleString()}</td></tr>`).join('')}</table></div><p style="font-size:10px;color:var(--text3);margin-top:6px">OOP capped at plan maximum. Assumes in-network care.</p>`;
-  }catch(e){el.innerHTML=`<div style="color:var(--red);font-size:12px">Error estimating costs.</div>`;}
-  finally{btn.disabled=false;btn.textContent='Estimate My Cost';}
+function appendTyping(id) {
+  const el = document.getElementById('intakeMessages');
+  const div = document.createElement('div');
+  div.className = 'intake-msg agent';
+  div.id = id;
+  div.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
 }
 
-function updateSim(){
-  const slider=document.getElementById('simSlider');if(!slider)return;
-  const income=Number(slider.value);const lbl=document.getElementById('simLbl');if(lbl)lbl.textContent='$'+income.toLocaleString();
-  const hhSz=Number(slider.getAttribute('data-hh'))||(currentProfile&&currentProfile.household_size)||1;
-  const bases={1:14580,2:19720,3:24860,4:30000,5:35140,6:40280};
-  const base=bases[Math.min(hhSz,6)]||30000;
-  const fpl=Math.round(income/base*100)/10;const isMed=fpl<138,hasSub=fpl>=100&&fpl<=400,nearCliff=fpl>=390&&fpl<=410;
-  const csrV=fpl<150?'94':fpl<200?'87':fpl<250?'73':null;
-  let aptc=0;if(hasSub){const pct=fpl<=150?0.02:fpl<=200?0.04:fpl<=250?0.06:0.085;aptc=Math.max(0,Math.round(500-income*pct/12));}
-  const el=document.getElementById('simRes');if(!el)return;
-  let html=`<div class="sim-grid"><div class="sim-stat"><div class="sim-lbl">FPL %</div><div class="sim-val ${fpl>400?'r':fpl<138?'g':'y'}">${fpl.toFixed(0)}%</div></div><div class="sim-stat"><div class="sim-lbl">Monthly Subsidy</div><div class="sim-val g">$${aptc}</div></div><div class="sim-stat"><div class="sim-lbl">Medicaid</div><div class="sim-val ${isMed?'g':'r'}">${isMed?'Eligible ✓':'Not Eligible'}</div></div><div class="sim-stat"><div class="sim-lbl">CSR</div><div class="sim-val ${csrV?'g':'r'}">${csrV?'CSR-'+csrV+' ✓':'None'}</div></div></div>`;
-  if(nearCliff){const gap=Math.round(400/100*base-income);html+=`<div class="ab warn">🚨 Subsidy Cliff Warning: At ${fpl.toFixed(0)}% FPL, earning ~$${Math.abs(gap).toLocaleString()} ${gap<0?'more pushes you past the cliff':'more could eliminate your entire subsidy'}.</div>`;}
-  if(isMed)html+=`<div class="ab open">🏥 At this income, you may qualify for Medicaid — free or near-free coverage.</div>`;
-  else if(csrV)html+=`<div class="ab info">💡 CSR-${csrV} eligible: Enroll in a Silver plan for dramatically lower deductibles at no extra premium cost.</div>`;
-  el.innerHTML=html;
+function removeTyping(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
 }
 
-async function resetApp(){
-  try{await fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID})});}catch(e){}
-  currentProfile=null;pendingProfile=null;specCount=0;
-  document.getElementById('msgs').innerHTML='<div class="msg sys">Starting session...</div>';
-  document.getElementById('confirmCard').style.display='none';
-  document.getElementById('results').classList.remove('on');document.getElementById('results').innerHTML='';
-  document.getElementById('loading').classList.remove('on');
-  disableIn();await initIntake();
+function removeSystemMsg() {
+  const el = document.getElementById('intakeMessages');
+  const sys = el.querySelector('.system');
+  if (sys) sys.remove();
 }
 
-function getMock(profile){
-  const bases={1:14580,2:19720,3:24860,4:30000};const base=bases[Math.min(profile.household_size||1,4)]||30000;const fpl=Math.round((profile.income||50000)/base*1000)/10;const credit=fpl<=400?Math.max(0,Math.round(450-(profile.income||50000)*0.085/12)):0;
-  return{route:fpl<138?'medicaid':fpl<=400?'subsidized':'marketplace',fpl_percentage:fpl,subsidy:{monthly_credit:credit,annual_credit:credit*12,fpl_percentage:fpl,csr_eligible:fpl<=250,csr_variant:fpl<=150?'94':fpl<=200?'87':fpl<=250?'73':null,is_medicaid_eligible:fpl<138},plans:[{id:'P1',name:'BlueCross Silver Select',metal_level:'Silver',type:'HMO',premium:342,premium_w_credit:Math.max(0,342-credit),deductible:3500,oop_max:7000,issuer:'BlueCross',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,342-credit)*12+875},{id:'P2',name:'Aetna Bronze HSA Plus',metal_level:'Bronze',type:'PPO',premium:218,premium_w_credit:Math.max(0,218-credit),deductible:6000,oop_max:8700,issuer:'Aetna',hsa_eligible:true,quality_rating:3,true_annual_cost:Math.max(0,218-credit)*12+600},{id:'P3',name:'UHC Gold Complete',metal_level:'Gold',type:'PPO',premium:487,premium_w_credit:Math.max(0,487-credit),deductible:1500,oop_max:5000,issuer:'UnitedHealthcare',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,487-credit)*12+750}],drugs:{resolved_drugs:[],coverage_details:[],generic_suggestions:{}},doctors:{results:[]},risks:{flags:['⚠️ Backend unavailable — showing estimated results.']},recommendation:`## Your Plan Analysis\n\nAt **${fpl.toFixed(0)}% FPL** with **$${credit}/month** subsidy.\n\n*Backend unavailable — estimated figures only.*`,cache_stats:{hits:0,misses:0,total_calls:0,hit_rate_pct:0,cached_entries:0},memory_used:false};
+function enableIntakeInput() {
+  document.getElementById('intakeInput').disabled = false;
+  document.getElementById('intakeSend').disabled = false;
+  document.getElementById('intakeInput').focus();
 }
+
+function disableIntakeInput() {
+  document.getElementById('intakeInput').disabled = true;
+  document.getElementById('intakeSend').disabled = true;
+}
+
+// ── PROFILE CONFIRMATION GATE ─────────────────────────────────────────────────
+function showConfirmation(profile) {
+  profile = { ...profile, is_premium: isPremium };
+  const table = document.getElementById('confirmTable');
+  const labels = {
+    zip_code: 'ZIP Code', age: 'Age', household_size: 'Household Size',
+    income: 'Annual Income', drugs: 'Medications', doctors: 'Doctors',
+    utilization: 'Healthcare Use', is_premium: 'Service Tier'
+  };
+  const fmt = (k, v) => {
+    if (k === 'is_premium') return v ? '💎 Premium' : '🔍 Free';
+    if (k === 'income') return '$' + Number(v).toLocaleString();
+    if (Array.isArray(v)) return v.length ? v.join(', ') : 'None';
+    return v;
+  };
+  table.innerHTML = Object.entries(labels)
+    .filter(([k]) => profile[k] !== undefined)
+    .map(([k, label]) => `<tr><td>${label}</td><td>${fmt(k, profile[k])}</td></tr>`)
+    .join('');
+  document.getElementById('confirmCard').style.display = '';
+  document.getElementById('confirmCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function editProfile() {
+  document.getElementById('confirmCard').style.display = 'none';
+  if (pendingProfile) {
+    // Pre-fill form with collected values
+    switchTab('form');
+    const p = pendingProfile;
+    if (p.zip_code) document.getElementById('zip').value = p.zip_code;
+    if (p.age) document.getElementById('age').value = p.age;
+    if (p.income) document.getElementById('income').value = p.income;
+    if (p.household_size) document.getElementById('household').value = p.household_size;
+    if (p.drugs) document.getElementById('drugs').value = p.drugs.join(', ');
+    if (p.doctors) document.getElementById('doctors').value = p.doctors.join(', ');
+    if (p.utilization) document.getElementById('utilization').value = p.utilization;
+  }
+}
+
+async function runAnalysis() {
+  const profile = pendingProfile || currentProfile;
+  if (!profile) return;
+  document.getElementById('confirmCard').style.display = 'none';
+  currentProfile = { ...profile, user_id: USER_ID, is_premium: isPremium };
+  startLoading();
+  doAnalyze(currentProfile);
+}
+
+// ── FORM FLOW ─────────────────────────────────────────────────────────────────
+function confirmAndAnalyze() {
+  const zip = document.getElementById('zip').value.trim();
+  const age = parseInt(document.getElementById('age').value);
+  const income = parseFloat(document.getElementById('income').value);
+  const household = parseInt(document.getElementById('household').value);
+  const utilization = document.getElementById('utilization').value;
+  const drugs = document.getElementById('drugs').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const doctors = document.getElementById('doctors').value.split(',').map(s=>s.trim()).filter(Boolean);
+
+  if (!zip || !age || !income || !household) {
+    alert('Please fill in ZIP, age, income, and household size.');
+    return;
+  }
+
+  pendingProfile = { zip_code: zip, age, income, household_size: household,
+                     utilization, tobacco_use: false, drugs, doctors };
+  showConfirmation(pendingProfile);
+}
+
+// ── ANALYSIS ─────────────────────────────────────────────────────────────────
+function showAgentProgress() {
+  const el = document.getElementById('agentStatus');
+  el.innerHTML = '';
+  AGENT_MESSAGES.forEach((msg, i) => {
+    setTimeout(() => {
+      const row = document.createElement('div');
+      row.className = 'agent-row';
+      row.style.animationDelay = `${i * 0.1}s`;
+      row.innerHTML = `<div class="agent-dot"></div><span>${msg}</span>`;
+      el.appendChild(row);
+    }, i * 600);
+  });
+}
+
+function startLoading() {
+  document.getElementById('analyzeBtn') && (document.getElementById('analyzeBtn').disabled = true);
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('results').classList.remove('active');
+  showAgentProgress();
+}
+
+function stopLoading() {
+  document.getElementById('loading').classList.remove('active');
+  document.getElementById('analyzeBtn') && (document.getElementById('analyzeBtn').disabled = false);
+}
+
+async function doAnalyze(profile) {
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile)
+    });
+    const data = await res.json();
+    stopLoading();
+    renderResults(data);
+    if (isPremium) {
+      localStorage.setItem('coverwise_profile', JSON.stringify(profile));
+      localStorage.setItem('coverwise_results', JSON.stringify(data));
+    }
+  } catch (e) {
+    stopLoading();
+    renderResults(getMockResults(profile));
+  }
+}
+
+// ── RENDER RESULTS ────────────────────────────────────────────────────────────
+function formatInline(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*\*\*/g, '') // Remove quadruple asterisks
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
+}
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  let inTable = false;
+  const out = [];
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+
+    // Table rows
+    if (trimmed.startsWith('|')) {
+      const isFirstRow = !inTable;
+      if (!inTable) { inTable = true; out.push('<div class="table-container"><table>'); }
+      // Skip separator rows (|---|---| or |:---:|)
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) continue;
+      const cells = trimmed.split('|').filter((_, i, a) => i > 0 && i < a.length - 1);
+      const tag = isFirstRow ? 'th' : 'td';
+      out.push(`<tr>${cells.map(c => `<${tag}>${formatInline(c.trim())}</${tag}>`).join('')}</tr>`);
+      continue;
+    }
+
+    // Close table if open
+    if (inTable) { inTable = false; out.push('</table></div>'); }
+
+    // Headings (order: most # first)
+    if (/^#{4,}\s/.test(trimmed)) {
+      out.push(`<h5 style="margin-top:14px;color:var(--text2);font-size:14px">${formatInline(trimmed.replace(/^#+\s*/, ''))}</h5>`);
+    } else if (trimmed.startsWith('### ')) {
+      out.push(`<h4 style="margin-top:16px;color:var(--accent2)">${formatInline(trimmed.slice(4))}</h4>`);
+    } else if (trimmed.startsWith('## ')) {
+      out.push(`<h3 style="margin-top:20px;color:var(--text)">${formatInline(trimmed.slice(3))}</h3>`);
+    } else if (trimmed.startsWith('# ')) {
+      out.push(`<h2 style="margin-top:24px;color:var(--text)">${formatInline(trimmed.slice(2))}</h2>`);
+    } else if (/^[-─═]{3,}$/.test(trimmed)) {
+      // Horizontal rule: --- or ─── or ═══
+      out.push('<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
+    } else if (trimmed === '') {
+      out.push('<br>');
+    } else {
+      out.push(formatInline(rawLine) + '<br>');
+    }
+  }
+  if (inTable) out.push('</table></div>');
+
+  return out.join('');
+}
+
+function buildDrugCoverageMap(coverageDetails) {
+  const map = {};
+  (coverageDetails || []).forEach(c => {
+    const key = String(c.rxcui);
+    if (!map[key]) map[key] = {};
+    map[key][c.plan_id] = c;
+  });
+  return map;
+}
+
+function tierColor(tier) {
+  const t = (tier || '').toLowerCase();
+  if (t.includes('1')) return 'tier-1';
+  if (t.includes('2')) return 'tier-2';
+  if (t.includes('3')) return 'tier-3';
+  if (t.includes('4')) return 'tier-4';
+  if (t.includes('5')) return 'tier-5';
+  return 'tier-3';
+}
+
+function tierCopay(tier) {
+  const t = (tier || '').toLowerCase();
+  if (t.includes('1')) return '$10';
+  if (t.includes('2')) return '$30';
+  if (t.includes('3')) return '$60';
+  if (t.includes('4')) return '$90';
+  if (t.includes('5')) return '$130+';
+  return '?';
+}
+
+function renderResults(data) {
+  const el = document.getElementById('results');
+  const route = data.route || 'marketplace';
+  const subsidy = data.subsidy || {};
+  const plans = data.plans || [];
+  const drugsData = data.drugs || {};
+  const doctorsData = data.doctors || {};
+  const risks = data.risks || {};
+  const cache = data.cache_stats || {};
+  const profile = data.profile || {};
+  const memoryUsed = data.memory_used;
+  const riskFlags = risks.flags || [];
+
+  const routeLabels = {
+    state_exchange: '→ State-Based Exchange', subsidized: '✓ Subsidy-Eligible Route',
+    medicaid: '✓ Medicaid Route — Free Coverage', marketplace: '→ Full Marketplace Route',
+    full_price: '→ Full Price Route', chip: '✓ CHIP Eligible'
+  };
+
+  let html = '';
+  if (memoryUsed) html += `<div class="memory-badge">🧠 mem0 — returning user profile loaded</div>`;
+  if (isPremium) html += `<div class="memory-badge" style="background:rgba(59,130,246,.1);border-color:var(--accent);color:var(--accent2)">💎 Premium Year-Round Advisor — All Checks Unlimited</div>`;
+
+  html += `<div class="route-badge ${route}">${routeLabels[route] || route} — ${profile.route_reason || ''}</div>`;
+
+  const monthlyCredit = subsidy.monthly_aptc || 0;
+  const annualCredit = monthlyCredit * 12;
+  const fpl = subsidy.fpl_percentage || profile.fpl_percentage || 0;
+  const lowestNet = plans.length ? Math.min(...plans.map(p => p.premium_w_credit ?? Math.max(0, p.premium - monthlyCredit))) : 0;
+
+  html += `<div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Monthly Subsidy</div><div class="stat-value green">$${monthlyCredit.toFixed(0)}</div></div>
+    <div class="stat-card"><div class="stat-label">Annual Credit</div><div class="stat-value blue">$${annualCredit.toFixed(0)}</div></div>
+    <div class="stat-card"><div class="stat-label">FPL %</div><div class="stat-value yellow">${Number(fpl).toFixed(0)}%</div></div>
+    <div class="stat-card"><div class="stat-label">Best Plan From</div><div class="stat-value green">${lowestNet <= 0 ? 'Subsidy covers it' : '$' + lowestNet.toFixed(0) + '/mo'}</div></div>
+  </div>`;
+
+  if (cache.total_calls > 0) {
+    html += `<div class="cache-bar">⚡ Cache: <span>${cache.hits} hits</span> / ${cache.total_calls} calls —
+      <span>${cache.hit_rate_pct}% hit rate</span> &nbsp;|&nbsp; ${cache.cached_entries} entries &nbsp;|&nbsp;
+      API calls saved: <span>${cache.hits}</span></div>`;
+  }
+
+  // ── PLANS ───────────────────────────────────────────────────────────────────
+  if (plans.length) {
+    // Re-order plan cards to match the LLM EV ranking so cards and AI recommendation agree.
+    // If llm_ranking is absent (Vertex AI unavailable), fall back to true_annual_cost order.
+    const evRanking = (data.llm_ranking || {}).expected_value_ranking || [];
+    let displayPlans = [...plans];
+    if (evRanking.length) {
+      const rankMap = {};
+      evRanking.forEach(r => { rankMap[r.plan_id] = r.rank; });
+      displayPlans.sort((a, b) => {
+        const ra = rankMap[a.id] ?? 999;
+        const rb = rankMap[b.id] ?? 999;
+        return ra - rb;
+      });
+    }
+
+    const rankingSource = evRanking.length ? 'AI Expected Value Ranking (Premiums × Scenarios × Utilization)' : 'True Annual Cost (Premiums + Est. OOP + Drug Costs)';
+    const planLabel = isPremium ? `Top ${displayPlans.length} Ranked Plans` : 'Top 3 Ranked Plans';
+    html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:8px">${planLabel}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Ranked by ${rankingSource}</div>
+      <div class="${isPremium ? 'plans-grid-premium' : 'plans-grid'}">`;
+    displayPlans.forEach((plan, i) => {
+      const net = plan.premium_w_credit ?? Math.max(0, plan.premium - monthlyCredit);
+      const rankLabel = i === 0 ? '🏆 Best Value' : i === 1 ? '2nd' : i === 2 ? '3rd' : `#${i+1}`;
+      const evEntry = evRanking.find(r => r.plan_id === plan.id);
+      const evScore = evEntry ? evEntry.ev_score : null;
+      const costBadge = evScore != null
+        ? `EV Score: $${Math.round(evScore).toLocaleString()}`
+        : `True Cost: $${(plan.true_annual_cost||0).toLocaleString()}`;
+      html += `<div class="plan-card${i === 0 ? ' best' : ''}">
+        <div class="plan-rank">${rankLabel}</div>
+        <div class="plan-header">
+          <span class="metal-badge ${plan.metal_level}">${plan.metal_level || '—'}</span>
+          <span class="true-annual-badge">${costBadge}</span>
+        </div>
+        <div class="plan-name">${plan.name}</div>
+        <div class="plan-issuer">${plan.issuer}${plan.type ? ' · ' + plan.type : ''}</div>
+        <div class="plan-price">$${net.toFixed(0)}<span style="font-size:14px;color:var(--text3)">/mo</span></div>
+        <div class="plan-price-label">after $${monthlyCredit.toFixed(0)} APTC subsidy</div>
+        <div class="plan-details">
+          <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
+          <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
+          <div class="plan-detail"><span class="plan-detail-label">Est. Drug Cost</span><span class="plan-detail-val">$${(plan.est_annual_drug_cost||0).toLocaleString()}/yr</span></div>
+          ${plan.quality_rating ? `<div class="plan-detail"><span class="plan-detail-label">Quality</span><span class="plan-detail-val">${plan.quality_rating}★</span></div>` : ''}
+          ${plan.hsa_eligible ? '<div class="plan-detail"><span class="plan-detail-label">HSA</span><span class="plan-detail-val" style="color:var(--green)">Eligible ✓</span></div>' : ''}
+          ${plan.pa_warning ? '<div class="plan-detail"><span class="plan-detail-label" style="color:var(--red)">⚠ PA Required</span><span class="plan-detail-val" style="color:var(--red)">For your drug</span></div>' : ''}
+        </div>
+        ${isPremium && plan.hsa_eligible && plan.hsa_tax_savings ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--green)">💡 HSA saves ~$${plan.hsa_tax_savings}/yr in taxes · 5yr balance ~$${plan.hsa_5yr_growth}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // ── PREMIUM: CSR DEEP EXPLANATION ───────────────────────────────────────────
+  if (isPremium && subsidy.csr_eligible && subsidy.csr_variant) {
+    const csrVariant = subsidy.csr_variant;
+    const csrData = {
+      '94': {label:'CSR-94 (100–150% FPL)', ded:'~$300', copay:'~$5–$15', oop:'~$1,000', tier:'Platinum-equivalent'},
+      '87': {label:'CSR-87 (150–200% FPL)', ded:'~$900', copay:'~$15–$30', oop:'~$2,500', tier:'Gold-equivalent'},
+      '73': {label:'CSR-73 (200–250% FPL)', ded:'~$2,500', copay:'~$25–$45', oop:'~$5,000', tier:'Silver-plus'},
+    };
+    const csr = csrData[csrVariant] || {};
+    html += `<div class="rec-card" style="border-color:var(--green)">
+      <h2>💡 CSR Cost-Sharing Reduction — ${csr.label}</h2>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">You qualify for CSR. This only applies to Silver plans. Picking Gold or Bronze when CSR-eligible leaves thousands in benefits on the table.</p>
+      <div class="table-container"><table class="compare-table">
+        <tr><th>Metric</th><th>Standard Silver</th><th>Your CSR-${csrVariant} Silver</th></tr>
+        <tr><td>Deductible</td><td>~$4,500</td><td style="color:var(--green)">${csr.ded}</td></tr>
+        <tr><td>Primary Care Copay</td><td>~$40–$65</td><td style="color:var(--green)">${csr.copay}</td></tr>
+        <tr><td>Out-of-Pocket Max</td><td>~$9,000</td><td style="color:var(--green)">${csr.oop}</td></tr>
+        <tr><td>Actuarial Value Tier</td><td>Silver (70%)</td><td style="color:var(--green)">${csr.tier}</td></tr>
+      </table></div>
+    </div>`;
+  }
+
+  // ── PREMIUM: HSA 5-YEAR FORECAST ────────────────────────────────────────────
+  if (isPremium) {
+    const hsaPlans = plans.filter(p => p.hsa_eligible);
+    if (hsaPlans.length) {
+      const profile2 = currentProfile || {};
+      const hhSize = profile2.household_size || 1;
+      const userIncome = profile2.income || 50000;
+      const hsaLimit = hhSize > 1 ? 8300 : 4150;
+      let taxRate = 0.10;
+      if (userIncome > 11600) taxRate = 0.12;
+      if (userIncome > 47150) taxRate = 0.22;
+      if (userIncome > 100525) taxRate = 0.24;
+      const annualTaxSave = Math.round(hsaLimit * taxRate);
+      html += `<div class="rec-card" style="border-color:var(--purple)">
+        <h2>💰 HSA 5-Year Wealth Forecast</h2>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+          Contributing the IRS maximum to an HSA (${hhSize > 1 ? 'family' : 'individual'}: $${hsaLimit.toLocaleString()}/yr) at your ${Math.round(taxRate*100)}% tax bracket.
+          Assumes 7% average annual growth on unused funds.
+        </p>
+        <div class="table-container"><table class="hsa-table">
+          <tr><th>Year</th><th>Contributed</th><th>Tax Saved</th><th>Cumulative Balance</th></tr>
+          ${[1,2,3,4,5].map(yr => {
+            const contributed = hsaLimit * yr;
+            const taxSaved = annualTaxSave * yr;
+            const balance = Math.round(hsaLimit * ((Math.pow(1.07, yr) - 1) / 0.07));
+            return `<tr><td>Year ${yr}</td><td>$${contributed.toLocaleString()}</td><td style="color:var(--green)">$${taxSaved.toLocaleString()}</td><td style="color:var(--accent2)">$${balance.toLocaleString()}</td></tr>`;
+          }).join('')}
+        </table></div>
+        <p style="font-size:11px;color:var(--text3);margin-top:8px">HSA funds roll over indefinitely. Withdrawals for medical expenses are tax-free at any age.</p>
+      </div>`;
+    }
+  }
+
+  // ── AI RECOMMENDATION ───────────────────────────────────────────────────────
+  if (data.recommendation) {
+    html += `<div class="rec-card"><h2>🤖 AI Recommendation (ADK Expert)</h2>
+      <div class="rec-body">${renderMarkdown(data.recommendation)}</div></div>`;
+  }
+
+  // ── RISK FLAGS & WARNINGS ───────────────────────────────────────────────────
+  if (riskFlags.length) {
+    html += `<div class="warnings-card"><h2>⚠️ Risk Analysis & Local Market Flags</h2>
+      ${riskFlags.map(w => {
+        const cls = w.startsWith('🚨') ? 'alert' : (w.startsWith('💡') || w.startsWith('📅') || w.startsWith('🏥')) ? 'tip' : '';
+        return `<div class="warning-item ${cls}">${w}</div>`;
+      }).join('')}</div>`;
+  }
+
+  // ── DRUG COVERAGE ───────────────────────────────────────────────────────────
+  const resolvedDrugs = drugsData.resolved_drugs || [];
+  const coverageDetails = drugsData.coverage_details || [];
+  const genericSuggestions = drugsData.generic_suggestions || {};
+  const drugCoverageMap = buildDrugCoverageMap(coverageDetails);
+  const topPlanIds = plans.slice(0, isPremium ? 5 : 3).map(p => p.id);
+
+  if (resolvedDrugs.length) {
+    html += `<div class="rec-card"><h2>💊 Medication Coverage${!isPremium ? ' (1 drug — free tier)' : ''}</h2>`;
+    resolvedDrugs.forEach(d => {
+      const rxcui = String(d.rxcui || '');
+      const planMap = drugCoverageMap[rxcui] || {};
+      const generics = genericSuggestions[d.name] || [];
+      html += `<div class="drug-row">
+        <div style="flex:1">
+          <div class="drug-name">${d.name}${d.full_name && d.full_name !== d.name ? ` <span style="color:var(--text3);font-size:11px">(${d.full_name})</span>` : ''}</div>
+          <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px">RxCUI: ${rxcui}${d.strength ? ' · ' + d.strength : ''}${d.route ? ' · ' + d.route : ''}</div>
+        </div>
+        <div class="drug-badges">
+          ${topPlanIds.map(pid => {
+            const c = planMap[pid];
+            if (!c) return '';
+            const planName = (plans.find(p => p.id === pid) || {}).name || pid;
+            const shortName = planName.length > 20 ? planName.slice(0, 18) + '…' : planName;
+            if (c.coverage === 'NotCovered') {
+              return `<span class="tier-badge tier-5" title="${planName}">Not Covered</span>`;
+            }
+            if (c.drug_tier) {
+              const tierClass = tierColor(c.drug_tier);
+              const pa = c.prior_authorization ? '<span class="pa-badge">PA</span>' : '';
+              const st = c.step_therapy ? '<span class="st-badge">ST</span>' : '';
+              return `<span title="${planName}: ${c.drug_tier}" class="tier-badge ${tierClass}">${c.drug_tier} ~${tierCopay(c.drug_tier)}</span>${pa}${st}`;
+            }
+            return `<span class="tier-badge net-unknown" title="${planName}">Data N/A</span>`;
+          }).join('')}
+          ${generics.length ? `<span class="generic-badge" title="Generic may be Tier 1 — confirm with your doctor">💊 Generic: ${generics[0]}</span>` : ''}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // ── PREMIUM: DRUG COMPARISON TABLE ──────────────────────────────────────────
+  if (isPremium && resolvedDrugs.length && topPlanIds.length > 1) {
+    html += `<div class="rec-card" style="border-color:var(--accent)">
+      <h2>💊 Drug vs Plan Comparison (Premium)</h2>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px">All your medications across your top plans — ranked by true drug cost.</p>
+      <div class="table-container"><table class="compare-table">
+        <tr>
+          <th>Medication</th>
+          ${topPlanIds.map(pid => {
+            const p = plans.find(pl => pl.id === pid);
+            return `<th>${p ? (p.name.length > 22 ? p.name.slice(0,20)+'…' : p.name) : pid}<br><span style="color:var(--text3);font-weight:400">${p ? p.metal_level : ''}</span></th>`;
+          }).join('')}
+        </tr>
+        ${resolvedDrugs.map(d => {
+          const rxcui = String(d.rxcui || '');
+          const planMap = drugCoverageMap[rxcui] || {};
+          return `<tr>
+            <td><strong>${d.name}</strong>${(genericSuggestions[d.name]||[]).length ? '<br><span style="font-size:10px;color:var(--green)">💊 generic avail.</span>' : ''}</td>
+            ${topPlanIds.map(pid => {
+              const c = planMap[pid];
+              if (!c) return '<td style="color:var(--text3)">—</td>';
+              if (c.coverage === 'NotCovered') return '<td style="color:var(--red)">✗ Not Covered</td>';
+              const tierClass = tierColor(c.drug_tier);
+              const pa = c.prior_authorization ? ' <span class="pa-badge">PA</span>' : '';
+              const st = c.step_therapy ? ' <span class="st-badge">ST</span>' : '';
+              return `<td><span class="tier-badge ${tierClass}">${c.drug_tier||'?'}</span> ${tierCopay(c.drug_tier)}/mo${pa}${st}</td>`;
+            }).join('')}
+          </tr>`;
+        }).join('')}
+      </table></div>
+      <p style="font-size:11px;color:var(--text3);margin-top:8px">PA = Prior Authorization required (can take 30+ days). ST = Step Therapy (must try cheaper drug first).</p>
+    </div>`;
+  }
+
+  // ── SPECIALIST FINDER ───────────────────────────────────────────────────────
+  const specialistPlanIds = plans.slice(0, 3).map(p => p.id);
+  html += `
+  <div class="specialist-search" id="specialistSection">
+    <h2>🔬 Find a Specialist for Your Condition</h2>
+    <p>Type a condition, ailment, or specialty — CoverWise will find in-area doctors, check network status on your plans, and show the estimated specialist copay per plan.</p>
+    <div id="searchHistory" class="search-history"></div>
+    <div class="specialist-input-row">
+      <input class="specialist-input" id="conditionInput"
+        placeholder="e.g. heart disease, diabetes, back pain, anxiety, oncology…"
+        onkeydown="if(event.key==='Enter')runSpecialistSearch()">
+      <button class="specialist-btn" id="specialistBtn" onclick="runSpecialistSearch()">Find Specialists</button>
+    </div>
+    ${!isPremium ? `<p style="font-size:11px;color:var(--text3);margin-top:-8px">Free tier: 1 specialist search per session. <a href="#" onclick="location.reload();return false" style="color:var(--accent2)">Upgrade to Premium</a> for unlimited.</p>` : '<p style="font-size:11px;color:var(--green);margin-top:-8px">💎 Premium: unlimited specialty searches</p>'}
+    <div id="specialistResults"></div>
+  </div>`;
+
+  // ── FEATURE: PROCEDURE COST ESTIMATOR ────────────────────────────────────────
+  html += `<div class="feature-card" id="procedureSection">
+    <h2>🩺 Procedure Cost Estimator</h2>
+    <p>Select a medical procedure to see exactly what you'd pay out-of-pocket on each plan — based on your plan's deductible and metal-level coinsurance rate.</p>
+    <div class="specialist-input-row">
+      <select class="specialist-input" id="procedureSelect" style="flex:1">
+        <option value="">Select a procedure…</option>
+        <optgroup label="Surgery"><option value="knee_replacement">Knee Replacement (~$35,000)</option><option value="hip_replacement">Hip Replacement (~$32,000)</option><option value="appendectomy">Appendectomy (~$18,000)</option><option value="gallbladder">Gallbladder Removal (~$14,000)</option><option value="back_surgery">Spinal Fusion / Back Surgery (~$45,000)</option><option value="heart_bypass">Coronary Bypass (~$95,000)</option></optgroup>
+        <optgroup label="Cardiac"><option value="angioplasty">Angioplasty / Stent (~$28,000)</option></optgroup>
+        <optgroup label="Oncology"><option value="chemotherapy_cycle">Chemotherapy (per cycle, ~$10,000)</option><option value="radiation_course">Radiation Therapy (~$60,000)</option></optgroup>
+        <optgroup label="Maternity"><option value="childbirth_vaginal">Childbirth – Vaginal (~$12,000)</option><option value="childbirth_csection">Childbirth – C-Section (~$20,000)</option></optgroup>
+        <optgroup label="Diagnostic"><option value="colonoscopy">Colonoscopy (~$3,500)</option><option value="mri">MRI Scan (~$2,600)</option><option value="ct_scan">CT Scan (~$2,000)</option></optgroup>
+        <optgroup label="Emergency"><option value="er_visit">ER Visit (~$3,200)</option><option value="ambulance">Ambulance Ride (~$1,800)</option></optgroup>
+        <optgroup label="Inpatient"><option value="inpatient_3day">3-Day Hospital Stay (~$22,000)</option></optgroup>
+        <optgroup label="Rehab / Chronic"><option value="physical_therapy">Physical Therapy, 12 sessions (~$2,400)</option><option value="diabetes_management">Annual Diabetes Management (~$5,500)</option><option value="mental_health_year">Mental Health, 12 months (~$4,800)</option></optgroup>
+      </select>
+      <button class="specialist-btn" id="procedureBtn" onclick="runProcedureEstimate()">Estimate My Cost</button>
+    </div>
+    <div id="procedureResults"></div>
+  </div>`;
+
+  // ── FEATURE: EMPLOYER vs MARKETPLACE ──────────────────────────────────────────
+  html += `<div class="feature-card" id="employerSection">
+    <h2>🏢 Employer vs Marketplace Comparison</h2>
+    <p>Enter your employer plan details to see if marketplace coverage (with your subsidy) would actually cost you less after all factors.</p>
+    <div class="employer-grid">
+      <div class="form-group"><label>Your Monthly Premium (you pay)</label><input type="number" class="specialist-input" id="empPremium" placeholder="e.g. 250" min="0" style="width:100%"></div>
+      <div class="form-group"><label>Employer Contribution/mo</label><input type="number" class="specialist-input" id="empContrib" placeholder="e.g. 600" min="0" style="width:100%"></div>
+      <div class="form-group"><label>Employer Plan Deductible</label><input type="number" class="specialist-input" id="empDeductible" placeholder="e.g. 2000" min="0" style="width:100%"></div>
+      <div class="form-group"><label>Employer Plan OOP Max</label><input type="number" class="specialist-input" id="empOopMax" placeholder="e.g. 6000" min="0" style="width:100%"></div>
+    </div>
+    <button class="specialist-btn" style="margin-top:8px" onclick="runEmployerComparison()">Compare Plans</button>
+    <div id="employerResults"></div>
+  </div>`;
+
+
+  // ── DOCTOR RESULTS ──────────────────────────────────────────────────────────
+  const doctorResults = doctorsData.results || [];
+  if (doctorResults.length) {
+    html += `<div class="rec-card"><h2>🏥 Doctor & Provider Check${!isPremium ? ' (1 doctor — free tier)' : ''}</h2>`;
+    doctorResults.forEach(doc => {
+      const netStatuses = Object.entries(doc.network_status || {});
+      html += `<div class="doctor-row">
+        <div class="doctor-info">
+          <div class="doctor-name">${doc.name}${doc.credential ? ', ' + doc.credential : ''}</div>
+          <div class="doctor-meta">NPI: ${doc.npi || 'Not found'} · ${doc.specialty || ''} · ${doc.city || ''}${doc.state ? ', ' + doc.state : ''}</div>
+          ${doc.mips_score != null ? `<div style="margin-top:4px"><span class="mips-badge">MIPS Quality: ${doc.mips_score}/100</span>${doc.telehealth ? ' <span class="mips-badge" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>' : ''}</div>` : ''}
+        </div>
+        <div class="doctor-networks">
+          ${netStatuses.length ? netStatuses.map(([pid, net]) => {
+            const planName = ((plans.find(p => p.id === pid) || {}).name || pid);
+            const short = planName.length > 22 ? planName.slice(0,20)+'…' : planName;
+            if (net.in_network === false) return `<span class="net-badge net-out" title="${planName}">✗ OON: ${short}</span>`;
+            if (net.in_network === true) {
+              const accept = net.accepting_patients === false ? ' (Not accepting)' : '';
+              return `<span class="net-badge net-in" title="${planName}">✓ In-Net: ${short}${accept}</span>`;
+            }
+            const verifyUrl = net.verify_url || 'https://healthcare.gov';
+            const issuerLabel = net.issuer ? ` (${net.issuer.split(' ').slice(0,3).join(' ')})` : '';
+            return `<a href="${verifyUrl}" target="_blank" class="net-badge net-unknown" title="CMS has no network data for this plan. Click to check ${net.issuer || 'insurer'} directory.">🔍 Verify${issuerLabel}</a>`;
+          }).join('') : '<span style="font-size:12px;color:var(--text3)">No network data</span>'}
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  // ── FOLLOW-UP CHAT ───────────────────────────────────────────────────────────
+  if (isPremium) {
+    html += `<div class="chat-card"><h2>💬 Year-Round Advisor — Ask Anything</h2>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px">Your profile is saved. Ask about plan changes, life events, employer coverage comparisons, or anything insurance-related.</p>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput"
+          placeholder="e.g. My employer offered coverage — is it better than my marketplace plan?"
+          onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-btn" onclick="sendChat()">Ask</button>
+      </div></div>`;
+  } else {
+    html += `<div class="chat-card"><h2>💬 Ask a Follow-Up Question</h2>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput"
+          placeholder="e.g. Which plan covers Ozempic best? Should I pick Silver or Bronze?"
+          onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-btn" onclick="sendChat()">Ask</button>
+      </div>
+      <div class="chat-gate">
+        <p>💎 Premium unlocks year-round advisor access — ask about life events, employer coverage, mid-year plan changes, and more. Your profile is saved for next year.</p>
+        <button class="btn" onclick="location.reload()" style="max-width:280px;margin:0 auto;padding:10px">Upgrade to Premium — $19/mo</button>
+      </div>
+    </div>`;
+  }
+
+  // ── PREMIUM UPSELL (free tier) ───────────────────────────────────────────────
+  if (!isPremium) {
+    const checkedDrugs = resolvedDrugs.length;
+    const checkedDocs = doctorResults.length;
+    html += `
+    <div class="rec-card" style="border:2px dashed var(--accent);background:rgba(59,130,246,0.05);margin-top:24px;">
+      <h2 style="color:var(--accent2)">🪄 Unlock the Full Analysis</h2>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">
+        I checked <strong>${checkedDrugs} medication${checkedDrugs !== 1 ? 's' : ''}</strong> and <strong>${checkedDocs} doctor${checkedDocs !== 1 ? 's' : ''}</strong> (free tier limit).
+        Premium unlocks unlimited drug &amp; doctor checks, the 5-year HSA tax calculator, CSR deductible deep-dive, 10-plan comparison, year-round advisor access, and PDF export.
+      </p>
+      <table style="width:100%;font-size:12px;margin-bottom:16px;border-collapse:collapse">
+        <tr style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+          <th style="text-align:left;padding:6px 8px">Feature</th>
+          <th style="text-align:center;padding:6px 8px">Free</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--accent2)">Premium $19/mo</th>
+        </tr>
+        ${[
+          ['Plans compared','3','10'],
+          ['Drug checks','1 medication','All meds'],
+          ['Doctor checks','1 doctor','All doctors'],
+          ['CSR deep explanation','Flag only','Full deductible table'],
+          ['HSA 5-yr forecast','Flag only','Full tax calc'],
+          ['Prior auth warnings','—','✓'],
+          ['Step therapy warnings','—','✓'],
+          ['Generic suggestions','—','✓'],
+          ['Year-round advisor','—','✓'],
+          ['PDF export','—','✓'],
+          ['Mem0 cross-year recall','—','✓'],
+        ].map(([feat,free,prem]) =>
+          `<tr style="border-top:1px solid var(--border)"><td style="padding:6px 8px">${feat}</td><td style="text-align:center;padding:6px 8px;color:var(--text3)">${free}</td><td style="text-align:center;padding:6px 8px;color:var(--green)">${prem}</td></tr>`
+        ).join('')}
+      </table>
+      <button class="btn" onclick="location.reload()" style="max-width:300px;margin:0 auto">Upgrade to Premium — $19/mo</button>
+    </div>`;
+  }
+
+  // ── PREMIUM PDF EXPORT ───────────────────────────────────────────────────────
+  if (isPremium) {
+    html += `<div class="rec-card" style="margin-top:24px;text-align:center;background:var(--bg3)">
+      <h3>📄 Download PDF Report</h3>
+      <p style="font-size:13px;margin-bottom:16px;color:var(--text2)">Generate a clean PDF of these recommendations to share with a family member or financial advisor.</p>
+      <button class="btn" onclick="window.print()" style="max-width:300px;margin:0 auto">Print / Save as PDF</button>
+    </div>`;
+  }
+
+  window._lastResults = data;   // used by specialist search to get plan IDs + metal levels
+  el.innerHTML = html;
+  el.classList.add('active');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── FOLLOW-UP CHAT ────────────────────────────────────────────────────────────
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const messages = document.getElementById('chatMessages');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'chat-msg user';
+  userDiv.textContent = msg;
+  messages.appendChild(userDiv);
+  input.value = '';
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'chat-msg ai';
+  loadingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  messages.appendChild(loadingDiv);
+  messages.scrollTop = messages.scrollHeight;
+  let extraContext = "";
+  const empEl = document.getElementById('employerResults');
+  if (empEl && empEl.innerText.trim().length > 0) {
+    extraContext = "Employer Comparison Run by User:\n" + empEl.innerText;
+  }
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: USER_ID, message: msg, profile: currentProfile, context: extraContext })
+    });
+    const data = await res.json();
+    loadingDiv.innerHTML = renderMarkdown(data.reply || 'No response received.');
+    messages.scrollTop = messages.scrollHeight;
+  } catch (e) {
+    loadingDiv.textContent = 'Sorry, could not process that right now.';
+  }
+}
+
+// ── SPECIALIST SEARCH ─────────────────────────────────────────────────────────
+let specialistSearchCount = 0;
+const searchHistoryItems = [];
+
+async function runSpecialistSearch() {
+  const input = document.getElementById('conditionInput');
+  const condition = input.value.trim();
+  if (!condition) return;
+
+  if (!isPremium && specialistSearchCount >= 1) {
+    document.getElementById('specialistResults').innerHTML = `
+      <div style="padding:16px;background:rgba(59,130,246,.06);border:1px dashed var(--accent);border-radius:var(--radius);text-align:center">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px">Free tier limit reached. Upgrade to Premium for unlimited specialist searches.</p>
+        <button class="specialist-btn" onclick="location.reload()">Upgrade to Premium — $19/mo</button>
+      </div>`;
+    return;
+  }
+
+  const btn = document.getElementById('specialistBtn');
+  const resultsEl = document.getElementById('specialistResults');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  resultsEl.innerHTML = `<div class="intake-msg agent" style="margin-top:8px"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+
+  // Track history
+  if (!searchHistoryItems.includes(condition)) {
+    searchHistoryItems.unshift(condition);
+    if (searchHistoryItems.length > 5) searchHistoryItems.pop();
+    renderSearchHistory();
+  }
+
+  const profile = currentProfile || {};
+  const plans = (window._lastResults || {}).plans || [];
+  const planIds = plans.slice(0, isPremium ? 5 : 3).map(p => p.id);
+
+  try {
+    const res = await fetch('/api/specialty-search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        user_id: USER_ID,
+        condition,
+        zip_code: profile.zip_code || '',
+        state: profile.state || '',
+        plan_ids: planIds,
+        is_premium: isPremium,
+      })
+    });
+    const data = await res.json();
+    specialistSearchCount++;
+    input.value = '';
+    renderSpecialistResults(data, plans);
+  } catch (e) {
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px">Error contacting server. Please try again.</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Find Specialists';
+  }
+}
+
+function renderSearchHistory() {
+  const el = document.getElementById('searchHistory');
+  if (!el) return;
+  el.innerHTML = searchHistoryItems.map(q =>
+    `<span class="history-chip" onclick="document.getElementById('conditionInput').value='${q.replace(/'/g,"\\'")}';runSpecialistSearch()">${q}</span>`
+  ).join('');
+}
+
+function renderSpecialistResults(data, plans) {
+  const el = document.getElementById('specialistResults');
+  if (!el) return;
+  if (data.detail) {
+    el.innerHTML = `<div style="color:var(--red);font-size:13px;padding:8px">⚠ ${data.detail}</div>`;
+    return;
+  }
+
+  const providers = data.providers || [];
+  const planCopays = data.plan_copays || {};
+  const metalEst = data.metal_estimates || {};
+
+  let html = `<div style="margin-bottom:12px">
+    <span class="spec-tag">Specialty: ${data.specialty}</span>
+    <span style="font-size:12px;color:var(--text3);margin-left:8px">${providers.length} provider${providers.length !== 1 ? 's' : ''} found near you</span>
+  </div>`;
+
+  if (!providers.length) {
+    html += `<div style="font-size:13px;color:var(--text2);padding:12px 0">
+      No providers found in the NPPES registry for "${data.condition}" in your state.
+      Try a different condition name or check <a href="https://www.ama-assn.org/find-doctor" target="_blank" style="color:var(--accent2)">AMA's doctor finder</a>.
+    </div>`;
+    el.innerHTML = html;
+    return;
+  }
+
+  // Per-plan copay summary row
+  const planCopayRows = plans.slice(0, 3).map(plan => {
+    const c = planCopays[plan.id];
+    let copayText = '';
+    if (c && c.found && c.copay != null) {
+      copayText = `$${c.copay} copay`;
+    } else if (c && c.found && c.coinsurance) {
+      copayText = `${Math.round(c.coinsurance * 100)}% coinsurance`;
+    } else {
+      const est = metalEst[plan.metal_level] || {};
+      copayText = est.note || `~$${est.copay || 60}/visit (est.)`;
+    }
+    return `<div class="copay-badge"><span style="color:var(--text3)">${plan.name.length>20?plan.name.slice(0,18)+'…':plan.name}</span> · <strong style="color:var(--accent2)">${copayText}</strong></div>`;
+  }).join('');
+
+  if (planCopayRows) {
+    html += `<div style="margin-bottom:12px">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;margin-bottom:6px">Estimated ${data.benefit_type} Copay on Your Plans</div>
+      <div class="copay-row">${planCopayRows}</div>
+    </div>`;
+  }
+
+  html += '<div class="specialist-results">';
+  providers.forEach((prov, i) => {
+    const netStatuses = Object.entries(prov.network_status || {});
+    const netHtml = netStatuses.length
+      ? netStatuses.map(([pid, net]) => {
+          const planName = (plans.find(p => p.id === pid) || {}).name || pid;
+          const short = planName.length > 20 ? planName.slice(0,18)+'…' : planName;
+          if (net.in_network === false)
+            return `<span class="net-badge net-out">✗ OON: ${short}</span>`;
+          if (net.in_network === true) {
+            const acc = net.accepting_patients === false ? ' (not accepting)' : '';
+            return `<span class="net-badge net-in">✓ In-Net: ${short}${acc}</span>`;
+          }
+          return `<span class="net-badge net-unknown">? ${short}</span>`;
+        }).join('')
+      : '<span style="font-size:11px;color:var(--text3)">Network status not verified</span>';
+
+    const mipsHtml = prov.mips_score != null
+      ? `<span class="mips-badge">MIPS: ${prov.mips_score}/100</span>`
+      : '';
+    const telehealthHtml = prov.telehealth
+      ? `<span class="mips-badge" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>`
+      : '';
+
+    html += `<div class="specialist-card">
+      <div class="specialist-header">
+        <div>
+          <div class="specialist-name">${prov.name}${prov.credential ? ', ' + prov.credential : ''} ${i === 0 ? '<span style="font-size:10px;color:var(--green)">● Top Match</span>' : ''}</div>
+          <div class="specialist-sub">NPI: ${prov.npi || 'N/A'} · ${prov.specialty} · ${prov.city || ''}${prov.state ? ', ' + prov.state : ''}</div>
+          ${prov.address ? `<div class="specialist-sub">${prov.address}</div>` : ''}
+          ${prov.phone ? `<div class="specialist-sub">📞 ${prov.phone}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${mipsHtml}${telehealthHtml}</div>
+      </div>
+      <div class="specialist-networks">${netHtml}</div>
+    </div>`;
+  });
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+// ── PROCEDURE COST ESTIMATOR ──────────────────────────────────────────────────
+async function runProcedureEstimate() {
+  const select = document.getElementById('procedureSelect');
+  const key = select.value;
+  if (!key) { alert('Please select a procedure.'); return; }
+  const btn = document.getElementById('procedureBtn');
+  const resultsEl = document.getElementById('procedureResults');
+  btn.disabled = true; btn.textContent = 'Calculating…';
+  resultsEl.innerHTML = `<div class="intake-msg agent" style="margin-top:8px"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+  const plans = (window._lastResults || {}).plans || [];
+  try {
+    const res = await fetch('/api/procedure-cost', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ user_id: USER_ID, procedure_key: key, plans })
+    });
+    const data = await res.json();
+    if (data.error) { resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px">${data.error}</div>`; return; }
+    const results = data.results || [];
+    resultsEl.innerHTML = `
+      <div style="margin:12px 0 8px;font-size:13px;color:var(--text2)">
+        <strong style="color:var(--text)">${data.procedure}</strong>
+        · National avg: <strong style="color:var(--accent2)">$${(data.total_cost||0).toLocaleString()}</strong>
+        · Category: ${data.category}
+      </div>
+      <div class="table-container"><table class="compare-table">
+        <tr><th>Plan</th><th>Metal</th><th>Net Premium</th><th>Deductible</th><th>Coinsurance</th><th>You Pay</th><th>Insurance Pays</th></tr>
+        ${results.map((r,i) => `<tr${i===0?' style="background:rgba(16,185,129,.05)"':''}>
+          <td>${(r.plan_name||'').length>22?(r.plan_name||'').slice(0,20)+'…':(r.plan_name||'—')}${i===0?' <span style="font-size:10px;color:var(--green)">● Best</span>':''}</td>
+          <td><span class="metal-badge ${r.metal_level}" style="font-size:10px">${r.metal_level}</span></td>
+          <td style="font-family:var(--mono)">$${r.net_premium}/mo</td>
+          <td style="font-family:var(--mono)">$${(r.deductible||0).toLocaleString()}</td>
+          <td style="font-family:var(--mono)">${r.coinsurance_pct}%</td>
+          <td style="font-family:var(--mono);color:${i===0?'var(--green)':'var(--yellow)'}"><strong>$${(r.patient_oop||0).toLocaleString()}</strong></td>
+          <td style="font-family:var(--mono);color:var(--text3)">$${(r.insurance_pays||0).toLocaleString()}</td>
+        </tr>`).join('')}
+      </table></div>
+      <p style="font-size:11px;color:var(--text3);margin-top:8px">OOP capped at plan maximum. Assumes procedure is in-network and fully covered after deductible+coinsurance. Actual costs vary.</p>`;
+  } catch(e) {
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px">Error estimating costs. Please try again.</div>`;
+  } finally { btn.disabled = false; btn.textContent = 'Estimate My Cost'; }
+}
+
+// ── EMPLOYER vs MARKETPLACE ───────────────────────────────────────────────────
+function runEmployerComparison() {
+  const empPremium  = Number(document.getElementById('empPremium').value)   || 0;
+  const empContrib  = Number(document.getElementById('empContrib').value)   || 0;
+  const empDed      = Number(document.getElementById('empDeductible').value)|| 0;
+  const resultsEl   = document.getElementById('employerResults');
+  if (!empPremium && !empContrib) {
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px;margin-top:8px">Please enter at least your employer premium or contribution.</div>`;
+    return;
+  }
+  const plans = (window._lastResults || {}).plans || [];
+  const subsidy = (window._lastResults || {}).subsidy || {};
+  const monthlyCredit = subsidy.monthly_aptc || 0;
+  const utilization = currentProfile ? currentProfile.utilization : 'sometimes';
+  const oopWeight = {rarely:0.1, sometimes:0.25, frequently:0.5, chronic:0.8};
+  const oopFactor = oopWeight[utilization] || 0.25;
+  const empTrueAnnual = empPremium * 12 + empDed * oopFactor;
+  let betterCount = 0;
+  let rows = plans.slice(0, isPremium ? 5 : 3).map(plan => {
+    const net = plan.premium_w_credit ?? Math.max(0, plan.premium - monthlyCredit);
+    const trueCost = net * 12 + (plan.deductible || 0) * oopFactor + (plan.est_annual_drug_cost || 0);
+    const better = trueCost < empTrueAnnual;
+    if (better) betterCount++;
+    const diff = Math.abs(Math.round(empTrueAnnual - trueCost));
+    return `<tr>
+      <td><strong>${(plan.name||'').length>24?(plan.name||'').slice(0,22)+'…':(plan.name||'')}</strong><br>
+        <span class="metal-badge ${plan.metal_level}" style="font-size:10px">${plan.metal_level}</span></td>
+      <td><span style="color:var(--green)">Marketplace</span></td>
+      <td style="font-family:var(--mono)">$${net.toFixed(0)}/mo</td>
+      <td style="font-family:var(--mono);color:${better?'var(--green)':'var(--text)'}"><strong>$${trueCost.toLocaleString()}</strong></td>
+      <td style="font-family:var(--mono);font-size:11px;color:${better?'var(--green)':'var(--red)'}">${better?`✓ Save $${diff.toLocaleString()}/yr`:`$${diff.toLocaleString()}/yr more`}</td>
+    </tr>`;
+  }).join('');
+  resultsEl.innerHTML = `<div style="margin-top:16px">
+    <div class="table-container"><table class="compare-table">
+      <tr><th>Plan</th><th>Source</th><th>Your Monthly</th><th>True Annual Cost</th><th>vs Employer</th></tr>
+      <tr style="background:rgba(248,196,113,.05)">
+        <td><strong>Your Employer Plan</strong><br><span style="font-size:11px;color:var(--text3)">Employer pays $${empContrib}/mo on top</span></td>
+        <td><span style="color:var(--yellow)">Employer</span></td>
+        <td style="font-family:var(--mono)">$${empPremium}/mo</td>
+        <td style="font-family:var(--mono);color:var(--yellow)"><strong>$${empTrueAnnual.toLocaleString()}</strong></td>
+        <td>—</td>
+      </tr>${rows}
+    </table></div>
+    ${betterCount>0
+      ? `<div class="sep-alert sep-open" style="margin-top:12px">💡 ${betterCount} marketplace plan${betterCount>1?'s':''} appear cheaper. Note: employer premiums are pre-tax — worth ~$${Math.round(empPremium*12*0.22).toLocaleString()}/yr in tax savings at 22%.</div>`
+      : `<div class="sep-alert sep-closed" style="margin-top:12px">✓ Your employer plan appears competitive after subsidy comparison.</div>`}
+    <p style="font-size:11px;color:var(--text3);margin-top:8px">True annual cost = net premiums + estimated OOP at your utilization level + drug costs. Employer plan premiums paid pre-tax.</p>
+  </div>`;
+}
+
+
+// ── MOCK FALLBACK ─────────────────────────────────────────────────────────────
+function getMockResults(profile) {
+  const fpl_bases = {1:14580,2:19720,3:24860,4:30000};
+  const base = fpl_bases[Math.min(profile.household_size||1,4)]||30000;
+  const fpl = Math.round((profile.income||50000)/base*1000)/10;
+  const credit = fpl<=400 ? Math.max(0,Math.round(450-(profile.income||50000)*0.085/12)) : 0;
+  const drugsList = (profile.drugs||[]).slice(0, isPremium ? 99 : 1);
+  const mockPlans = [
+    {id:'P1',name:'BlueCross Silver Select',metal_level:'Silver',type:'HMO',premium:342,premium_w_credit:Math.max(0,342-credit),deductible:3500,oop_max:7000,issuer:'BlueCross BlueShield',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,342-credit)*12+3500*0.25,est_annual_drug_cost:720,pa_warning:false},
+    {id:'P2',name:'Aetna Bronze HSA Plus',metal_level:'Bronze',type:'PPO',premium:218,premium_w_credit:Math.max(0,218-credit),deductible:6000,oop_max:8700,issuer:'Aetna',hsa_eligible:true,quality_rating:3,true_annual_cost:Math.max(0,218-credit)*12+6000*0.1,est_annual_drug_cost:360,pa_warning:false},
+    {id:'P3',name:'UHC Gold Complete',metal_level:'Gold',type:'PPO',premium:487,premium_w_credit:Math.max(0,487-credit),deductible:1500,oop_max:5000,issuer:'UnitedHealthcare',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,487-credit)*12+1500*0.5,est_annual_drug_cost:1080,pa_warning:false},
+  ];
+  const mockCoverage = drugsList.flatMap(d => mockPlans.map(p => ({
+    rxcui: '0', plan_id: p.id, coverage:'Covered', drug_tier:'Tier 2',
+    prior_authorization: false, step_therapy: false, quantity_limit: false
+  })));
+  const mockDoctors = (profile.doctors||[]).slice(0, isPremium ? 99 : 1).map(d => ({
+    name: d, searched_name: d, npi: null, credential:'', specialty:'',
+    city:'', state:'', found: false, mips_score: null, telehealth: false,
+    network_status: {}
+  }));
+  return {
+    route: fpl<138?'medicaid':fpl<=400?'subsidized':'marketplace',
+    profile: {fpl_percentage:fpl, route_reason:`At ${fpl.toFixed(0)}% FPL.`},
+    subsidy: {
+      monthly_aptc: credit, fpl_percentage: fpl,
+      csr_eligible: fpl<=250, csr_variant: fpl<=150?'94':fpl<=200?'87':fpl<=250?'73':null,
+      is_medicaid_eligible: fpl<138
+    },
+    plans: mockPlans,
+    drugs: {
+      resolved_drugs: drugsList.map(d => ({rxcui:'0', name:d, full_name:d, strength:'', route:''})),
+      coverage_details: mockCoverage,
+      generic_suggestions: {}
+    },
+    doctors: { results: mockDoctors },
+    risks: {
+      flags: [
+        fpl<=250 ? '💡 You qualify for CSR cost-sharing reductions on Silver plans.' : '📅 Open enrollment ends January 15.',
+        '⚠️ Backend unavailable — showing estimated results. Real data requires the backend to be running.',
+      ]
+    },
+    recommendation: `## Your Plan Analysis\n\nBased on your profile at **${fpl.toFixed(0)}% FPL**:\n\n### Top Recommendation\n\nBlueCross Silver Select is ranked #1 by true annual cost. After your **$${credit}/month** APTC subsidy your net premium is **$${Math.max(0,342-credit)}/month**.\n\n---\n\n### Key Takeaway\n\nWith your income level, ${fpl<=250 ? 'Silver plans with CSR give you dramatically lower deductibles at no extra cost.' : 'compare deductibles carefully — a lower premium often means higher out-of-pocket risk.'}\n\n*Note: Backend unavailable. These are estimated figures.*`,
+    cache_stats:{hits:0,misses:0,total_calls:0,hit_rate_pct:0,cached_entries:0},
+    memory_used:false,
+  };
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+// Flow started via startFlow in landing cards
 </script>
 </body>
 </html>

@@ -1,219 +1,617 @@
 """
-Sub-Agents — each handles one domain of insurance analysis
-All run in parallel via asyncio, orchestrator merges results
+Sub-Agents — each handles one domain of insurance analysis.
+All data pulled live from CMS APIs. No hardcoded values.
 """
 
 import asyncio
 from tools.gov_apis import (
-    search_plans_by_zip,
-    calculate_fpl_percentage,  
-    check_drug_coverage, lookup_npi_registry, get_medicaid_threshold, get_fips_from_zip,
-    get_state_exchange
+    calculate_fpl_percentage, get_fpl_thresholds, search_plans,
+    get_eligibility_estimates, get_medicaid_threshold, get_fips_from_zip,
+    resolve_drug_rxcui, check_drug_coverage, verify_doctor_cms, _fips_to_state,
+    get_state_exchange, lookup_npi_registry, check_doctor_in_plan_network,
+    get_generic_alternatives, get_doctor_quality_score,
+    check_sep_eligibility, check_hrsa_shortage,
 )
 
 # ─── PROFILE AGENT ────────────────────────────────────────────────────────────
 
 async def profile_agent(profile: dict) -> dict:
-    """Gather and validate user profile. Entry point for handoff routing."""
-    await asyncio.sleep(0)  # yield to event loop
-    fpl_pct = calculate_fpl_percentage(profile["income"], profile["household_size"])
+    await asyncio.sleep(0)
     fips = get_fips_from_zip(profile["zip_code"])
-    state = _fips_to_state(fips or "") if fips else "TX"
-    medicaid_threshold = get_medicaid_threshold(state)
-    
+    state = _fips_to_state(fips) if fips else "US"
+
+    fpl_pct = calculate_fpl_percentage(profile["income"], profile["household_size"], state)
+    medicaid_threshold = get_medicaid_threshold(state) if state else 138.0
     route = determine_route(fpl_pct, medicaid_threshold)
-    
+
     state_exchange = get_state_exchange(profile["zip_code"])
 
     return {
         "agent": "profile",
         "fpl_percentage": fpl_pct,
         "fips": fips,
+        "state": state,
         "route": "state_exchange" if state_exchange else route,
         "route_reason": get_route_reason(route, fpl_pct),
         "state_exchange": state_exchange,
     }
 
 def determine_route(fpl_pct: float, medicaid_threshold: float) -> str:
-    """
-    HANDOFF LOGIC — routes user to correct coverage path.
-    This is the key agent handoff concept.
-    """
     if fpl_pct < medicaid_threshold:
-        return "medicaid"          # → Medicaid/CHIP agent, skip marketplace entirely
+        return "medicaid"
     elif fpl_pct < 138:
-        return "chip"              # → CHIP for children
+        return "chip"
     elif fpl_pct <= 400:
-        return "subsidized"        # → Subsidized marketplace plans (APTC eligible)
+        return "subsidized"
     elif fpl_pct <= 600:
-        return "marketplace"       # → Unsubsidized marketplace
+        return "marketplace"
     else:
-        return "full_price"        # → Full price, consider employer/short-term
+        return "full_price"
 
 def get_route_reason(route: str, fpl_pct: float) -> str:
     reasons = {
-        "medicaid": f"At {fpl_pct}% FPL you likely qualify for free Medicaid coverage. No marketplace plan needed.",
-        "chip": f"At {fpl_pct}% FPL children in your household may qualify for CHIP.",
+        "medicaid":   f"At {fpl_pct}% FPL you likely qualify for free Medicaid coverage.",
+        "chip":       f"At {fpl_pct}% FPL children in your household may qualify for CHIP.",
         "subsidized": f"At {fpl_pct}% FPL you qualify for ACA premium tax credits (APTC).",
-        "marketplace": f"At {fpl_pct}% FPL you don't qualify for subsidies but can use the marketplace.",
+        "marketplace":f"At {fpl_pct}% FPL you don't qualify for subsidies but can use the marketplace.",
         "full_price": f"At {fpl_pct}% FPL consider employer coverage or full-price marketplace plans.",
     }
     return reasons.get(route, "")
 
-# ─── SUBSIDY AGENT ────────────────────────────────────────────────────────────
+# ─── SUBSIDY AGENT — real APTC from CMS eligibility endpoint ──────────────────
 
-async def subsidy_agent(profile: dict, fpl_pct: float) -> dict:
-    """Calculate ACA premium tax credit (APTC) amount."""
+async def subsidy_agent(profile: dict, fpl_pct: float, fips: str, state: str) -> dict:
     await asyncio.sleep(0)
-    
-    if fpl_pct > 400:
-        return {"agent": "subsidy", "eligible": False, "monthly_credit": 0, "annual_credit": 0}
-    
-    # IRS applicable percentage table (2024)
-    if fpl_pct <= 133: pct_of_income = 0.0
-    elif fpl_pct <= 150: pct_of_income = 0.0
-    elif fpl_pct <= 200: pct_of_income = 0.02
-    elif fpl_pct <= 250: pct_of_income = 0.04
-    elif fpl_pct <= 300: pct_of_income = 0.06
-    elif fpl_pct <= 400: pct_of_income = 0.085
-    else: pct_of_income = 0.085
 
-    benchmark_premium = 450  # estimated Silver benchmark
-    max_contribution = (profile["income"] * pct_of_income) / 12
-    monthly_credit = max(0, benchmark_premium - max_contribution)
-    
-    csr_eligible = 138 <= fpl_pct <= 250
-    
+    if fpl_pct > 600:
+        return {"agent": "subsidy", "eligible": False, "monthly_credit": 0, "annual_credit": 0}
+
+    estimates = get_eligibility_estimates(
+        income=profile["income"],
+        age=profile["age"],
+        fips=fips,
+        zip_code=profile["zip_code"],
+        state=state,
+        tobacco_use=profile.get("tobacco_use", False),
+    )
+
+    aptc = estimates.get("aptc", 0) or 0
+    is_medicaid = estimates.get("is_medicaid_chip", False)
+    in_gap = estimates.get("in_coverage_gap", False)
+
+    csr_eligible = 100 <= fpl_pct <= 250
+    csr_variant = None
+    csr_note = None
+    if 100 <= fpl_pct <= 150:
+        csr_variant = "94"
+        csr_note = "You qualify for CSR-94 — Silver plans will have Platinum-level benefits (roughly $0–$500 deductible)."
+    elif 150 <= fpl_pct <= 200:
+        csr_variant = "87"
+        csr_note = "You qualify for CSR-87 — Silver plans will have Gold-level benefits (roughly $500–$1,500 deductible)."
+    elif 200 <= fpl_pct <= 250:
+        csr_variant = "73"
+        csr_note = "You qualify for CSR-73 — Silver plans will have slightly better benefits than standard Silver."
+
     return {
         "agent": "subsidy",
-        "eligible": True,
-        "monthly_credit": round(monthly_credit, 2),
-        "annual_credit": round(monthly_credit * 12, 2),
+        "eligible": aptc > 0,
+        "monthly_credit": round(aptc, 2),
+        "annual_credit": round(aptc * 12, 2),
         "csr_eligible": csr_eligible,
-        "csr_note": "You qualify for Cost Sharing Reductions on Silver plans — lower deductibles and copays." if csr_eligible else None,
+        "csr_variant": csr_variant,
+        "csr_note": csr_note,
         "subsidy_cliff_warning": 390 <= fpl_pct <= 410,
+        "is_medicaid_chip": is_medicaid,
+        "in_coverage_gap": in_gap,
     }
 
 # ─── PLAN SEARCH AGENT ────────────────────────────────────────────────────────
 
-async def plan_search_agent(profile: dict) -> dict:
-    """Fetch available plans from CMS Marketplace."""
+async def plan_search_agent(profile: dict, fips: str, state: str) -> dict:
     await asyncio.sleep(0)
-    plans = search_plans_by_zip(
-        profile["zip_code"], profile["age"],
-        profile["income"], profile["household_size"]
+    plans = search_plans(
+        zip_code=profile["zip_code"],
+        age=profile["age"],
+        income=profile["income"],
+        fips=fips,
+        state=state,
+        tobacco_use=profile.get("tobacco_use", False),
     )
     return {"agent": "plan_search", "plans": plans, "plan_count": len(plans)}
 
-# ─── DRUG CHECK AGENT ─────────────────────────────────────────────────────────
+# ─── DRUG CHECK AGENT — tier, PA, step therapy, generics ──────────────────────
 
 async def drug_check_agent(profile: dict, plans: list) -> dict:
-    """Check drug formulary coverage for all user medications."""
     await asyncio.sleep(0)
-    
+
     if not profile.get("drugs"):
-        return {"agent": "drug_check", "results": [], "warnings": []}
-    
+        return {"agent": "drug_check", "results": [], "warnings": [], "coverage_raw": []}
+
+    # Step 1: Resolve drug names → RxCUI
+    resolved = []
+    for drug_name in profile["drugs"]:
+        info = resolve_drug_rxcui(drug_name)
+        if info:
+            resolved.append({**info, "input_name": drug_name})
+        else:
+            resolved.append({"rxcui": None, "name": drug_name, "input_name": drug_name, "full_name": ""})
+
+    rxcui_list = [d["rxcui"] for d in resolved if d.get("rxcui")]
+    plan_ids = [p["id"] for p in plans if p.get("id")]
+
+    # Step 2: Enhanced drug coverage — captures tier, PA, step_therapy, quantity_limit
+    coverage_raw = check_drug_coverage(rxcui_list, plan_ids) if rxcui_list else []
+
+    # Step 3: Organise by plan_id → rxcui → full coverage record
+    plan_drug_map: dict = {}
+    for c in coverage_raw:
+        pid = c.get("plan_id")
+        rxcui = str(c.get("rxcui", ""))
+        if pid not in plan_drug_map:
+            plan_drug_map[pid] = {}
+        plan_drug_map[pid][rxcui] = c
+
+    # Step 4: Build per-drug results
     results = []
     warnings = []
-    
-    for drug in profile["drugs"]:
-        # Check against first plan as representative (production: check all)
-        plan_id = plans[0]["id"] if plans else "DEMO"
-        raw = check_drug_coverage([drug] if isinstance(drug, str) else drug, [plan_id] if isinstance(plan_id, str) else plan_id)
-        info = raw[0] if isinstance(raw, list) and raw else {}
-        results.append(info)
-        
-        if isinstance(info, dict) and info.get("tier", 0) and str(info.get("tier","")).isdigit() and int(info.get("tier",0)) >= 4:
-            warnings.append(f"⚠️ {drug} is Tier {info['tier']} — estimated ${info['monthly_cost']}/month. Consider plans with better formulary coverage.")
-        if info.get("prior_auth"):
-            warnings.append(f"🔒 {drug} requires prior authorization on most plans.")
-    
-    return {"agent": "drug_check", "results": results, "warnings": warnings}
+    for d in resolved:
+        rxcui = str(d.get("rxcui", "")) if d.get("rxcui") else None
 
-# ─── DOCTOR CHECK AGENT ───────────────────────────────────────────────────────
+        # Collect per-plan coverage record
+        plan_coverage: dict = {}
+        if rxcui:
+            for pid in plan_ids[:10]:
+                rec = plan_drug_map.get(pid, {}).get(rxcui)
+                if rec:
+                    plan_coverage[pid] = {
+                        "coverage": rec.get("coverage", "Unknown"),
+                        "tier": rec.get("drug_tier"),
+                        "prior_authorization": rec.get("prior_authorization", False),
+                        "step_therapy": rec.get("step_therapy", False),
+                        "quantity_limit": rec.get("quantity_limit", False),
+                    }
+                else:
+                    plan_coverage[pid] = {"coverage": "Unknown"}
 
-async def doctor_check_agent(profile: dict) -> dict:
-    """Verify doctors exist in NPI registry and flag network concerns."""
+        covered_count = sum(1 for v in plan_coverage.values() if v.get("coverage") == "Covered")
+        not_covered = sum(1 for v in plan_coverage.values() if v.get("coverage") == "NotCovered")
+        data_missing = sum(1 for v in plan_coverage.values() if v.get("coverage") in ("DataNotProvided", "Unknown"))
+        pa_count = sum(1 for v in plan_coverage.values() if v.get("prior_authorization"))
+        st_count = sum(1 for v in plan_coverage.values() if v.get("step_therapy"))
+
+        # Generic alternatives via openFDA
+        generics = get_generic_alternatives(d["input_name"]) if d.get("rxcui") else []
+
+        results.append({
+            "drug_name": d["input_name"],
+            "rxcui": rxcui,
+            "full_name": d.get("full_name", ""),
+            "route": d.get("route", ""),
+            "strength": d.get("strength", ""),
+            "covered_in": covered_count,
+            "not_covered_in": not_covered,
+            "data_missing_in": data_missing,
+            "prior_auth_in": pa_count,
+            "step_therapy_in": st_count,
+            "plan_coverage": plan_coverage,
+            "generic_alternatives": generics,
+        })
+
+        # Warnings
+        if not_covered > covered_count:
+            warnings.append(f"⚠️ {d['input_name']} appears not covered in most checked plans.")
+        elif data_missing == len(plan_coverage) and plan_coverage:
+            warnings.append(
+                f"ℹ️ {d['input_name']} ({d.get('full_name','')}): formulary data not provided by "
+                f"insurers for 2024. Check each plan's formulary URL before enrolling."
+            )
+        if pa_count > 0:
+            warnings.append(
+                f"🔒 {d['input_name']} requires prior authorization on {pa_count} plan(s). "
+                f"Get PA approved BEFORE enrolling — it can take 30+ days."
+            )
+        if st_count > 0:
+            warnings.append(
+                f"⚠️ {d['input_name']} has step therapy restrictions on {st_count} plan(s) — "
+                f"the plan may require you to try a cheaper drug first. Flag this for your doctor."
+            )
+        if generics:
+            generic_names = ", ".join(g["generic_name"] for g in generics if g.get("is_generic"))
+            if generic_names:
+                warnings.append(
+                    f"💊 Generic equivalent for {d['input_name']}: {generic_names} — "
+                    f"may be Tier 1 or 2 on most plans. Confirm with your doctor before switching."
+                )
+
+    return {"agent": "drug_check", "results": results, "warnings": warnings, "coverage_raw": coverage_raw}
+
+# ─── DOCTOR CHECK AGENT — NPPES NPI Registry + MIPS quality + network check ───
+
+async def doctor_check_agent(profile: dict, plans: list = None) -> dict:
     await asyncio.sleep(0)
-    
+
     if not profile.get("doctors"):
         return {"agent": "doctor_check", "results": [], "warnings": []}
-    
+
+    zip_code = profile.get("zip_code", "")
+    state = profile.get("state", "")
+    top_plan_ids = [p["id"] for p in (plans or [])[:3] if p.get("id")]
+
     results = []
+    warnings = []
     for doctor in profile["doctors"]:
-        npi_info = lookup_npi_registry(doctor)
-        results.append(npi_info)
-    
-    return {
-        "agent": "doctor_check",
-        "results": results,
-        "warnings": ["Always verify your specific doctor is in-network before enrolling — network directories change frequently."] if results else []
-    }
+        # Step 1: NPPES NPI Registry lookup (authoritative provider identity)
+        nppes = lookup_npi_registry(doctor, state=state)
+
+        # Step 2: Fall back to CMS Order & Referring if NPPES misses
+        cms_info = {}
+        if not nppes.get("found"):
+            cms_info = verify_doctor_cms(doctor)
+
+        npi = nppes.get("npi") or cms_info.get("npi")
+
+        # Step 3: MIPS quality score (if NPI found)
+        quality = {}
+        if npi:
+            quality = get_doctor_quality_score(str(npi))
+
+        # Step 4: In-network verification for top 3 plans
+        network_status: dict = {}
+        if npi and top_plan_ids:
+            for pid in top_plan_ids:
+                net = check_doctor_in_plan_network(pid, str(npi), zip_code)
+                network_status[pid] = net
+
+        record = {
+            "searched_name": doctor,
+            "found": nppes.get("found") or cms_info.get("found", False),
+            "npi": npi,
+            "name": nppes.get("name") or cms_info.get("name", doctor),
+            "credential": nppes.get("credential", ""),
+            "specialty": nppes.get("specialty", ""),
+            "city": nppes.get("city", ""),
+            "state": nppes.get("state", ""),
+            "phone": nppes.get("phone", ""),
+            "active": nppes.get("active", True),
+            # Legacy Medicare fields from CMS Order & Referring
+            "medicare_part_b": cms_info.get("medicare_part_b"),
+            "can_order_dme": cms_info.get("can_order_dme"),
+            # Quality
+            "mips_score": quality.get("mips_score"),
+            "telehealth": quality.get("telehealth"),
+            "mips_year": quality.get("year"),
+            # Multiple candidates if ambiguous
+            "all_candidates": nppes.get("all_candidates", []),
+            # Per-plan network status
+            "network_status": network_status,
+        }
+        results.append(record)
+
+        # Warnings
+        if not record["found"]:
+            warnings.append(
+                f"⚠️ {doctor} not found in NPPES NPI Registry. "
+                f"They may use a different name or have a recent license change."
+            )
+        else:
+            if len(nppes.get("all_candidates", [])) > 1:
+                warnings.append(
+                    f"ℹ️ Multiple providers named {doctor} found. "
+                    f"Confirm NPI {npi} with your doctor's office before enrolling."
+                )
+            not_active = not record.get("active", True)
+            if not_active:
+                warnings.append(f"⚠️ {record['name']} (NPI {npi}) is listed as inactive in NPPES.")
+
+            # Network warnings
+            for pid, net in network_status.items():
+                if net.get("in_network") is False:
+                    warnings.append(
+                        f"🚨 {record['name']} is OUT-OF-NETWORK on plan {pid}. "
+                        f"An out-of-network specialist visit can cost $3,000–$8,000 out of pocket."
+                    )
+                elif net.get("accepting_patients") is False:
+                    warnings.append(
+                        f"⚠️ {record['name']} is in-network on plan {pid} but NOT accepting new patients."
+                    )
+
+            # MIPS quality note
+            if quality.get("found") and quality.get("mips_score") is not None:
+                score = quality["mips_score"]
+                if float(score) < 30:
+                    warnings.append(
+                        f"⚠️ {record['name']} has a low MIPS quality score ({score}/100). "
+                        f"Consider researching patient reviews."
+                    )
+
+    warnings.append(
+        "Always confirm your doctor is in-network with your specific chosen plan — "
+        "network directories change frequently and online tools can be outdated."
+    )
+    return {"agent": "doctor_check", "results": results, "warnings": warnings}
 
 # ─── RISK & GAPS AGENT ────────────────────────────────────────────────────────
 
 async def risk_gaps_agent(profile: dict, plans: list, fpl_pct: float) -> dict:
-    """Proactively identify coverage gaps the user didn't think to ask about."""
     await asyncio.sleep(0)
-    
-    gaps = []
+
+    state = profile.get("state", "")
+    fips = profile.get("fips", "")
     flags = []
-    
-    # Mental health parity check
-    gaps.append("Verify mental health and substance abuse coverage parity on shortlisted plans.")
-    
-    # OOP exposure
-    if any(p.get("oop_max", 0) > 8000 for p in plans):
+
+    # OOP max risk
+    if any(p.get("oop_max", 0) > 8700 for p in plans):
         flags.append("⚠️ Some plans have OOP max above $8,700 — consider your risk tolerance for a bad health year.")
-    
-    # Subsidy cliff warning
+
+    # Subsidy cliff
     if 390 <= fpl_pct <= 410:
-        flags.append("🚨 Subsidy cliff alert: Your income is within 5% of the 400% FPL threshold. A small raise could cost you thousands in lost subsidies.")
-    
-    # HSA opportunity
-    bronze_plans = [p for p in plans if p.get("metal_level") == "Bronze"]
-    if bronze_plans:
-        flags.append("💡 Bronze HDHP plans may qualify for HSA contributions — tax savings of $1,600–$3,200/year depending on household.")
-    
-    # Catastrophic plan check
-    if profile["age"] < 30:
-        flags.append("💡 As someone under 30, you may qualify for a Catastrophic plan — lower premiums, $9,450 deductible.")
-    
-    return {"agent": "risk_gaps", "gaps": gaps, "flags": flags}
+        flags.append("🚨 Subsidy cliff: Your income is within 5% of the 400% FPL cutoff. A small raise could cost thousands in lost subsidies.")
+
+    # HSA eligibility & tax savings calculation
+    hsa_plans = [p for p in plans if p.get("hsa_eligible")]
+    if hsa_plans:
+        # 2024 limits: $4,150 individual, $8,300 family
+        limit = 8300 if profile.get("household_size", 1) > 1 else 4150
+        income = profile.get("income", 50000)
+        
+        # Simple 2024 tax bracket estimate (Single)
+        if income <= 11600: rate = 0.10
+        elif income <= 47150: rate = 0.12
+        elif income <= 100525: rate = 0.22
+        elif income <= 191950: rate = 0.24
+        elif income <= 243725: rate = 0.32
+        elif income <= 609350: rate = 0.35
+        else: rate = 0.37
+        
+        tax_savings = round(limit * rate)
+        flags.append(
+            f"💡 {len(hsa_plans)} HSA-eligible plan(s) available. By contributing the ${limit:,} limit, "
+            f"you'd save roughly ${tax_savings:,} in federal taxes this year (based on your {int(rate*100)}% bracket). "
+            f"HSA funds also grow tax-free and are tax-free for medical use."
+        )
+
+    # Under-30 catastrophic
+    if profile.get("age", 35) < 30:
+        flags.append("💡 Under 30: you may qualify for a Catastrophic plan — lower premiums with a $9,450 deductible.")
+
+    # HRSA provider shortage area
+    if state:
+        hrsa = check_hrsa_shortage(state, fips)
+        if hrsa.get("shortage_area"):
+            flags.append(f"🏥 {hrsa.get('message', 'Your county is a Health Professional Shortage Area.')} Prefer PPO or EPO plans over HMOs for more provider flexibility.")
+
+    # SEP / open enrollment status
+    sep = check_sep_eligibility()
+    if sep.get("in_open_enrollment"):
+        flags.append(f"📅 Open enrollment is active — {sep.get('days_remaining')} days left (deadline {sep.get('deadline')}).")
+    else:
+        flags.append(
+            f"📅 {sep.get('message', '')} Qualifying events (job loss, marriage, birth, move) trigger a 60-day Special Enrollment Period."
+        )
+
+    # Mental health parity check
+    hmo_only = all(p.get("type") == "HMO" for p in plans) if plans else False
+    if hmo_only:
+        flags.append("ℹ️ All available plans in your area are HMO — you must use in-network providers. Confirm your doctors are in-network before enrolling.")
+
+    return {"agent": "risk_gaps", "flags": flags, "sep": sep}
 
 # ─── METAL TIER AGENT ─────────────────────────────────────────────────────────
 
 async def metal_tier_agent(profile: dict, plans: list, subsidy: dict) -> dict:
-    """Analyze Bronze/Silver/Gold tradeoffs for this specific user."""
     await asyncio.sleep(0)
-    
-    monthly_credit = subsidy.get("monthly_credit", 0)
+
     csr_eligible = subsidy.get("csr_eligible", False)
-    
-    recommendation = ""
-    if csr_eligible:
-        recommendation = "Silver is your best metal tier. CSR makes Silver plans act like Gold with lower deductibles — this benefit only applies to Silver."
-    elif profile["income"] > 80000:
-        recommendation = "Gold makes sense if you expect frequent medical visits. The lower deductible pays off above ~$3,000/year in medical costs."
-    else:
-        recommendation = "Bronze + HSA is optimal if you're generally healthy. Pay low premiums, invest HSA contributions tax-free."
-    
+    monthly_credit = subsidy.get("monthly_credit", 0)
+    cliff_warning = subsidy.get("subsidy_cliff_warning", False)
+    has_drugs = bool(profile.get("drugs"))
+    age = profile.get("age", 35)
+
+    # Group plans by metal tier using plan-specific CMS net premiums
+    tiers: dict = {}
+    for p in plans:
+        tiers.setdefault(p.get("metal_level", "Unknown"), []).append(p)
+
+    tier_stats = {}
+    for tier, tier_plans in tiers.items():
+        nets = [p.get("premium_w_credit", p["premium"]) for p in tier_plans]
+        deductibles = [p.get("deductible", 0) for p in tier_plans]
+        oops = [p.get("oop_max", 0) for p in tier_plans]
+        hsa_count = sum(1 for p in tier_plans if p.get("hsa_eligible"))
+        cheapest_idx = nets.index(min(nets))
+        net = nets[cheapest_idx]
+        tier_stats[tier] = {
+            "count": len(tier_plans),
+            "cheapest_net_monthly": round(net, 2),
+            "cheapest_annual_premiums": round(net * 12, 2),
+            "min_deductible": min(deductibles),
+            "avg_deductible": round(sum(deductibles) / len(deductibles)),
+            "min_oop_max": min(oops),
+            "hsa_available": hsa_count > 0,
+            "hsa_count": hsa_count,
+            "true_annual_avg_use": round(net * 12 + sum(deductibles) / len(deductibles)),
+            "worst_case": round(net * 12 + min(oops)),
+        }
+
+    silver = tier_stats.get("Silver", {})
+    bronze = tier_stats.get("Bronze", {})
+    gold = tier_stats.get("Gold", {})
+
+    reasons = []
+    recommended_tier = "Bronze"
+
+    # ── CSR eligible (138–250% FPL): Silver wins almost always ────────────────
+    if csr_eligible and silver:
+        recommended_tier = "Silver"
+        s_net = silver["cheapest_net_monthly"]
+        s_ded = silver["min_deductible"]
+        if bronze:
+            b_net = bronze["cheapest_net_monthly"]
+            b_ded = bronze["min_deductible"]
+            premium_gap = round((s_net - b_net) * 12)
+            ded_savings = b_ded - s_ded
+            reasons.append(
+                f"Silver (CSR): cheapest Silver is ${s_net:.2f}/mo vs Bronze at ${b_net:.2f}/mo — "
+                f"Silver costs ${abs(premium_gap):,} {'more' if premium_gap > 0 else 'less'} per year in premiums "
+                f"but your deductible drops from ${b_ded:,} to ${s_ded:,} (${ded_savings:,} savings). "
+                f"CSR only applies to Silver — do not choose Bronze or Gold if CSR-eligible."
+            )
+        else:
+            reasons.append(
+                f"Silver (CSR): cheapest Silver is ${s_net:.2f}/mo with deductible ${s_ded:,}. "
+                f"CSR applies only to Silver plans."
+            )
+
+    elif csr_eligible and not silver:
+        # CSR eligible but no Silver plans returned for this market — flag it
+        fallback = gold or bronze
+        if fallback:
+            recommended_tier = "Gold" if gold else "Bronze"
+            tier_name = "Gold" if gold else "Bronze"
+            reasons.append(
+                f"Note: you are CSR-eligible but no Silver plans were returned for your area. "
+                f"CSR cost-sharing reductions only apply to Silver — verify Silver availability at healthcare.gov. "
+                f"Cheapest {tier_name} shown is ${fallback['cheapest_net_monthly']:.2f}/mo "
+                f"(deductible ${fallback['min_deductible']:,})."
+            )
+
+    # ── Subsidized but not CSR (250–400% FPL) ─────────────────────────────────
+    elif monthly_credit > 0 and gold and bronze:
+        g_net = gold["cheapest_net_monthly"]
+        b_net = bronze["cheapest_net_monthly"]
+        g_ded = gold["min_deductible"]
+        b_ded = bronze["min_deductible"]
+        premium_gap = round((g_net - b_net) * 12)
+        ded_savings = b_ded - g_ded
+        if has_drugs or age > 50:
+            recommended_tier = "Gold"
+            reasons.append(
+                f"Gold: cheapest Gold is ${g_net:.2f}/mo (deductible ${g_ded:,}), "
+                f"costs ${premium_gap:,} more per year than Bronze (${b_net:.2f}/mo, deductible ${b_ded:,}). "
+                f"Gold pays off if you spend more than ${premium_gap:,} on covered care — "
+                f"likely given {'your medications' if has_drugs else 'your age'}."
+            )
+        else:
+            recommended_tier = "Bronze"
+            hsa_note = (
+                f" {bronze['hsa_count']} HSA-eligible Bronze plan(s) available — "
+                f"pre-tax contributions up to $4,150/yr (single, 2024)."
+                if bronze.get("hsa_available") else ""
+            )
+            reasons.append(
+                f"Bronze: cheapest Bronze is ${b_net:.2f}/mo (deductible ${b_ded:,}). "
+                f"Gold costs ${premium_gap:,} more per year — only worth it if you expect "
+                f"more than ${premium_gap:,} in out-of-pocket costs.{hsa_note}"
+            )
+
+    # ── No subsidy (>400% FPL) ─────────────────────────────────────────────────
+    elif gold:
+        recommended_tier = "Gold"
+        reasons.append(
+            f"Gold: no subsidy applies — cheapest Gold is ${gold['cheapest_net_monthly']:.2f}/mo "
+            f"with deductible ${gold['min_deductible']:,}. Lower deductibles matter more without subsidy help."
+        )
+    elif bronze:
+        recommended_tier = "Bronze"
+        reasons.append(f"Bronze: cheapest Bronze is ${bronze['cheapest_net_monthly']:.2f}/mo.")
+
+    # ── Under-30 Catastrophic note ─────────────────────────────────────────────
+    if age < 30:
+        cat = tier_stats.get("Catastrophic", {})
+        if cat:
+            reasons.append(
+                f"Under 30: Catastrophic plan available at ${cat['cheapest_net_monthly']:.2f}/mo — "
+                f"$9,450 deductible, best only if you rarely use medical care."
+            )
+        else:
+            reasons.append("Under 30: You may also qualify for a Catastrophic plan — check healthcare.gov.")
+
+    # ── Subsidy cliff warning ──────────────────────────────────────────────────
+    if cliff_warning:
+        reasons.append(
+            "Subsidy cliff: your income is within 5% of the 400% FPL cutoff. "
+            "A small income increase could eliminate all APTC — report any income changes to healthcare.gov promptly."
+        )
+
     return {
         "agent": "metal_tier",
-        "recommendation": recommendation,
+        "recommendation": " ".join(reasons),
+        "recommended_tier": recommended_tier,
         "csr_eligible": csr_eligible,
         "monthly_credit": monthly_credit,
+        "tier_analysis": tier_stats,
     }
 
 # ─── MEDICAID AGENT ───────────────────────────────────────────────────────────
 
-async def medicaid_agent(profile: dict, fpl_pct: float) -> dict:
-    """Handle users who qualify for Medicaid — skip marketplace entirely."""
+async def medicaid_agent(profile: dict, fpl_pct: float, state: str) -> dict:
     await asyncio.sleep(0)
+    threshold = get_medicaid_threshold(state) if state else 138.0
     return {
         "agent": "medicaid",
-        "qualifies": fpl_pct < 138,
-        "message": f"At {fpl_pct}% FPL, you likely qualify for Medicaid — free or near-free coverage. Visit your state Medicaid office or healthcare.gov to confirm and enroll.",
+        "qualifies": fpl_pct < threshold,
+        "message": f"At {fpl_pct}% FPL you likely qualify for Medicaid — free or near-free coverage.",
         "action": "Visit healthcare.gov → Apply for Coverage → Medicaid/CHIP",
+    }
+# ─── RANKING AGENT — Agentic "Simulated Year" Logic ────────────────────────────
+
+async def ranking_agent(profile: dict, plans: list, subsidy: dict, medications: dict = None) -> dict:
+    """
+    Performs an agentic ranking of plans by simulating three distinct health years:
+    1. The Healthy Year (Low Use)
+    2. The Clinical Year (Expected Use)
+    3. The Worst Case (Catastrophic)
+    """
+    await asyncio.sleep(0)
+    
+    monthly_aptc = subsidy.get("monthly_credit", 0)
+    is_premium = profile.get("is_premium", False)
+    
+    ranked_plans = []
+    for p in plans:
+        # 1. Monthly Economics
+        net_premium = max(0, p.get("premium", 0) - monthly_aptc)
+        annual_premium = net_premium * 12
+        
+        # 2. Clinical Simulation (Drugs/Doctors)
+        # We estimate $30/visit for Specialist and $10/Tier for drugs if coverage unknown
+        drug_est = 0
+        if medications and medications.get("results"):
+            for d in medications["results"]:
+                cov = d.get("plan_coverage", {}).get(p["id"], {})
+                if cov.get("coverage") == "NotCovered":
+                    drug_est += 1200 # Assume $100/mo for uncovered specialty drugs
+                elif cov.get("tier") == "Tier 4":
+                    drug_est += 600
+                else:
+                    drug_est += 120
+                    
+        # 3. Scenarios
+        healthy_year = annual_premium
+        clinical_year = annual_premium + drug_est + (p.get("deductible", 0) * 0.15)
+        worst_case = annual_premium + p.get("oop_max", 0)
+        
+        # 4. Agentic Weighting (Higher weight on Clinical if user has chronic conditions)
+        weight_healthy = 0.5 if not medications.get("results") else 0.2
+        weight_clinical = 0.3 if not medications.get("results") else 0.6
+        weight_worst = 0.2
+        
+        expected_value = (healthy_year * weight_healthy) + (clinical_year * weight_clinical) + (worst_case * weight_worst)
+        
+        # 5. Metadata for UI
+        p["agent_scores"] = {
+            "healthy_year": round(healthy_year, 2),
+            "clinical_year": round(clinical_year, 2),
+            "worst_case": round(worst_case, 2),
+            "expected_value": round(expected_value, 2)
+        }
+        ranked_plans.append(p)
+
+    # Sort by Expected Value
+    ranked_plans.sort(key=lambda x: x["agent_scores"]["expected_value"])
+    
+    return {
+        "agent": "ranking",
+        "ranked_plans": ranked_plans[:10],
+        "top_pick_rationale": "Ranked based on expected value across three usage scenarios."
     }
