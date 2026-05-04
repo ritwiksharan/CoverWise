@@ -209,6 +209,22 @@ def get_fips_from_zip(zip_code: str) -> Optional[str]:
         except Exception:
             pass
 
+        # Final fallback: CMS counties API (works for any valid US ZIP)
+        try:
+            import requests as _req
+            r = _req.get(
+                f"https://marketplace.api.healthcare.gov/api/v1/counties/by/zip/{zip_code}",
+                params={"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {},
+                timeout=10
+            )
+            counties = r.json().get("counties", [])
+            if counties:
+                fips = counties[0].get("fips")
+                print(f"CMS API FIPS for {zip_code}: {fips}")
+                return fips
+        except Exception as e:
+            print(f"CMS counties API error: {e}")
+
         print(f"FIPS not found for ZIP {zip_code}")
         return None
 
