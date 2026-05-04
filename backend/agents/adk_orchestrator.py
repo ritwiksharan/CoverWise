@@ -899,7 +899,7 @@ async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = Fals
             ),
         )
         response = await asyncio.to_thread(model.generate_content, synthesis_prompt)
-        return response.text.replace("**", "")
+        return response.text.replace("*", "")
     except Exception as e:
         traceback.print_exc()
         return f"**Synthesis error**: {e}\n\nRaw data has been returned in the structured fields."
