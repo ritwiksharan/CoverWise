@@ -37,6 +37,7 @@ STATE_EXCHANGES = {
     "DC": {"name": "DC Health Link", "url": "https://dchealthlink.com"},
 }
 
+
 # ZIP code prefix to state mapping (first 3 digits)
 ZIP_STATE_MAP = {
     "100": "NY", "101": "NY", "102": "NY", "103": "NY", "104": "NY",
@@ -108,6 +109,8 @@ ZIP_STATE_MAP = {
 }
 
 # Known FIPS codes for common ZIPs - avoids extra API call
+
+# Known FIPS codes for common ZIPs - avoids extra API call
 KNOWN_FIPS = {
     "77001": "48201", "77002": "48201", "77003": "48201", "77004": "48201",
     "77005": "48201", "77006": "48201", "77007": "48201", "77008": "48201",
@@ -166,18 +169,7 @@ def get_state_from_zip(zip_code: str) -> Optional[str]:
 
 
 def get_state_exchange(zip_code: str) -> Optional[dict]:
-    state = get_state_from_zip(zip_code)
-    if state and state in STATE_EXCHANGES:
-        exchange = STATE_EXCHANGES[state]
-        return {
-            "state": state,
-            "exchange_name": exchange["name"],
-            "exchange_url": exchange["url"],
-            "message": (
-                f"Your state ({state}) runs its own health exchange. "
-                f"Visit {exchange['name']} at {exchange['url']} to see plans available in your area."
-            ),
-        }
+    return None
     return None
 
 
@@ -345,8 +337,11 @@ def _normalize_plan(p: dict) -> dict:
     issuer = p.get("issuer", {})
     issuer_name = issuer.get("name", "") if isinstance(issuer, dict) else str(issuer)
 
-    networks = p.get("network", [])
-    network_url = networks[0].get("network_url", "") if networks else ""
+    # network_url lives at top level in plan-detail responses; inside network[] in search
+    network_url = p.get("network_url") or ""
+    if not network_url:
+        networks = p.get("network") or []
+        network_url = networks[0].get("network_url", "") if networks else ""
 
     return {
         "id": p.get("id", ""),
@@ -440,8 +435,12 @@ def resolve_drug_rxcui(drug_name: str) -> Optional[dict]:
     return cached_call("rxnorm_drug_v2", {"drug": drug_name.lower()}, fetch)
 
 
-def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024) -> list:
-    """Check drug coverage — captures tier, prior_authorization, step_therapy, quantity_limit."""
+def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024,
+                        drug_names: Optional[list] = None) -> list:
+    """
+    Check drug coverage from CMS API; falls back to RAG formulary store when
+    the API returns DataNotProvided (common for many state plans).
+    """
     if not rxcui_list or not plan_ids:
         return []
 
@@ -472,8 +471,61 @@ def check_drug_coverage(rxcui_list: list, plan_ids: list, year: int = 2024) -> l
         except Exception as e:
             print(f"Drug coverage check error: {e}")
             return []
+
     key = {"rxcuis": sorted(rxcui_list), "planids": sorted(plan_ids[:5]), "year": year}
-    return cached_call("formulary", key, fetch)
+    results = cached_call("formulary", key, fetch)
+
+    # Fall back to RAG store for any plan where all drugs returned DataNotProvided
+    try:
+        plans_missing = {
+            pid for pid in plan_ids
+            if all(
+                r.get("coverage") == "DataNotProvided"
+                for r in results if r.get("plan_id") == pid
+            )
+        }
+        if plans_missing:
+            from rag.formulary_store import lookup_drug_coverage, seed_issuers_from_plan_ids
+            seed_issuers_from_plan_ids(list(plans_missing), blocking=False)
+            names = drug_names or []
+            # Build map: queried_rxcui → RAG result (normalise rxcui to queried value
+            # so the orchestrator can match by rxcui)
+            rag_replacements: dict[tuple, dict] = {}
+            for i, queried_rxcui in enumerate(rxcui_list):
+                name = names[i] if i < len(names) else ""
+                rag_hits = lookup_drug_coverage(name, str(queried_rxcui), list(plans_missing))
+                for row in rag_hits:
+                    # Use the original queried plan_ids rather than the proxy plan
+                    target_plan_ids = (
+                        row.get("original_plan_ids") or [row["plan_id"]]
+                        if row.get("note") else [row["plan_id"]]
+                    )
+                    for tpid in target_plan_ids:
+                        rag_replacements[(str(queried_rxcui), tpid)] = {
+                            **row,
+                            "rxcui": str(queried_rxcui),   # normalise to queried RxCUI
+                            "plan_id": tpid,
+                        }
+
+            if rag_replacements:
+                updated = []
+                replaced_keys: set[tuple] = set()
+                for r in results:
+                    k = (str(r.get("rxcui")), r.get("plan_id"))
+                    if k in rag_replacements:
+                        updated.append(rag_replacements[k])
+                        replaced_keys.add(k)
+                    else:
+                        updated.append(r)
+                # Add RAG results for combos not present in original CMS response
+                for k, v in rag_replacements.items():
+                    if k not in replaced_keys and k not in {(str(r.get("rxcui")), r.get("plan_id")) for r in updated}:
+                        updated.append(v)
+                results = updated
+    except Exception as e:
+        print(f"[formulary] RAG fallback error: {e}")
+
+    return results
 
 
 # ---------- DOCTOR — CMS Order & Referring ----------
@@ -519,6 +571,57 @@ def verify_doctor_cms(doctor_name: str) -> dict:
 # ─── NPPES NPI REGISTRY — proper provider identity lookup ────────────────────
 NPPES_API = "https://npiregistry.cms.hhs.gov/api/"
 
+# ─── CONDITION → SPECIALTY TAXONOMY MAP ──────────────────────────────────────
+# Maps keywords in user's condition query to NPPES taxonomy description,
+# a human-readable specialty label, and the CMS benefit service type for copay lookup.
+CONDITION_SPECIALTY_MAP = [
+    # Cardiovascular
+    {"keywords": ["heart","cardiac","cardio","chest pain","hypertension","blood pressure","arrhythmia","coronary","atrial","palpitation"],
+     "taxonomy_desc": "Cardiovascular Disease", "specialty": "Cardiologist", "benefit_type": "Specialist Visit"},
+    # Endocrine / Diabetes
+    {"keywords": ["diabetes","diabetic","insulin","a1c","thyroid","endocrine","hormone","adrenal","thyroid"],
+     "taxonomy_desc": "Endocrinology", "specialty": "Endocrinologist", "benefit_type": "Specialist Visit"},
+    # Oncology / Cancer
+    {"keywords": ["cancer","tumor","oncology","chemotherapy","chemo","radiation","lymphoma","leukemia","melanoma","biopsy"],
+     "taxonomy_desc": "Hematology & Oncology", "specialty": "Oncologist", "benefit_type": "Specialist Visit"},
+    # Orthopedics
+    {"keywords": ["back pain","spine","joint","knee","hip","shoulder","fracture","bone","orthopedic","ortho","sports injury","tendon","ligament"],
+     "taxonomy_desc": "Orthopaedic Surgery", "specialty": "Orthopedic Surgeon", "benefit_type": "Specialist Visit"},
+    # Mental Health / Psychiatry
+    {"keywords": ["mental health","depression","anxiety","ptsd","bipolar","schizophrenia","psychiatry","psychiatric","mood","panic","ocd","adhd","therapy","therapist"],
+     "taxonomy_desc": "Psychiatry", "specialty": "Psychiatrist", "benefit_type": "Mental Health"},
+    # Neurology
+    {"keywords": ["neuro","migraine","seizure","epilepsy","parkinson","alzheimer","ms","multiple sclerosis","stroke","numbness","tremor","neuropathy"],
+     "taxonomy_desc": "Neurology", "specialty": "Neurologist", "benefit_type": "Specialist Visit"},
+    # Gastroenterology
+    {"keywords": ["stomach","gut","ibs","crohn","colitis","colon","gastro","ulcer","acid reflux","gerd","liver","hepatitis","gallbladder"],
+     "taxonomy_desc": "Gastroenterology", "specialty": "Gastroenterologist", "benefit_type": "Specialist Visit"},
+    # Pulmonology
+    {"keywords": ["lung","asthma","copd","breathing","pulmonary","respiratory","bronchitis","pneumonia","sleep apnea"],
+     "taxonomy_desc": "Pulmonary Disease", "specialty": "Pulmonologist", "benefit_type": "Specialist Visit"},
+    # Dermatology
+    {"keywords": ["skin","rash","acne","eczema","psoriasis","dermatology","mole","lesion","hives","hair loss"],
+     "taxonomy_desc": "Dermatology", "specialty": "Dermatologist", "benefit_type": "Specialist Visit"},
+    # OB/GYN
+    {"keywords": ["pregnancy","prenatal","gynecology","women","obgyn","ob/gyn","uterus","ovary","menopause","fertility"],
+     "taxonomy_desc": "Obstetrics & Gynecology", "specialty": "OB/GYN", "benefit_type": "Specialist Visit"},
+    # Urology
+    {"keywords": ["kidney","bladder","prostate","urology","urinary","erectile","incontinence"],
+     "taxonomy_desc": "Urology", "specialty": "Urologist", "benefit_type": "Specialist Visit"},
+    # Rheumatology
+    {"keywords": ["arthritis","rheumatoid","lupus","fibromyalgia","gout","autoimmune","rheumatology","joint pain"],
+     "taxonomy_desc": "Rheumatology", "specialty": "Rheumatologist", "benefit_type": "Specialist Visit"},
+    # Ophthalmology
+    {"keywords": ["eye","vision","glaucoma","cataract","retina","ophthalmology","optic","macular"],
+     "taxonomy_desc": "Ophthalmology", "specialty": "Ophthalmologist", "benefit_type": "Vision"},
+    # Allergy/Immunology
+    {"keywords": ["allergy","allergies","immunology","anaphylaxis","food allergy","asthma allergy"],
+     "taxonomy_desc": "Allergy & Immunology", "specialty": "Allergist", "benefit_type": "Specialist Visit"},
+    # General Internal Medicine (fallback)
+    {"keywords": ["internal medicine","general","primary care","checkup","physical","annual","preventive"],
+     "taxonomy_desc": "Internal Medicine", "specialty": "Internist", "benefit_type": "Primary Care Visit"},
+]
+
 def lookup_npi_registry(doctor_name: str, city: str = "", state: str = "") -> dict:
     """Look up a provider via the NPPES NPI Registry — returns NPI, specialty, address, phone."""
     clean = doctor_name.replace("Dr.", "").replace("Dr ", "").strip()
@@ -542,7 +645,13 @@ def lookup_npi_registry(doctor_name: str, city: str = "", state: str = "") -> di
             if not results:
                 return {"found": False, "searched_name": doctor_name}
 
-            match = results[0]
+            # Pick the result whose last name actually matches before falling back to [0]
+            last_upper = last.upper()
+            match = next(
+                (res for res in results
+                 if res.get("basic", {}).get("last_name", "").upper() == last_upper),
+                results[0],
+            )
             basic = match.get("basic", {})
             taxonomies = match.get("taxonomies") or [{}]
             addresses = match.get("addresses") or [{}]
@@ -588,21 +697,36 @@ def check_doctor_in_plan_network(plan_id: str, npi: str, zip_code: str) -> dict:
     def fetch():
         try:
             r = requests.get(
-                f"{BASE_MARKETPLACE}/plans/{plan_id}/providers",
-                params=_params({"npi": npi, "zip": zip_code}),
-                timeout=10
+                f"{BASE_MARKETPLACE}/providers/{npi}",
+                params=_params({"year": 2024}),
+                timeout=10,
             )
-            data = r.json()
-            providers = data.get("providers", [])
-            if providers:
-                p = providers[0]
+            if r.status_code == 404:
                 return {
-                    "in_network": True,
-                    "network_tier": p.get("network_tier", "In-Network"),
-                    "accepting_patients": p.get("accepting_patients", True),
-                    "provider_name": p.get("name", ""),
+                    "in_network": None,
+                    "note": "Provider not found in CMS Marketplace directory. Verify directly with the insurer.",
                 }
-            return {"in_network": False, "accepting_patients": None}
+            if r.status_code != 200:
+                return {"in_network": None, "error": f"CMS returned HTTP {r.status_code}"}
+
+            prov = r.json().get("provider", {})
+            plans = prov.get("plans") or []
+            plan_ids_in_network = [p.get("id", "") if isinstance(p, dict) else str(p) for p in plans]
+
+            if not plans:
+                return {
+                    "in_network": None,
+                    "provider_name": prov.get("name"),
+                    "accepting": prov.get("accepting", "unknown"),
+                    "note": "CMS marketplace directory has no plan-network data for this provider. "
+                            "Call the insurer's member services or use their online provider directory to confirm.",
+                }
+            in_net = any(plan_id in pid for pid in plan_ids_in_network)
+            return {
+                "in_network": in_net,
+                "provider_name": prov.get("name"),
+                "accepting": prov.get("accepting", "unknown"),
+            }
         except Exception as e:
             print(f"Plan network check error: {e}")
             return {"in_network": None, "error": str(e)}
@@ -688,42 +812,6 @@ def get_doctor_quality_score(npi: str) -> dict:
     return cached_call("mips_score", {"npi": str(npi)}, fetch)
 
 
-# ─── HRSA SHORTAGE AREAS ─────────────────────────────────────────────────────
-
-def check_hrsa_shortage(state: str, fips: str = "") -> dict:
-    """Check if a county is a Health Professional Shortage Area via HRSA."""
-    def fetch():
-        try:
-            r = requests.get(
-                "https://data.hrsa.gov/api/GenerateHPSAData/HPSADataType/Primary Care",
-                params={"StateAbbreviation": state.upper()},
-                timeout=12
-            )
-            data = r.json()
-            hpsas = data.get("HPSA_FullCounty", []) if isinstance(data, dict) else []
-            if fips and hpsas:
-                match = next(
-                    (h for h in hpsas if h.get("FIPS_County_CD", "").lstrip("0") == fips.lstrip("0")),
-                    None
-                )
-                if match:
-                    return {
-                        "shortage_area": True,
-                        "designation": match.get("HPSA_Status"),
-                        "score": match.get("HPSA_Score"),
-                        "message": (
-                            f"Your county is a Primary Care HPSA (score {match.get('HPSA_Score')}). "
-                            f"HMO plans may have limited in-network providers in your area."
-                        ),
-                    }
-            return {"shortage_area": False}
-        except Exception as e:
-            print(f"HRSA shortage check error: {e}")
-            return {"shortage_area": False, "error": str(e)}
-
-    return cached_call("hrsa_shortage", {"state": state.lower(), "fips": fips}, fetch)
-
-
 # ─── SEP ELIGIBILITY — pure date logic, no external API ─────────────────────
 
 _SEP_EVENTS = {
@@ -744,7 +832,10 @@ def check_sep_eligibility(event_type: str = "", event_date_str: str = "") -> dic
     today = date.today()
     
     # DEMO/TEST OVERRIDE
-    if os.getenv("FORCE_OPEN_ENROLLMENT", "").upper() == "TRUE":
+    force_oe = os.getenv("FORCE_OPEN_ENROLLMENT", "").upper()
+    print(f"DEBUG: FORCE_OPEN_ENROLLMENT is '{force_oe}'")
+    if force_oe == "TRUE":
+        print("DEBUG: Applying DEMO MODE override for Open Enrollment")
         deadline = date(today.year + (1 if today.month > 1 else 0), 1, 15)
         return {
             "in_open_enrollment": True,
@@ -833,62 +924,470 @@ def check_sep_eligibility(event_type: str = "", event_date_str: str = "") -> dic
     }
 
 
-# ---------- SEARCH BY ZIP (handles PO Box ZIPs rejected by CMS) ----------
+# ─── SPECIALIST SEARCH ───────────────────────────────────────────────────────
 
-def search_plans_by_zip(zip_code: str, age: int, income: float, household_size: int, tobacco_use: bool = False) -> list:
-    """Search plans using ZIP - tries nearby ZIPs if CMS rejects original."""
-    if not CMS_MARKETPLACE_KEY:
-        return []
+def map_condition_to_specialty(condition: str) -> dict:
+    """Map a free-text condition/ailment to a specialist type and NPPES taxonomy."""
+    q = condition.lower().strip()
+    for entry in CONDITION_SPECIALTY_MAP:
+        if any(kw in q for kw in entry["keywords"]):
+            return entry
+    # Fallback: treat the condition text itself as the taxonomy description keyword
+    return {
+        "taxonomy_desc": condition,
+        "specialty": f"{condition.title()} Specialist",
+        "benefit_type": "Specialist Visit",
+    }
 
-    state_exchange = get_state_exchange(zip_code)
-    if state_exchange:
-        return []
 
-    def _try_zip(z):
-        fips = get_fips_from_zip(z)
-        if not fips:
-            return None
-        state = _fips_to_state(fips)
-        if not state:
-            return None
-        body = {
-            "household": {
-                "income": income,
-                "people": [{"age": age, "aptc_eligible": True, "gender": "Male", "uses_tobacco": tobacco_use}],
-            },
-            "market": "Individual",
-            "place": {"countyfips": fips, "zipcode": z, "state": state},
-            "year": 2024,
-            "limit": 10,
-        }
+def search_providers_by_specialty(taxonomy_desc: str, state: str, city: str = "", limit: int = 5) -> list:
+    """Search NPPES for active individual providers by specialty (taxonomy description)."""
+    def fetch():
         try:
-            r = requests.post(f"{BASE_MARKETPLACE}/plans/search", params=_params(), json=body, timeout=15)
-            if r.status_code != 200:
-                return None
-            data = r.json()
-            plans = [_normalize_plan(p) for p in data.get("plans", [])]
-            if plans:
-                print(f"CMS returned {len(plans)} plans for ZIP {z}")
-            return plans if plans else None
+            params = {
+                "version": "2.1",
+                "enumeration_type": "NPI-1",
+                "taxonomy_description": taxonomy_desc,
+                "limit": limit,
+            }
+            if state:
+                params["state"] = state.upper()
+            if city:
+                params["city"] = city.upper()
+            r = requests.get(NPPES_API, params=params, timeout=12)
+            results = r.json().get("results", [])
+            providers = []
+            for item in results:
+                basic = item.get("basic", {})
+                taxonomies = item.get("taxonomies") or [{}]
+                addresses = item.get("addresses") or [{}]
+                primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
+                practice_addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0]
+                )
+                if basic.get("status", "") != "A":
+                    continue
+                providers.append({
+                    "npi": item.get("number"),
+                    "name": f"{basic.get('first_name','')} {basic.get('last_name','')}".strip(),
+                    "credential": basic.get("credential", ""),
+                    "specialty": primary_tax.get("desc", taxonomy_desc),
+                    "city": practice_addr.get("city", ""),
+                    "state": practice_addr.get("state", ""),
+                    "phone": practice_addr.get("telephone_number", ""),
+                    "address": f"{practice_addr.get('address_1','')} {practice_addr.get('address_2','')}".strip(),
+                })
+            return providers
         except Exception as e:
-            print(f"Plan search error for {z}: {e}")
-            return None
+            print(f"NPPES specialty search error: {e}")
+            return []
 
-    result = _try_zip(zip_code)
-    if result:
-        return result
+    return cached_call("nppes_specialty", {"taxonomy": taxonomy_desc.lower(), "state": state.lower(), "city": city.lower()}, fetch)
 
-    # Try nearby ZIPs for PO Box ZIPs
+
+def get_plan_specialist_copay(plan_id: str, benefit_type: str = "Specialist Visit") -> dict:
+    """
+    Fetch specialist copay from the CMS plan detail endpoint.
+    Falls back to metal-level estimates if the API doesn't return benefit data.
+    """
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/plans/{plan_id}",
+                params=_params({"year": 2024}),
+                timeout=12,
+            )
+            data = r.json()
+            plan_data = data.get("plan", data)
+            benefits = plan_data.get("benefits", [])
+            if benefits:
+                target = next(
+                    (b for b in benefits if benefit_type.lower() in b.get("name", "").lower()),
+                    None
+                )
+                if not target:
+                    target = next(
+                        (b for b in benefits if "specialist" in b.get("name", "").lower()),
+                        None
+                    )
+                if target:
+                    cost_sharings = target.get("cost_sharings", [{}])
+                    in_net = next(
+                        (c for c in cost_sharings if "In" in c.get("network_tier", "In")),
+                        cost_sharings[0] if cost_sharings else {}
+                    )
+                    return {
+                        "found": True,
+                        "benefit_name": target.get("name"),
+                        "covered": target.get("covered", True),
+                        "copay": in_net.get("copay_amount"),
+                        "coinsurance": in_net.get("coinsurance_rate"),
+                        "display": in_net.get("display_string", ""),
+                        "source": "cms_benefits",
+                    }
+        except Exception as e:
+            print(f"Plan benefits fetch error for {plan_id}: {e}")
+        return {"found": False, "source": "fallback"}
+
+    return cached_call("plan_benefit", {"plan_id": plan_id, "benefit": benefit_type.lower()}, fetch)
+
+
+# CMS benefit name → drug tier key mapping (ordered: most-specific first)
+_DRUG_BENEFIT_TIER_MAP = [
+    ("preferred generic",       ["PREFERRED-GENERIC"]),
+    ("non-preferred generic",   ["NON-PREFERRED-GENERIC"]),
+    ("generic",                 ["GENERIC", "PREFERRED-GENERIC"]),
+    ("preferred brand",         ["PREFERRED-BRAND", "BRAND"]),
+    ("non-preferred brand",     ["NON-PREFERRED-BRAND"]),
+    ("preferred specialty",     ["PREFERRED-SPECIALTY"]),
+    ("non-preferred specialty", ["NON-PREFERRED-SPECIALTY"]),
+    ("specialty",               ["SPECIALTY", "PREFERRED-SPECIALTY", "NON-PREFERRED-SPECIALTY"]),
+]
+
+
+def get_plan_drug_copays(plan_id: str, year: int = 2024) -> dict:
+    """
+    Fetch per-tier drug cost-sharing from the CMS plan benefits endpoint.
+    Returns {TIER_KEY: {copay_amount, coinsurance_rate, display_string, after_deductible}}.
+    Most-specific keyword matched first (preferred generic beats generic).
+    """
+    def fetch():
+        try:
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/plans/{plan_id}",
+                params=_params({"year": year}),
+                timeout=12,
+            )
+            if r.status_code != 200:
+                return {}
+            data = r.json()
+            plan_data = data.get("plan", data)
+            benefits = plan_data.get("benefits", [])
+            tier_copays: dict = {}
+            for benefit in benefits:
+                bname = benefit.get("name", "").lower()
+                if "drug" not in bname and "formulary" not in bname:
+                    continue
+                matching_tiers = None
+                for keyword, tiers in _DRUG_BENEFIT_TIER_MAP:
+                    if keyword in bname:
+                        matching_tiers = tiers
+                        break
+                if not matching_tiers:
+                    continue
+                cost_sharings = benefit.get("cost_sharings", [])
+                in_net = next(
+                    (c for c in cost_sharings if "In" in c.get("network_tier", "In-Network")),
+                    cost_sharings[0] if cost_sharings else {},
+                )
+                display = in_net.get("display_string", "")
+                entry = {
+                    "copay_amount":     float(in_net.get("copay_amount") or 0),
+                    "coinsurance_rate": float(in_net.get("coinsurance_rate") or 0),
+                    "display_string":   display,
+                    "after_deductible": "deductible" in display.lower(),
+                }
+                for tier_key in matching_tiers:
+                    if tier_key not in tier_copays:   # don't overwrite more-specific match
+                        tier_copays[tier_key] = entry
+            return tier_copays
+        except Exception as e:
+            print(f"Plan drug copays fetch error for {plan_id}: {e}")
+            return {}
+
+    return cached_call("plan_drug_copays", {"plan_id": plan_id, "year": year}, fetch)
+
+
+# Metal-level copay estimates (fallback when CMS benefits API has no data)
+METAL_COPAY_ESTIMATES = {
+    "Platinum": {"copay": 20, "note": "~$20 specialist copay, no deductible first"},
+    "Gold":     {"copay": 40, "note": "~$40 specialist copay, usually no deductible"},
+    "Silver":   {"copay": 65, "note": "~$65 specialist copay, after deductible"},
+    "Bronze":   {"copay": 100, "note": "~$100 copay or 30–40% coinsurance, after deductible"},
+    "Catastrophic": {"copay": 150, "note": "Full cost until $9,450 deductible met"},
+}
+
+# Coinsurance by metal level (patient's share after deductible)
+METAL_COINSURANCE = {
+    "Platinum": 0.10, "Gold": 0.20, "Silver": 0.30,
+    "Bronze": 0.40, "Catastrophic": 1.00,
+}
+
+# ─── PROCEDURE COST CATALOG ──────────────────────────────────────────────────
+PROCEDURE_CATALOG = {
+    "knee_replacement":   {"label": "Knee Replacement",          "total_cost": 35000, "category": "Surgery"},
+    "hip_replacement":    {"label": "Hip Replacement",           "total_cost": 32000, "category": "Surgery"},
+    "appendectomy":       {"label": "Appendectomy",              "total_cost": 18000, "category": "Surgery"},
+    "gallbladder":        {"label": "Gallbladder Removal",       "total_cost": 14000, "category": "Surgery"},
+    "back_surgery":       {"label": "Spinal Fusion / Back Surgery", "total_cost": 45000, "category": "Surgery"},
+    "heart_bypass":       {"label": "Coronary Bypass Surgery",   "total_cost": 95000, "category": "Surgery"},
+    "angioplasty":        {"label": "Angioplasty / Stent",       "total_cost": 28000, "category": "Cardiac"},
+    "chemotherapy_cycle": {"label": "Chemotherapy (per cycle)",  "total_cost": 10000, "category": "Oncology"},
+    "radiation_course":   {"label": "Radiation Therapy (full course)", "total_cost": 60000, "category": "Oncology"},
+    "childbirth_vaginal": {"label": "Childbirth – Vaginal",      "total_cost": 12000, "category": "Maternity"},
+    "childbirth_csection":{"label": "Childbirth – C-Section",    "total_cost": 20000, "category": "Maternity"},
+    "colonoscopy":        {"label": "Colonoscopy",               "total_cost": 3500,  "category": "Diagnostic"},
+    "mri":                {"label": "MRI Scan",                  "total_cost": 2600,  "category": "Diagnostic"},
+    "ct_scan":            {"label": "CT Scan",                   "total_cost": 2000,  "category": "Diagnostic"},
+    "er_visit":           {"label": "Emergency Room Visit",      "total_cost": 3200,  "category": "Emergency"},
+    "ambulance":          {"label": "Ambulance Ride",            "total_cost": 1800,  "category": "Emergency"},
+    "inpatient_3day":     {"label": "3-Day Hospital Stay",       "total_cost": 22000, "category": "Inpatient"},
+    "physical_therapy":   {"label": "Physical Therapy (12 sessions)", "total_cost": 2400, "category": "Rehabilitation"},
+    "diabetes_management":{"label": "Annual Diabetes Management","total_cost": 5500,  "category": "Chronic"},
+    "mental_health_year": {"label": "Mental Health (12 months therapy)", "total_cost": 4800, "category": "Mental Health"},
+}
+
+
+def estimate_procedure_oop(procedure_key: str, plans: list) -> dict:
+    """
+    Estimate the out-of-pocket cost for a procedure on each plan.
+    Uses deductible + metal-level coinsurance up to OOP max.
+    """
+    proc = PROCEDURE_CATALOG.get(procedure_key)
+    if not proc:
+        return {"error": f"Unknown procedure: {procedure_key}"}
+
+    total_cost = proc["total_cost"]
+    results = []
+    for plan in plans:
+        deductible = plan.get("deductible", 0) or 0
+        oop_max    = plan.get("oop_max", 9450) or 9450
+        metal      = plan.get("metal_level", "Silver")
+        coinsurance = METAL_COINSURANCE.get(metal, 0.30)
+
+        # Patient pays deductible first, then coinsurance on the remainder
+        if total_cost <= deductible:
+            patient_share = total_cost
+        else:
+            patient_share = deductible + (total_cost - deductible) * coinsurance
+
+        patient_share = min(patient_share, oop_max)
+        insurance_pays = total_cost - patient_share
+
+        results.append({
+            "plan_id":       plan.get("id"),
+            "plan_name":     plan.get("name"),
+            "metal_level":   metal,
+            "net_premium":   round(plan.get("premium_w_credit", plan.get("premium", 0)), 2),
+            "patient_oop":   round(patient_share),
+            "insurance_pays": round(insurance_pays),
+            "deductible":    deductible,
+            "oop_max":       oop_max,
+            "coinsurance_pct": int(coinsurance * 100),
+        })
+
+    results.sort(key=lambda x: x["patient_oop"])
+    return {
+        "procedure": proc["label"],
+        "total_cost": total_cost,
+        "category": proc["category"],
+        "results": results,
+    }
+
+
+def search_hospitals_nearby(zip_code: str, limit: int = 8) -> list:
+    """
+    Return hospitals near a ZIP code by resolving state from ZIP then searching
+    NPPES NPI-2 with taxonomy 'General Acute Care Hospital'.
+    No name required — purely location-based.
+    """
+    fips  = get_fips_from_zip(zip_code)
+    state = _fips_to_state(fips) if fips else ""
+
+    def fetch():
+        try:
+            # Primary search: general acute care hospitals in state
+            for taxonomy in ["General Acute Care Hospital", "Hospital"]:
+                params = {
+                    "version": "2.1",
+                    "enumeration_type": "NPI-2",
+                    "taxonomy_description": taxonomy,
+                    "limit": limit,
+                }
+                if state:
+                    params["state"] = state.upper()
+                r = requests.get(NPPES_API, params=params, timeout=12)
+                results = r.json().get("results", [])
+                if results:
+                    break
+
+            hospitals = []
+            seen = set()
+            for item in results:
+                npi = item.get("number")
+                if npi in seen:
+                    continue
+                seen.add(npi)
+                basic = item.get("basic", {})
+                addresses = item.get("addresses") or [{}]
+                addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0],
+                )
+                if basic.get("status", "") != "A":
+                    continue
+                hospitals.append({
+                    "npi":     npi,
+                    "name":    basic.get("organization_name", ""),
+                    "city":    addr.get("city", ""),
+                    "state":   addr.get("state", ""),
+                    "address": f"{addr.get('address_1','')} {addr.get('address_2','')}".strip(),
+                    "phone":   addr.get("telephone_number", ""),
+                })
+            return hospitals[:limit]
+        except Exception as e:
+            print(f"Nearby hospital search error: {e}")
+            return []
+
+    return cached_call("hospitals_nearby", {"zip": zip_code}, fetch)
+
+
+def search_hospitals(name: str, state: str, city: str = "") -> list:
+    """Search NPPES for hospitals / facilities (NPI-2) by name."""
+    def fetch():
+        try:
+            # Try progressively looser queries: exact → first 2 words → first word
+            queries = [name]
+            words = name.split()
+            if len(words) >= 3:
+                queries.append(" ".join(words[:2]))
+            if len(words) >= 2:
+                queries.append(words[0])
+
+            results = []
+            for q in queries:
+                params = {
+                    "version": "2.1",
+                    "enumeration_type": "NPI-2",
+                    "organization_name": q,
+                    "limit": 10,
+                }
+                if state:
+                    params["state"] = state.upper()
+                if city:
+                    params["city"] = city.upper()
+                r = requests.get(NPPES_API, params=params, timeout=12)
+                results = r.json().get("results", [])
+                if results:
+                    break  # stop at first query that returns results
+
+            hospitals = []
+            seen_npis = set()
+            for item in results:
+                npi = item.get("number")
+                if npi in seen_npis:
+                    continue
+                seen_npis.add(npi)
+                basic = item.get("basic", {})
+                addresses = item.get("addresses") or [{}]
+                practice_addr = next(
+                    (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                    addresses[0]
+                )
+                hospitals.append({
+                    "npi": npi,
+                    "name": basic.get("organization_name", name),
+                    "city": practice_addr.get("city", ""),
+                    "state": practice_addr.get("state", ""),
+                    "address": f"{practice_addr.get('address_1','')} {practice_addr.get('address_2','')}".strip(),
+                    "phone": practice_addr.get("telephone_number", ""),
+                    "status": basic.get("status", ""),
+                })
+            return hospitals[:5]
+        except Exception as e:
+            print(f"Hospital search error: {e}")
+            return []
+
+    return cached_call("hospital_search", {"name": name.lower(), "state": state.lower()}, fetch)
+
+
+# ─── PLAN PROVIDERS — fetch plan detail + NPPES specialty search ─────────────
+
+def get_plan_providers(plan_id: str, zip_code: str, specialty: str = "Internal Medicine",
+                       limit: int = 20) -> dict:
+    """
+    Return providers for a given plan by:
+    1. Fetching the CMS plan detail for issuer name and provider directory URL.
+    2. Searching NPPES for providers of the requested specialty near the ZIP.
+    Returns the directory URL plus up to `limit` NPPES providers as a reference list
+    (network membership must be confirmed via the insurer's directory).
+    """
     try:
-        num = int(zip_code)
-        for delta in [1, -1, 2, -2, 5, -5, 10, -10]:
-            nearby = str(num + delta).zfill(5)
-            if nearby[:3] == zip_code[:3]:
-                result = _try_zip(nearby)
-                if result:
-                    print(f"Used nearby ZIP {nearby} for {zip_code}")
-                    return result
-    except Exception:
-        pass
+        # Step 1: Plan detail → issuer + network URL
+        r = requests.get(
+            f"{BASE_MARKETPLACE}/plans/{plan_id}",
+            params=_params({"year": 2024}),
+            timeout=10,
+        )
+        plan_meta: dict = {}
+        if r.status_code == 200:
+            raw = r.json().get("plan", {})
+            issuer_obj = raw.get("issuer") or {}
+            issuer_name = issuer_obj.get("name", "") if isinstance(issuer_obj, dict) else str(issuer_obj)
+            network_url = raw.get("network_url") or ""
+            if not network_url:
+                networks = raw.get("network") or []
+                network_url = networks[0].get("network_url", "") if networks else ""
+            plan_meta = {
+                "plan_id": plan_id,
+                "plan_name": raw.get("name", plan_id),
+                "issuer": issuer_name,
+                "metal_level": raw.get("metal_level", ""),
+                "type": raw.get("type", ""),
+                "network_url": network_url,
+            }
 
-    return []
+        # Step 2: FIPS/state from ZIP
+        fips = get_fips_from_zip(zip_code)
+        state = _fips_to_state(fips) if fips else ""
+
+        # Step 3: NPPES search by specialty
+        params = {
+            "version": "2.1",
+            "enumeration_type": "NPI-1",
+            "taxonomy_description": specialty,
+            "limit": min(limit, 50),
+        }
+        if state:
+            params["state"] = state.upper()
+
+        nr = requests.get(NPPES_API, params=params, timeout=10)
+        results = nr.json().get("results", [])
+
+        providers = []
+        for item in results:
+            basic = item.get("basic") or {}
+            taxonomies = item.get("taxonomies") or [{}]
+            addresses = item.get("addresses") or [{}]
+            primary_tax = next((t for t in taxonomies if t.get("primary")), taxonomies[0])
+            addr = next(
+                (a for a in addresses if a.get("address_purpose") == "LOCATION"),
+                addresses[0],
+            )
+            providers.append({
+                "npi": item.get("number"),
+                "name": f"{basic.get('first_name', '')} {basic.get('last_name', '')}".strip()
+                        or basic.get("organization_name", ""),
+                "credential": basic.get("credential", ""),
+                "specialty": primary_tax.get("desc", specialty),
+                "city": addr.get("city", ""),
+                "state": addr.get("state", ""),
+                "phone": addr.get("telephone_number", ""),
+                "active": basic.get("status", "") == "A",
+            })
+
+        return {
+            **plan_meta,
+            "specialty_searched": specialty,
+            "zip_code": zip_code,
+            "state": state,
+            "providers_from_nppes": providers,
+            "provider_count": len(providers),
+            "note": (
+                "NPPES lists all licensed providers in this state/specialty. "
+                "Network membership must be confirmed via the insurer's provider directory below."
+            ),
+        }
+    except Exception as e:
+        return {"error": str(e), "plan_id": plan_id}
