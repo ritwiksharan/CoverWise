@@ -1,7 +1,3 @@
-"""
-Auth database — SQLite-backed user accounts and session tokens.
-Uses pbkdf2_hmac for password hashing (no extra dependencies).
-"""
 import sqlite3
 import hashlib
 import hmac
@@ -24,11 +20,11 @@ def init_db():
     with _conn() as con:
         con.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                user_id   TEXT PRIMARY KEY,
-                email     TEXT UNIQUE NOT NULL COLLATE NOCASE,
-                name      TEXT NOT NULL,
-                pw_hash   TEXT NOT NULL,
-                pw_salt   TEXT NOT NULL,
+                user_id    TEXT PRIMARY KEY,
+                username   TEXT UNIQUE NOT NULL COLLATE NOCASE,
+                name       TEXT NOT NULL,
+                pw_hash    TEXT NOT NULL,
+                pw_salt    TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS sessions (
@@ -45,7 +41,7 @@ def _hash_password(password: str, salt: str) -> str:
     return dk.hex()
 
 
-def create_user(email: str, password: str, name: str) -> dict:
+def create_user(username: str, password: str, name: str) -> dict:
     init_db()
     salt = secrets.token_hex(32)
     pw_hash = _hash_password(password, salt)
@@ -53,24 +49,24 @@ def create_user(email: str, password: str, name: str) -> dict:
     now = datetime.utcnow().isoformat()
     with _conn() as con:
         con.execute(
-            "INSERT INTO users (user_id, email, name, pw_hash, pw_salt, created_at) VALUES (?,?,?,?,?,?)",
-            (user_id, email.lower().strip(), name.strip(), pw_hash, salt, now),
+            "INSERT INTO users (user_id, username, name, pw_hash, pw_salt, created_at) VALUES (?,?,?,?,?,?)",
+            (user_id, username.lower().strip(), name.strip(), pw_hash, salt, now),
         )
-    return {"user_id": user_id, "email": email.lower().strip(), "name": name.strip()}
+    return {"user_id": user_id, "username": username.lower().strip(), "name": name.strip()}
 
 
-def verify_user(email: str, password: str) -> dict | None:
+def verify_user(username: str, password: str) -> dict | None:
     init_db()
     with _conn() as con:
         row = con.execute(
-            "SELECT * FROM users WHERE email = ?", (email.lower().strip(),)
+            "SELECT * FROM users WHERE username = ?", (username.lower().strip(),)
         ).fetchone()
     if not row:
         return None
     expected = _hash_password(password, row["pw_salt"])
     if not hmac.compare_digest(expected, row["pw_hash"]):
         return None
-    return {"user_id": row["user_id"], "email": row["email"], "name": row["name"]}
+    return {"user_id": row["user_id"], "username": row["username"], "name": row["name"]}
 
 
 def create_session(user_id: str) -> str:
@@ -91,14 +87,14 @@ def get_user_by_token(token: str) -> dict | None:
     init_db()
     with _conn() as con:
         row = con.execute(
-            """SELECT u.user_id, u.email, u.name
+            """SELECT u.user_id, u.username, u.name
                FROM sessions s JOIN users u ON s.user_id = u.user_id
                WHERE s.token = ?""",
             (token,),
         ).fetchone()
     if not row:
         return None
-    return {"user_id": row["user_id"], "email": row["email"], "name": row["name"]}
+    return {"user_id": row["user_id"], "username": row["username"], "name": row["name"]}
 
 
 def delete_session(token: str):
@@ -107,10 +103,10 @@ def delete_session(token: str):
         con.execute("DELETE FROM sessions WHERE token = ?", (token,))
 
 
-def email_exists(email: str) -> bool:
+def username_exists(username: str) -> bool:
     init_db()
     with _conn() as con:
         row = con.execute(
-            "SELECT 1 FROM users WHERE email = ?", (email.lower().strip(),)
+            "SELECT 1 FROM users WHERE username = ?", (username.lower().strip(),)
         ).fetchone()
     return row is not None

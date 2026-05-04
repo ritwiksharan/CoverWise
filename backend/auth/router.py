@@ -1,19 +1,19 @@
 from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional
-from .db import create_user, verify_user, create_session, get_user_by_token, delete_session, email_exists
+from .db import create_user, verify_user, create_session, get_user_by_token, delete_session, username_exists
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 
 class SignupRequest(BaseModel):
-    email: str
+    username: str
     password: str
     name: str
 
 
 class LoginRequest(BaseModel):
-    email: str
+    username: str
     password: str
 
 
@@ -29,32 +29,32 @@ def _require_token(authorization: Optional[str]) -> dict:
 
 @router.post("/signup")
 def signup(req: SignupRequest):
+    if len(req.username.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     if not req.name.strip():
         raise HTTPException(status_code=400, detail="Name is required")
-    if "@" not in req.email:
-        raise HTTPException(status_code=400, detail="Invalid email address")
-    if email_exists(req.email):
-        raise HTTPException(status_code=409, detail="An account with that email already exists")
-    user = create_user(req.email, req.password, req.name)
+    if username_exists(req.username):
+        raise HTTPException(status_code=409, detail="That username is already taken")
+    user = create_user(req.username, req.password, req.name)
     token = create_session(user["user_id"])
-    return {"token": token, "user_id": user["user_id"], "email": user["email"], "name": user["name"]}
+    return {"token": token, "user_id": user["user_id"], "username": user["username"], "name": user["name"]}
 
 
 @router.post("/login")
 def login(req: LoginRequest):
-    user = verify_user(req.email, req.password)
+    user = verify_user(req.username, req.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
     token = create_session(user["user_id"])
-    return {"token": token, "user_id": user["user_id"], "email": user["email"], "name": user["name"]}
+    return {"token": token, "user_id": user["user_id"], "username": user["username"], "name": user["name"]}
 
 
 @router.get("/me")
 def me(authorization: Optional[str] = Header(None)):
     user = _require_token(authorization)
-    return {"user_id": user["user_id"], "email": user["email"], "name": user["name"]}
+    return {"user_id": user["user_id"], "username": user["username"], "name": user["name"]}
 
 
 @router.post("/logout")

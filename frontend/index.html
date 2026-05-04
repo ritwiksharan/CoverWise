@@ -348,8 +348,8 @@
     <!-- Sign In form -->
     <div id="formSignin">
       <div style="margin-bottom:14px;">
-        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">EMAIL</label>
-        <input id="siEmail" type="email" placeholder="you@example.com" autocomplete="email"
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">USERNAME</label>
+        <input id="siUsername" type="text" placeholder="your_username" autocomplete="username"
           style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
           onkeydown="if(event.key==='Enter')doSignin()">
@@ -377,8 +377,8 @@
           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
       </div>
       <div style="margin-bottom:14px;">
-        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">EMAIL</label>
-        <input id="suEmail" type="email" placeholder="you@example.com" autocomplete="email"
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">USERNAME</label>
+        <input id="suUsername" type="text" placeholder="choose_a_username" autocomplete="username"
           style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
       </div>
@@ -673,7 +673,7 @@
 <script>
 // ── Auth state ────────────────────────────────────────────────────────────────
 let USER_ID = null;
-let authUser = null;   // { user_id, email, name, token }
+let authUser = null;   // { user_id, username, name, token }
 const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9);
 let currentProfile = null;
 let pendingProfile = null;
@@ -686,7 +686,7 @@ function saveAuth(data) {
   localStorage.setItem('cw_token',   data.token);
   localStorage.setItem('cw_user_id', data.user_id);
   localStorage.setItem('cw_name',    data.name);
-  localStorage.setItem('cw_email',   data.email);
+  localStorage.setItem('cw_username', data.username);
 }
 
 function loadAuthFromStorage() {
@@ -696,7 +696,7 @@ function loadAuthFromStorage() {
     token:   token,
     user_id: localStorage.getItem('cw_user_id') || '',
     name:    localStorage.getItem('cw_name')    || '',
-    email:   localStorage.getItem('cw_email')   || '',
+    username: localStorage.getItem('cw_username') || '',
   };
   USER_ID = authUser.user_id;
   return true;
@@ -704,7 +704,7 @@ function loadAuthFromStorage() {
 
 function clearAuth() {
   authUser = null; USER_ID = null;
-  ['cw_token','cw_user_id','cw_name','cw_email'].forEach(k => localStorage.removeItem(k));
+  ['cw_token','cw_user_id','cw_name','cw_username'].forEach(k => localStorage.removeItem(k));
 }
 
 async function verifyStoredToken() {
@@ -732,16 +732,16 @@ function setAuthError(id, msg) {
 }
 
 async function doSignin() {
-  const email = document.getElementById('siEmail').value.trim();
-  const pass  = document.getElementById('siPassword').value;
+  const username = document.getElementById('siUsername').value.trim();
+  const pass     = document.getElementById('siPassword').value;
   setAuthError('siError', '');
-  if (!email || !pass) { setAuthError('siError', 'Please enter your email and password.'); return; }
+  if (!username || !pass) { setAuthError('siError', 'Please enter your username and password.'); return; }
   const btn = document.getElementById('siBtn');
   btn.disabled = true; btn.textContent = 'Signing in…';
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password: pass }),
+      body: JSON.stringify({ username, password: pass }),
     });
     const data = await r.json();
     if (!r.ok) { setAuthError('siError', data.detail || 'Sign in failed.'); return; }
@@ -752,19 +752,19 @@ async function doSignin() {
 }
 
 async function doSignup() {
-  const name  = document.getElementById('suName').value.trim();
-  const email = document.getElementById('suEmail').value.trim();
-  const pass  = document.getElementById('suPassword').value;
+  const name     = document.getElementById('suName').value.trim();
+  const username = document.getElementById('suUsername').value.trim();
+  const pass     = document.getElementById('suPassword').value;
   setAuthError('suError', '');
-  if (!name)  { setAuthError('suError', 'Please enter your name.'); return; }
-  if (!email) { setAuthError('suError', 'Please enter your email.'); return; }
+  if (!name)     { setAuthError('suError', 'Please enter your name.'); return; }
+  if (!username) { setAuthError('suError', 'Please enter a username.'); return; }
   if (pass.length < 8) { setAuthError('suError', 'Password must be at least 8 characters.'); return; }
   const btn = document.getElementById('suBtn');
   btn.disabled = true; btn.textContent = 'Creating account…';
   try {
     const r = await fetch('/api/auth/signup', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password: pass, name }),
+      body: JSON.stringify({ username, password: pass, name }),
     });
     const data = await r.json();
     if (!r.ok) { setAuthError('suError', data.detail || 'Sign up failed.'); return; }

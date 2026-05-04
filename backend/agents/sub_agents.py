@@ -553,3 +553,65 @@ async def medicaid_agent(profile: dict, fpl_pct: float, state: str) -> dict:
         "message": f"At {fpl_pct}% FPL you likely qualify for Medicaid — free or near-free coverage.",
         "action": "Visit healthcare.gov → Apply for Coverage → Medicaid/CHIP",
     }
+# ─── RANKING AGENT — Agentic "Simulated Year" Logic ────────────────────────────
+
+async def ranking_agent(profile: dict, plans: list, subsidy: dict, medications: dict = None) -> dict:
+    """
+    Performs an agentic ranking of plans by simulating three distinct health years:
+    1. The Healthy Year (Low Use)
+    2. The Clinical Year (Expected Use)
+    3. The Worst Case (Catastrophic)
+    """
+    await asyncio.sleep(0)
+    
+    monthly_aptc = subsidy.get("monthly_credit", 0)
+    is_premium = profile.get("is_premium", False)
+    
+    ranked_plans = []
+    for p in plans:
+        # 1. Monthly Economics
+        net_premium = max(0, p.get("premium", 0) - monthly_aptc)
+        annual_premium = net_premium * 12
+        
+        # 2. Clinical Simulation (Drugs/Doctors)
+        # We estimate $30/visit for Specialist and $10/Tier for drugs if coverage unknown
+        drug_est = 0
+        if medications and medications.get("results"):
+            for d in medications["results"]:
+                cov = d.get("plan_coverage", {}).get(p["id"], {})
+                if cov.get("coverage") == "NotCovered":
+                    drug_est += 1200 # Assume $100/mo for uncovered specialty drugs
+                elif cov.get("tier") == "Tier 4":
+                    drug_est += 600
+                else:
+                    drug_est += 120
+                    
+        # 3. Scenarios
+        healthy_year = annual_premium
+        clinical_year = annual_premium + drug_est + (p.get("deductible", 0) * 0.15)
+        worst_case = annual_premium + p.get("oop_max", 0)
+        
+        # 4. Agentic Weighting (Higher weight on Clinical if user has chronic conditions)
+        weight_healthy = 0.5 if not medications.get("results") else 0.2
+        weight_clinical = 0.3 if not medications.get("results") else 0.6
+        weight_worst = 0.2
+        
+        expected_value = (healthy_year * weight_healthy) + (clinical_year * weight_clinical) + (worst_case * weight_worst)
+        
+        # 5. Metadata for UI
+        p["agent_scores"] = {
+            "healthy_year": round(healthy_year, 2),
+            "clinical_year": round(clinical_year, 2),
+            "worst_case": round(worst_case, 2),
+            "expected_value": round(expected_value, 2)
+        }
+        ranked_plans.append(p)
+
+    # Sort by Expected Value
+    ranked_plans.sort(key=lambda x: x["agent_scores"]["expected_value"])
+    
+    return {
+        "agent": "ranking",
+        "ranked_plans": ranked_plans[:10],
+        "top_pick_rationale": "Ranked based on expected value across three usage scenarios."
+    }
