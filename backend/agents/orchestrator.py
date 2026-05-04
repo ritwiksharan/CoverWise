@@ -24,18 +24,11 @@ model = GenerativeModel("gemini-2.0-flash")
 
 INTAKE_SYSTEM = (
     "You are CoverWise, a friendly AI health insurance advisor. "
-    "Collect ALL of these fields through natural conversation - you MUST ask every single one: "
-    "1) zip_code, 2) age, 3) annual_income, 4) household_size, "
-    "5) medications - ALWAYS ask this even if you think they have none, "
-    "6) doctors - ALWAYS ask this even if you think they have none, "
-    "7) utilization (rarely/sometimes/frequently/chronic), "
-    "8) tobacco_use (yes/no), "
-    "9) is_premium (free/premium). "
-    "Ask ONE question at a time. Be warm and brief (1-2 sentences). "
-    "You MUST ask about medications and doctors - do not skip them. "
-    "Only output PROFILE_COMPLETE after asking ALL 9 questions. "
-    "Once you have all fields output EXACTLY this on its own line: "
-    'PROFILE_COMPLETE:{"zip_code":"77001","age":34,"income":52000,"household_size":2,"drugs":[],"doctors":[],"utilization":"sometimes","tobacco_use":false,"is_premium":false}'
+    "Collect the user profile through natural conversation. "
+    "You need: zip_code, age, annual_income, household_size, medications (optional), doctors (optional). "
+    "Ask one question at a time. Be warm and conversational. Keep responses to 1-2 sentences. "
+    'Once you have all required fields output EXACTLY this on its own line with no extra text: '
+    'PROFILE_COMPLETE:{"zip_code":"77001","age":34,"income":52000,"household_size":2,"drugs":[],"doctors":[]}'
 )
 
 ADVISOR_SYSTEM = (
@@ -219,7 +212,6 @@ class ConversationalOrchestrator:
 
     async def _run_analysis(self, user_id, profile):
         from tools.gov_apis import get_state_exchange, calculate_fpl_percentage
-
         fpl_pct = calculate_fpl_percentage(float(profile["income"]), int(profile["household_size"]))
         state_exchange = get_state_exchange(str(profile["zip_code"]))
         if state_exchange:
@@ -227,34 +219,6 @@ class ConversationalOrchestrator:
         if fpl_pct < 138:
             med = await medicaid_agent(profile, fpl_pct)
             return {"route": "medicaid", "fpl_percentage": fpl_pct, "medicaid": med, "recommendation": med["message"], "plans": []}
-
-        # Try ADK orchestrator first (available on Cloud Run)
-        try:
-            from agents.adk_orchestrator import ADKOrchestrator, ADK_AVAILABLE
-            if ADK_AVAILABLE:
-                adk = ADKOrchestrator()
-                # Ensure all fields are present
-                full_profile = {
-                    "zip_code": str(profile.get("zip_code", "")),
-                    "age": int(profile.get("age", 30)),
-                    "income": float(profile.get("income", 50000)),
-                    "household_size": int(profile.get("household_size", 1)),
-                    "drugs": profile.get("drugs", []),
-                    "doctors": profile.get("doctors", []),
-                    "utilization": profile.get("utilization", "sometimes"),
-                    "tobacco_use": bool(profile.get("tobacco_use", False)),
-                    "is_premium": bool(profile.get("is_premium", False)),
-                    "user_id": str(profile.get("user_id", "anonymous")),
-                }
-                result = await adk.analyze(full_profile)
-                result["fpl_percentage"] = fpl_pct
-                result["is_premium"] = full_profile["is_premium"]
-                return result
-        except Exception as e:
-            print("ADK analysis failed, falling back to basic: " + str(e))
-            import traceback; traceback.print_exc()
-
-        # Fallback: basic parallel sub-agents
         wave1 = await asyncio.gather(subsidy_agent(profile, fpl_pct), plan_search_agent(profile), doctor_check_agent(profile))
         subsidy, plan_result, doctors = wave1
         plans = plan_result.get("plans", [])
@@ -276,7 +240,6 @@ class ConversationalOrchestrator:
             "metal_tier": metal,
             "recommendation": recommendation,
             "cache_stats": get_cache_stats(),
-            "is_premium": bool(profile.get("is_premium")),
         }
 
     async def _synthesize(self, profile, fpl_pct, subsidy, plans, drugs, doctors, risks, metal, memory_context):
@@ -301,8 +264,7 @@ class ConversationalOrchestrator:
             "Warnings: " + drug_warnings,
             "Risk flags:\n" + flags,
             "Metal rec: " + (metal.get("recommendation") or ""),
-            "Give top 3 plans ranked by TRUE annual cost. For each: net premium after subsidy, why it ranks here, drug note, one warning." +
-            (" Include a 5-Year HSA Wealth Forecast table for any HSA-eligible plans. Provide breakeven analysis between top plans. Explain CSR variants in detail. Give 3x more detail on financial tradeoffs. No word limit." if profile.get("is_premium") else " Under 400 words."),
+            "Give top 3 plans ranked by TRUE annual cost. For each: net premium after subsidy, why it ranks here, drug note, one warning. Under 400 words.",
         ]
         prompt = "\n".join(str(p) for p in parts)
         try:
