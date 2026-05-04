@@ -386,7 +386,7 @@ def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, 
             prefix = zip_code[:3]
             for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50]:
                 nearby = str(int(zip_code) + delta).zfill(5)
-                if nearby[:3] != prefix:
+                if nearby[:2] != prefix[:2]:
                     continue
                 nearby_fips = get_fips_from_zip(nearby)
                 if nearby_fips:
