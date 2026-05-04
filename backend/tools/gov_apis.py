@@ -380,8 +380,21 @@ def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, 
         return []
 
     def fetch():
+        nonlocal fips
         if not fips:
-            raise RuntimeError(f"Cannot search plans: no FIPS for ZIP {zip_code}")
+            # Try nearby ZIPs — handles PO Box ZIPs not in census file
+            prefix = zip_code[:3]
+            for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50]:
+                nearby = str(int(zip_code) + delta).zfill(5)
+                if nearby[:3] != prefix:
+                    continue
+                nearby_fips = get_fips_from_zip(nearby)
+                if nearby_fips:
+                    print(f"ZIP {zip_code} no FIPS — using nearby {nearby} ({nearby_fips})")
+                    fips = nearby_fips
+                    break
+            if not fips:
+                raise RuntimeError(f"Cannot search plans: no FIPS for ZIP {zip_code}")
         # Try original ZIP first
         plans = _try_zip(zip_code, fips)
         if plans:
