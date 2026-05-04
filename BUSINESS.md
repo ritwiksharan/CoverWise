@@ -41,27 +41,22 @@
 
 ### Token Economics — Per Call Breakdown (grounded in actual code)
 
-Every `/api/analyze` runs **two separate LLM calls** (`adk_orchestrator.py`):
+Every `/api/analyze` runs **one LLM call** (`adk_orchestrator.py`). EV ranking is computed instantly in Python (no LLM needed — it is pure weighted arithmetic on pre-computed scenario costs), so only the synthesis step uses Gemini.
 
-**Phase 1.5 — LLM Ranking Agent** (`_rank_plans_with_llm`):
+**Phase 1.5 — Python EV Ranking** (`_rank_plans_python`):
+- Zero LLM cost. Computes `EV = (w_h × healthy) + (w_c × clinical) + (w_w × worst)` for every plan in microseconds.
+- Weights are determined by utilization level (`rarely` / `sometimes` / `frequently` / `chronic`).
 
-| Component | Tokens | Rate | Cost |
+**Phase 2 — Synthesis Agent** (`_synthesize_with_gemini`, model: `gemini-2.5-flash`):
+
+| Component | Tokens | Rate (input/output) | Cost |
 |---|---|---|---|
-| System: `_RANKING_INSTRUCTION` (utilization weights, EV formula, JSON schema) | ~1,150 | $0.075/1M | $0.000086 |
-| User: compact plan JSON (up to 10 plans × scenario costs) | ~500 | $0.075/1M | $0.000038 |
-| Output: ranked JSON with per-plan EV scores and rationale | ~450 | $0.300/1M | $0.000135 |
-| **Phase 1.5 total** | **~2,100** | | **$0.000259** |
+| System: `ORCHESTRATOR_INSTRUCTION` (section order, pillar rules, ranking rule) | ~975 | $0.075/1M | $0.000073 |
+| User: full structured data doc — plan tables, 3 scenario tables, drug coverage per plan, doctor NPI data, subsidy, risk flags, Python-computed EV ranking | ~3,025 | $0.075/1M | $0.000227 |
+| Output: full markdown recommendation (Pre-Analysis + EV table + 5 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
+| **Phase 2 total** | **~5,500** | | **$0.000750** |
 
-**Phase 2 — Synthesis Agent** (`_synthesize_with_gemini`):
-
-| Component | Tokens | Rate | Cost |
-|---|---|---|---|
-| System: `ORCHESTRATOR_INSTRUCTION` (4-pillar analysis, breakeven rules, format) | ~975 | $0.075/1M | $0.000073 |
-| User: full structured data doc — plan tables, 3 scenario tables, drug coverage per plan, doctor NPI data, subsidy, risk flags, embedded ranking | ~3,025 | $0.075/1M | $0.000227 |
-| Output: markdown recommendation (pre-analysis + 4 pillars) | ~450 | $0.300/1M | $0.000135 |
-| **Phase 2 total** | **~4,450** | | **$0.000435** |
-
-**Total per `/api/analyze` (10 plans, 2 drugs, 1 doctor): ~6,550 tokens → $0.00069**
+**Total per `/api/analyze` (10 plans, 2 drugs, 1 doctor): ~5,500 tokens → $0.00075**
 
 ---
 
@@ -94,15 +89,14 @@ Note: chat re-sends the entire data document each turn (by design — Gemini nee
 
 | Item | Monthly Cost |
 |---|---|
-| Phase 1.5 Ranking (1×) | $0.000259 |
-| Phase 2 Synthesis (1×) | $0.000435 |
+| Phase 2 Synthesis (1× @ $0.00075) | $0.000750 |
 | Chat follow-ups (8× × $0.00040) | $0.003200 |
 | Insurance Q&A (4× × $0.000113) | $0.000452 |
-| **Total LLM tokens** | **$0.0043** |
-| Cloud Run (2Gi / 2vCPU / ~40 req) | $0.040 |
+| **Total LLM tokens** | **$0.0044** |
+| Cloud Run (4Gi / 2vCPU / ~40 req) | $0.040 |
 | mem0 + ChromaDB storage | $0.005 |
 | Government APIs (CMS, NPPES, RxNorm) | $0.000 |
-| **Total cost to serve** | **$0.049/month** |
+| **Total cost to serve** | **$0.050/month** |
 | **Revenue** | **$19.00** |
 | **Gross margin** | **99.7%** |
 

@@ -8,6 +8,30 @@ An agentic AI system that helps Americans find their optimal ACA health insuranc
 
 ---
 
+## Business Pitch
+
+### The User
+
+**Primary:** The 21.4 million Americans who buy health insurance on the ACA Marketplace without an employer HR department to guide them — freelancers, gig workers (Uber, DoorDash, Upwork), self-employed small-business owners, and people between jobs.
+
+**Secondary:** The 160 million Americans with employer coverage who face annual open enrollment and have no idea whether the "better" plan actually costs less given their specific medications and doctors.
+
+**Concrete persona:** Maria, 34, a Chicago-based graphic designer. She earns $52,000 freelancing, takes Ozempic for Type 2 diabetes and Metformin, and sees her endocrinologist quarterly. Every November she spends 4–6 hours on healthcare.gov trying to figure out whether a Bronze plan with a $7,400 deductible is cheaper than a Silver plan with a $3,000 deductible — and she still doesn't know if Ozempic is covered or whether her doctor is in-network. She has been making the wrong call for three years.
+
+### The Problem
+
+**Health insurance is the highest-stakes financial decision most Americans make every year, and almost no one makes it well.**
+
+- The average American overspends $1,500–$2,500/year on health insurance by choosing the wrong plan for their actual utilization and medications (Kaiser Family Foundation, 2023).
+- Healthcare.gov shows 50–90 plans per ZIP code. None of them tell you your true cost after your actual medications, your actual doctors, and your actual utilization are factored in.
+- Navigating this requires cross-referencing 5+ government websites (CMS Marketplace, NPPES NPI Registry, each insurer's formulary, HRSA shortage databases, IRS APTC tables) that most people don't know exist.
+
+**What people do today:** They click the lowest premium, or they call a broker who earns a commission from the insurer — a direct conflict of interest. Neither approach accounts for drug tier costs, prior authorization requirements, or out-of-pocket max exposure.
+
+**Why CoverWise:** The only free tool that cross-references your exact medications (RxNorm + CMS formulary), your specific doctors (NPPES NPI), your subsidy eligibility (FPL calculation), and healthcare utilization into a single ranked recommendation. No commissions. No conflict of interest.
+
+---
+
 ## Class Concepts Applied
 
 ### 1. Tool Use / Function Calling
@@ -212,77 +236,115 @@ ADK-powered agent. Restricted to health insurance topics via few-shot prompting.
 | Output (non-thinking) | $0.30 / 1M tokens |
 | Output (thinking, if budget fires) | $3.50 / 1M tokens |
 
-### Tokens per Operation
+### Per-Call Breakdown (grounded in actual code)
 
-Every full analysis makes exactly one Gemini call. The system prompt (`ORCHESTRATOR_INSTRUCTION`) is ~1,500 tokens. The synthesis prompt (`_build_synthesis_prompt`) scales with the number of plans, drugs, and doctors injected.
+Every `/api/analyze` runs **one LLM call**. EV ranking is computed instantly in Python (`_rank_plans_python`) — pure weighted arithmetic, zero LLM cost. Only the synthesis step uses Gemini.
 
-| Operation | Input tokens | Output tokens | Total |
+**Phase 1.5 — Python EV Ranking** (`_rank_plans_python`): $0.00
+
+**Phase 2 — Synthesis** (`_synthesize_with_gemini`, model: `gemini-2.5-flash`):
+
+| Component | Tokens | Rate | Cost |
 |---|---|---|---|
-| Full analysis — Free (3 plans, 1 drug, 1 doctor) | ~4,000 | ~2,000 | **~6,000** |
-| Full analysis — Premium (10 plans, 3 drugs, 3 doctors) | ~7,000 | ~3,500 | **~10,500** |
-| Chat message — Free (rebuilds full synthesis prompt + prior rec + question each turn) | ~4,800 | ~500 | **~5,300** |
-| Chat message — Premium | ~7,800 | ~800 | **~8,600** |
-| Insurance Q&A — no tool call | ~830 | ~300 | **~1,130** |
-| Insurance Q&A — with tool call (2-pass: question → tool → answer) | ~1,800 | ~400 | **~2,200** |
+| System: `ORCHESTRATOR_INSTRUCTION` (section order, pillar rules, ranking rule) | ~975 | $0.075/1M | $0.000073 |
+| User: full structured data doc — plan tables, 3 scenario tables, drug coverage per plan, doctor NPI data, subsidy, risk flags, Python EV ranking | ~3,025 | $0.075/1M | $0.000227 |
+| Output: full markdown recommendation (Pre-Analysis + EV table + 5 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
+| **Phase 2 total** | **~5,500** | | **$0.000750** |
 
-> Note: `chat()` calls `_build_synthesis_prompt()` in full on every message — the entire data document is re-injected each turn. Architecturally wasteful; a cached delta approach could cut chat token cost by ~60%.
+**Total per `/api/analyze` (10 plans, 2 drugs, 1 doctor): ~5,500 tokens → $0.00075**
 
-### Cost per Operation
+---
 
-| Operation | Input $ | Output $ | **Total $** |
+**Per `/api/chat` follow-up** (`_synthesize_with_gemini` called directly):
+
+| Component | Tokens | Cost |
+|---|---|---|
+| System: `ORCHESTRATOR_INSTRUCTION` | ~975 | |
+| User: full data doc (same synthesis prompt rebuilt each turn) + prior recommendation (first 3,000 chars) + user question | ~3,825 | |
+| Output: focused answer | ~125 | |
+| **Total** | **~4,925** | **$0.00040** |
+
+> `chat()` re-sends the entire data document on every message — the dominant per-session cost. A cached delta approach could cut this by ~60%.
+
+---
+
+**Per `/api/insurance-qa`** (ADK agent, 2 LLM passes):
+
+| Pass | Input | Output | Cost |
 |---|---|---|---|
-| Full analysis — Free | $0.000300 | $0.000600 | **$0.0009** |
-| Full analysis — Premium | $0.000525 | $0.001050 | **$0.0016** |
-| Chat message — Free | $0.000360 | $0.000150 | **$0.0005** |
-| Chat message — Premium | $0.000585 | $0.000240 | **$0.0008** |
-| Insurance Q&A (avg, 1 tool call) | $0.000135 | $0.000120 | **$0.00025** |
+| Pass 1: intent + tool selection | ~600 tokens | ~50 tokens | $0.000060 |
+| Pass 2: tool result → answer | ~400 tokens | ~75 tokens | $0.000053 |
+| **Total** | **~1,125** | | **$0.000113** |
+
+---
 
 ### One-User-Month: Cost to Serve
 
-**Free user** — enrollment window visitor, uses the tool once or twice:
+**Free user** — enrollment window visitor, 1 analysis + 3 chats + 2 Q&As:
+- LLM: ~$0.0018/user/month
+- 1,000 free users = **$1.78/month** in LLM costs
+- Infra negligible at this scale (Cloud Run scales to zero)
 
-| Activity | Count/mo | Cost each | Subtotal |
-|---|---|---|---|
-| Full analysis runs | 1.5 | $0.0009 | $0.0014 |
-| Chat follow-ups | 2.5 | $0.0005 | $0.0013 |
-| Q&A questions | 1.5 | $0.00025 | $0.0004 |
-| Cloud Run compute (shared) | — | — | ~$0.010 |
-| **Total cost to serve** | | | **~$0.013** |
+**Premium user ($19/month)** — 1 analysis + 8 chats + 4 Q&As:
 
-**Premium user** — actively using year-round:
+| Item | Monthly Cost |
+|---|---|
+| Phase 2 Synthesis (1x @ $0.00075) | $0.000750 |
+| Chat follow-ups (8x x $0.00040) | $0.003200 |
+| Insurance Q&A (4x x $0.000113) | $0.000452 |
+| **Total LLM** | **$0.0044** |
+| Cloud Run (4 GiB / 2 vCPU / ~40 req) | $0.040 |
+| mem0 + ChromaDB storage | $0.005 |
+| Government APIs (CMS, NPPES, RxNorm) | $0.000 |
+| **Total cost to serve** | **$0.050** |
+| **Revenue** | **$19.00** |
+| **Gross margin** | **99.7%** |
 
-| Activity | Count/mo | Cost each | Subtotal |
-|---|---|---|---|
-| Full analysis runs | 2.5 | $0.0016 | $0.0040 |
-| Chat messages | 12 | $0.0008 | $0.0096 |
-| Q&A questions | 7 | $0.00025 | $0.0018 |
-| Cloud Run compute | — | — | ~$0.020 |
-| **Total cost to serve** | | | **~$0.036** |
-
-### The P&L
-
-| | Free | Premium |
-|---|---|---|
-| Revenue | $0 | **$19.00** |
-| LLM cost | $0.003 | $0.016 |
-| Infra (Cloud Run) | $0.010 | $0.020 |
-| **Total cost to serve** | **$0.013** | **$0.036** |
-| **Gross margin** | **−$0.013/user** | **$18.96 = 99.8%** |
-
-The unit economics are excellent. You could absorb a 10× power user (25 analyses, 100 chat messages) for under $0.30 in tokens.
+You could absorb a 10x power user (25 analyses, 100 chat messages) for under $0.30 in tokens.
 
 ### Where It Breaks
 
-**Thinking tokens** — `gemini-2.5-flash` can fire a thinking budget automatically. If it does, output cost jumps from $0.30/M to $3.50/M. Premium user LLM cost rises from ~$0.016 to ~$0.18/month. Still under 1% of revenue, but worth setting `thinking_config={"thinking_budget": 0}` explicitly if synthesis quality is acceptable without it.
+**Thinking tokens** — `gemini-2.5-flash` can fire a thinking budget automatically. If it does, output cost jumps $0.30/M to $3.50/M. Premium LLM cost rises from ~$0.004 to ~$0.045/month. Still under 1% of revenue, but worth setting `thinking_config={"thinking_budget": 0}` explicitly if synthesis quality holds without it.
 
-**Seasonality** — Open enrollment runs Nov 15–Jan 15 (60 days). Outside that window there is almost nothing to analyze. The realistic subscription pattern: user subscribes in November, cancels in February → **LTV ≈ $19–$38**. If CAC via paid ads is $30–$50, the model is break-even or underwater on acquisition. The year-round advisor feature is the retention play, but that has to be proven.
+**Seasonality** — Open enrollment is Nov 15–Jan 15 (60 days). Outside that window there is almost nothing to analyze. The realistic subscription pattern: user subscribes November, cancels February — **LTV ~$19–$38**. If CAC via paid ads is $30–$50, the model is break-even or underwater on acquisition. The year-round advisor is the retention play — it has to be proven.
 
-**Conversion math** — At 3% free-to-premium conversion and 60% monthly churn after enrollment season:
+**Conversion math** — At 3% free-to-premium conversion and 60% post-enrollment churn:
 - 1,000 free users → 30 premium → ~12 retained in month 2
-- LTV per converted user ≈ $19 / (1 − 0.4) = **~$32 over lifetime**
-- This only works if CAC < $32, which means essentially organic / SEO traffic
+- LTV per converted user = $19 / (1 - 0.4) = **~$32**
+- Only works if CAC < $32 — essentially organic / SEO only
 
-**Missing revenue layer** — Traditional insurance tech earns **$20–$100/enrolled member/month** in broker commissions from carriers (eHealth, GoHealth, SelectQuote all operate this way). At $19/month from the user, the larger revenue stream is being left on the table. Adding licensed broker referral fees on top of the subscription could 5–10× LTV without changing the cost structure.
+**Missing revenue layer** — Traditional insurance tech earns **$20–$100/enrolled member/month** in broker commissions from carriers (eHealth, GoHealth, SelectQuote). At $19/month from the user, the larger stream is untapped. Licensed broker referral fees on top of the subscription could 5–10x LTV without changing the cost structure.
+
+**Path to $100K ARR:**
+- ~440 premium subscribers at $19/month
+- At 3% conversion: ~15,000 free users needed
+- Open enrollment (Nov–Jan) drives 60–70% of annual sign-ups — SEO on "ACA plan comparison", "health insurance calculator" is the primary acquisition channel
+
+**Fixed cost floor:** Cloud Run minimum + domain ~$15/month regardless of user count. Breakeven: **1 premium subscriber** covers fixed costs; 2 covers all LLM costs for ~400 free users.
+
+---
+
+## Competitive Landscape
+
+| | CoverWise | healthcare.gov | eHealth.com | Local Broker |
+|---|---|---|---|---|
+| Personalized drug analysis | Yes | No | No | Sometimes |
+| Doctor NPI verification | Yes | No | No | Rarely |
+| Subsidy calculation | Yes | Yes | Yes | Yes |
+| No commission conflict | Yes | Yes | No | No |
+| Year-round AI advisor | Yes | No | No | No |
+| Price | Free / $19/mo | Free | Free (lead-gen) | Free (commission) |
+
+---
+
+## Risk & Mitigation
+
+| Risk | Mitigation |
+|---|---|
+| CMS API availability / rate limits | TTL cache absorbs ~75% of calls; graceful degradation returns data-only results without synthesis |
+| LLM cost spike at scale | Gemini 2.5 Flash is cost-efficient for structured summarization; hard rate limits per user tier |
+| "Not a licensed insurance broker" liability | Explicit disclaimer on every output: "This is informational only. CoverWise is not a licensed insurance broker. Verify all plan details on healthcare.gov." |
+| Open enrollment seasonality | Year-round advisor and mid-year SEP guidance smooth monthly revenue; plan for 70% of annual sign-ups in Nov–Jan |
 
 ---
 
