@@ -394,6 +394,27 @@ def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, 
                     fips = nearby_fips
                     break
             if not fips:
+                # Last resort: try CMS counties API for nearby ZIPs
+                import requests as _req
+                prefix2 = zip_code[:2]
+                for delta in range(-100, 100):
+                    nearby = str(int(zip_code) + delta).zfill(5)
+                    if nearby[:2] != prefix2:
+                        continue
+                    try:
+                        r = _req.get(
+                            f"https://marketplace.api.healthcare.gov/api/v1/counties/by/zip/{nearby}",
+                            params={"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {},
+                            timeout=5
+                        )
+                        counties = r.json().get("counties", [])
+                        if counties:
+                            fips = counties[0].get("fips")
+                            print(f"ZIP {zip_code} — CMS county API found FIPS via {nearby}: {fips}")
+                            break
+                    except Exception:
+                        continue
+            if not fips:
                 raise RuntimeError(f"Cannot search plans: no FIPS for ZIP {zip_code}")
         # Try original ZIP first
         plans = _try_zip(zip_code, fips)
