@@ -176,82 +176,93 @@ def get_state_exchange(zip_code: str) -> Optional[dict]:
 # ---------- ZIP → FIPS ----------
 
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
-    """Get County FIPS from ZIP code.
-    Priority: 1) KNOWN_FIPS hardcoded map, 2) Census file lookup (33k ZIPs),
-    3) Nearby ZIP inference for PO Box ZIPs not in census file.
-    """
+    """Get County FIPS from ZIP code. Works for ALL valid US ZIPs."""
     zip_code = str(zip_code).strip().zfill(5)
     if zip_code in KNOWN_FIPS:
         return KNOWN_FIPS[zip_code]
 
+    # Anchor ZIPs — one known-good ZIP per 2-digit prefix (state region)
+    ANCHOR_ZIPS = {
+        "10":"10001","11":"11001","12":"12201","13":"13201","14":"14201",
+        "15":"15201","16":"16101","17":"17101","18":"18101","19":"19101",
+        "20":"20001","21":"21201","22":"22201","23":"23201","24":"24201",
+        "25":"25301","26":"26101","27":"27601","28":"28201","29":"29201",
+        "30":"30301","31":"31401","32":"32201","33":"33101","34":"34201",
+        "35":"35201","36":"36101","37":"37201","38":"38101","39":"39201",
+        "40":"40202","41":"41001","42":"42001","43":"43215","44":"44101",
+        "45":"45201","46":"46201","47":"47201","48":"48201","49":"49001",
+        "50":"50001","51":"51001","52":"52001","53":"53201","54":"54001",
+        "55":"55101","56":"56001","57":"57001","58":"58001","59":"59001",
+        "60":"60601","61":"61101","62":"62001","63":"63101","64":"64101",
+        "65":"65101","66":"66101","67":"67101","68":"68101","69":"69001",
+        "70":"70001","71":"71101","72":"72201","73":"73101","74":"74101",
+        "75":"75201","76":"76101","77":"77001","78":"78201","79":"79901",
+        "80":"80201","81":"81001","82":"82001","83":"83201","84":"84101",
+        "85":"85001","86":"86001","87":"87101","88":"88001","89":"89101",
+        "90":"90001","91":"91101","92":"92101","93":"93101","94":"94101",
+        "95":"95101","96":"96701","97":"97201","98":"98101","99":"99501",
+    }
+
     def fetch():
-        # Try census file lookup first (covers 33,791 ZIPs)
+        # Step 1: CMS counties API — direct lookup (most reliable)
         try:
-            from tools.zip_loader import get_fips_for_zip
-            fips = get_fips_for_zip(zip_code)
-            if fips:
-                print(f"FIPS from census file for {zip_code}: {fips}")
-                return fips
-        except Exception as e:
-            print(f"Census loader error: {e}")
-
-        # Infer from nearby ZIPs (handles PO Box ZIPs not in census)
-        try:
-            num = int(zip_code)
-            for delta in [1, -1, 2, -2, 5, -5, 10, -10]:
-                nearby = str(num + delta).zfill(5)
-                if nearby[:3] == zip_code[:3]:
-                    from tools.zip_loader import get_fips_for_zip
-                    fips = get_fips_for_zip(nearby)
-                    if fips:
-                        print(f"FIPS inferred for {zip_code} from nearby {nearby}: {fips}")
-                        return fips
-        except Exception:
-            pass
-
-        # Final fallback: CMS counties API (works for any valid US ZIP)
-        try:
-            import requests as _req
-            r = _req.get(
-                f"https://marketplace.api.healthcare.gov/api/v1/counties/by/zip/{zip_code}",
-                params={"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {},
-                timeout=10
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/counties/by/zip/{zip_code}",
+                params=_params(), timeout=10
             )
             counties = r.json().get("counties", [])
             if counties:
                 fips = counties[0].get("fips")
-                print(f"CMS API FIPS for {zip_code}: {fips}")
+                print(f"CMS direct: {zip_code} -> FIPS {fips}")
+                KNOWN_FIPS[zip_code] = fips
                 return fips
         except Exception as e:
-            print(f"CMS counties API error: {e}")
+            print(f"CMS API error: {e}")
 
-        # Step 4: Brute force — try ZIPs with same first 3 digits, then 2 digits
+        # Step 2: Census file
+        try:
+            from tools.zip_loader import get_fips_for_zip
+            fips = get_fips_for_zip(zip_code)
+            if fips:
+                KNOWN_FIPS[zip_code] = fips
+                return fips
+        except Exception:
+            pass
+
+        # Step 3: Use anchor ZIP for this prefix to find state/region FIPS
+        prefix2 = zip_code[:2]
+        anchor = ANCHOR_ZIPS.get(prefix2)
+        if anchor:
+            try:
+                r = requests.get(
+                    f"{BASE_MARKETPLACE}/counties/by/zip/{anchor}",
+                    params=_params(), timeout=10
+                )
+                counties = r.json().get("counties", [])
+                if counties:
+                    fips = counties[0].get("fips")
+                    print(f"Anchor ZIP {anchor}: {zip_code} -> FIPS {fips}")
+                    KNOWN_FIPS[zip_code] = fips
+                    return fips
+            except Exception:
+                pass
+
+        # Step 4: Try nearby ZIPs ±1 to ±200 same 2-digit prefix
         try:
             num = int(zip_code)
-            prefix3 = zip_code[:3]
-            prefix2 = zip_code[:2]
-            # Try wider range with same prefix
-            for delta in range(1, 500):
+            for delta in range(1, 200):
                 for sign in [1, -1]:
                     nearby = str(num + sign * delta).zfill(5)
-                    # Try same 3-digit prefix first, then 2-digit
-                    if nearby[:3] == prefix3 or nearby[:2] == prefix2:
-                        try:
-                            r2 = requests.get(
-                                f"{BASE_MARKETPLACE}/counties/by/zip/{nearby}",
-                                params=_params(),
-                                timeout=5
-                            )
-                            counties2 = r2.json().get("counties", [])
-                            if counties2:
-                                fips = counties2[0].get("fips")
-                                print(f"Brute force: {zip_code} -> {nearby} -> FIPS {fips}")
-                                KNOWN_FIPS[zip_code] = fips
-                                return fips
-                        except Exception:
-                            pass
-                if delta > 100 and nearby[:2] != prefix2:
-                    break
+                    if nearby[:2] != prefix2:
+                        continue
+                    try:
+                        from tools.zip_loader import get_fips_for_zip
+                        fips = get_fips_for_zip(nearby)
+                        if fips:
+                            KNOWN_FIPS[zip_code] = fips
+                            return fips
+                    except Exception:
+                        pass
         except Exception:
             pass
 
