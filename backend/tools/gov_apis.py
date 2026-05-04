@@ -225,6 +225,36 @@ def get_fips_from_zip(zip_code: str) -> Optional[str]:
         except Exception as e:
             print(f"CMS counties API error: {e}")
 
+        # Step 4: Brute force — try ZIPs with same first 3 digits, then 2 digits
+        try:
+            num = int(zip_code)
+            prefix3 = zip_code[:3]
+            prefix2 = zip_code[:2]
+            # Try wider range with same prefix
+            for delta in range(1, 500):
+                for sign in [1, -1]:
+                    nearby = str(num + sign * delta).zfill(5)
+                    # Try same 3-digit prefix first, then 2-digit
+                    if nearby[:3] == prefix3 or nearby[:2] == prefix2:
+                        try:
+                            r2 = requests.get(
+                                f"{BASE_MARKETPLACE}/counties/by/zip/{nearby}",
+                                params=_params(),
+                                timeout=5
+                            )
+                            counties2 = r2.json().get("counties", [])
+                            if counties2:
+                                fips = counties2[0].get("fips")
+                                print(f"Brute force: {zip_code} -> {nearby} -> FIPS {fips}")
+                                KNOWN_FIPS[zip_code] = fips
+                                return fips
+                        except Exception:
+                            pass
+                if delta > 100 and nearby[:2] != prefix2:
+                    break
+        except Exception:
+            pass
+
         print(f"FIPS not found for ZIP {zip_code}")
         return None
 
