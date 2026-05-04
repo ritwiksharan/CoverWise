@@ -1566,11 +1566,17 @@ async function sendChat() {
   loadingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
   messages.appendChild(loadingDiv);
   messages.scrollTop = messages.scrollHeight;
+  let extraContext = "";
+  const empEl = document.getElementById('employerResults');
+  if (empEl && empEl.innerText.trim().length > 0) {
+    extraContext = "Employer Comparison Run by User:\n" + empEl.innerText;
+  }
+
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: USER_ID, message: msg, profile: currentProfile })
+      body: JSON.stringify({ user_id: USER_ID, message: msg, profile: currentProfile, context: extraContext })
     });
     const data = await res.json();
     loadingDiv.innerHTML = renderMarkdown(data.reply || 'No response received.');

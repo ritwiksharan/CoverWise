@@ -995,7 +995,7 @@ class ADKOrchestrator:
             "medication_coverage": data.get("medication_coverage", {}),
         }
 
-    async def chat(self, user_id: str, message: str, profile: Optional[dict] = None) -> dict:
+    async def chat(self, user_id: str, message: str, profile: Optional[dict] = None, context: str = "") -> dict:
         """
         Follow-up chat: loads prior analysis from session, builds context,
         calls Gemini directly with ORCHESTRATOR_INSTRUCTION + user question.
@@ -1031,6 +1031,7 @@ class ADKOrchestrator:
             "",
             "─" * 60,
             f"PRIOR RECOMMENDATION SUMMARY:\n{prior_rec}" if prior_rec else "",
+            f"EXTRA CONTEXT (e.g. Employer Plan Comparison run by user):\n{context}" if context else "",
             "─" * 60,
             f"USER FOLLOW-UP QUESTION: {message}",
             "",

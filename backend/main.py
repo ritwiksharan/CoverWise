@@ -67,6 +67,7 @@ class ChatMessage(BaseModel):
     user_id: str
     message: str
     profile: Optional[UserProfile] = None
+    context: str = ""
 
 
 class IntakeStart(BaseModel):
@@ -140,7 +141,7 @@ async def analyze(profile: UserProfile):
 async def chat(msg: ChatMessage):
     try:
         result = await orchestrator.chat(
-            msg.user_id, msg.message, msg.profile.dict() if msg.profile else None
+            msg.user_id, msg.message, msg.profile.dict() if msg.profile else None, msg.context
         )
         return result
     except Exception as e:
