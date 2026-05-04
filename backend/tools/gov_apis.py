@@ -83,21 +83,23 @@ def get_state_exchange(zip_code: str) -> Optional[dict]:
 # ---------- ZIP → FIPS ----------
 
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
-    """Get County FIPS from ZIP code using CMS crosswalk."""
+    """Convert ZIP to county FIPS - uses known map first, then CMS API."""
     zip_code = str(zip_code).strip().zfill(5)
     if zip_code in KNOWN_FIPS:
         return KNOWN_FIPS[zip_code]
 
     def fetch():
         try:
-            r = requests.get(
-                f"{BASE_MARKETPLACE}/counties/by/zip/{zip_code}",
-                params=_params(), timeout=10
-            )
-            counties = r.json().get("counties", [])
+            url = BASE_MARKETPLACE + "/counties/by/zip/" + zip_code + ".json"
+            params = {}
+            if CMS_MARKETPLACE_KEY:
+                params["apikey"] = CMS_MARKETPLACE_KEY
+            r = requests.get(url, params=params, timeout=10)
+            data = r.json()
+            counties = data.get("counties", [])
             return counties[0].get("fips") if counties else None
         except Exception as e:
-            print(f"FIPS lookup error: {e}")
+            print("FIPS lookup error: " + str(e))
             return None
     return cached_call("zip_fips", {"zip": zip_code}, fetch)
 

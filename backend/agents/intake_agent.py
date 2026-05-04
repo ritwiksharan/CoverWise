@@ -370,7 +370,7 @@ async def _collect_final_text(user_id: str, session_id: str, msg: "Content") -> 
                     if hasattr(part, "text") and part.text:
                         reply = part.text
                         break
-    return reply or "I'm here to help you find a health plan. What's your ZIP code?"
+    return (reply or "I'm here to help you find a health plan. What's your ZIP code?").replace("**", "")
 
 
 # ── FALLBACKS (when ADK not installed) ───────────────────────────────────────

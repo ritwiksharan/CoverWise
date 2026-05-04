@@ -891,15 +891,15 @@ async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = Fals
     try:
         vertexai.init(project=PROJECT_ID, location=REGION)
         model = GenerativeModel(
-            "gemini-2.5-pro-preview-05-06",
+            "gemini-2.0-flash-001",
             system_instruction=ORCHESTRATOR_INSTRUCTION,
             generation_config=GenerationConfig(
-                max_output_tokens=16384,
+                max_output_tokens=8192,
                 temperature=1,   # Gemini 2.5 Pro uses temperature=1 for thinking
             ),
         )
         response = await asyncio.to_thread(model.generate_content, synthesis_prompt)
-        return response.text
+        return response.text.replace("**", "")
     except Exception as e:
         traceback.print_exc()
         return f"**Synthesis error**: {e}\n\nRaw data has been returned in the structured fields."
@@ -917,7 +917,7 @@ class ADKOrchestrator:
         if self._runner: return
         agent = Agent(
             name="insurance_expert",
-            model="gemini-2.5-pro-preview-05-06",
+            model="gemini-2.0-flash",
             instruction=ORCHESTRATOR_INSTRUCTION,
             tools=[run_full_analysis_parallel]
         )

@@ -522,7 +522,7 @@ class InsuranceQAAgent:
                             answer += part.text
 
         return {
-            "answer": answer,
+            "answer": answer.replace("**", ""),
             "tool_calls": list(dict.fromkeys(tool_calls)),
             "error": None,
         }
