@@ -299,17 +299,13 @@ def test_doctors(profile, plans, state):
 # PHASE 1e — Market Risks
 # ─────────────────────────────────────────────────────────────────────────────
 def test_market(profile, fips, state):
-    from tools.gov_apis import check_hrsa_shortage, check_sep_eligibility
+    from tools.gov_apis import check_sep_eligibility
     hdr(f"PHASE 1e — Market Risks  (ZIP {profile['zip_code']}, {state})")
-    hrsa = check_hrsa_shortage(state, fips)
-    sep  = check_sep_eligibility()
-    kv("HRSA shortage area:", str(hrsa.get("shortage_area", False)))
-    if hrsa.get("message"):
-        ok(hrsa["message"])
-    else:
-        ok("No primary care shortage designation for this area.")
+    sep = check_sep_eligibility()
     kv("Open enrollment:", str(sep.get("in_open_enrollment", False)))
     kv("SEP message:", sep.get("message",""))
+    if sep.get("in_open_enrollment"):
+        ok(f"Deadline: {sep.get('deadline')} ({sep.get('days_remaining')} days remaining)")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

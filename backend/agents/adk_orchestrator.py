@@ -100,11 +100,8 @@ ANALYSIS PILLARS
    • If no doctors provided: skip this pillar and note it.
 
 4. ## 🌐 Market Pillar
-   • HRSA: if `shortage_area: False` or message says "no HPSA found", write "No primary care
-     shortage in this area." Do NOT write "tool error" or imply a failure — False means the check
-     succeeded and found no shortage.
-   • If `shortage_area: True`, name the specific implication for plan choice (HMO risk, telehealth).
-   • Enrollment window: state exact deadline or SEP trigger conditions.
+   • Enrollment window: state the exact deadline date and days remaining, or explain SEP trigger conditions.
+   • Do NOT mention HRSA, shortage areas, or primary care access — that data source is removed.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PREMIUM TIER RULES (is_premium: true)
@@ -310,10 +307,6 @@ async def _collect_analysis_data(profile: dict) -> dict:
 
     if age < 30:
         risk_flags.append("💡 Under 30: Catastrophic plan option available — $9,450 deductible but lower premiums.")
-
-    hrsa = risks.get("hrsa", {})
-    if hrsa.get("shortage_area"):
-        risk_flags.append(f"🏥 {hrsa.get('message', 'HPSA area.')} Prefer PPO/EPO with $0 telehealth.")
 
     sep = risks.get("sep", {})
     if sep.get("in_open_enrollment"):
@@ -559,17 +552,10 @@ def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> 
             lines.append(f"    • {pname[:40]}: {status}{url_note}")
         lines.append("")
 
-    # ── Market / HRSA / SEP ──────────────────────────────────────────────────
-    hrsa = risks.get("hrsa", {})
-    hrsa_status = (
-        hrsa.get("message", "")
-        if hrsa.get("shortage_area")
-        else "No primary care shortage designation for this area (HRSA check: no HPSA found)."
-    )
+    # ── Market / SEP ─────────────────────────────────────────────────────────
     lines += [
         "MARKET & RISK DATA",
         "─" * 40,
-        f"HRSA shortage area: {hrsa.get('shortage_area', False)}  |  {hrsa_status}",
         f"Enrollment: {'Open — ' + str(sep.get('days_remaining','')) + ' days left (deadline ' + str(sep.get('deadline','')) + ')' if sep.get('in_open_enrollment') else sep.get('message','Closed')}",
         f"Actuarial values: Bronze=60% | Silver=70% | Gold=80% | Platinum=90%",
         f"CSR-94 deductible range: $0–$500  |  CSR-87: $500–$1,500  |  CSR-73: $1,500–$3,000",

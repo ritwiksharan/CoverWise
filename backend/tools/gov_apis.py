@@ -699,42 +699,6 @@ def get_doctor_quality_score(npi: str) -> dict:
     return cached_call("mips_score", {"npi": str(npi)}, fetch)
 
 
-# ─── HRSA SHORTAGE AREAS ─────────────────────────────────────────────────────
-
-def check_hrsa_shortage(state: str, fips: str = "") -> dict:
-    """Check if a county is a Health Professional Shortage Area via HRSA."""
-    def fetch():
-        try:
-            r = requests.get(
-                "https://data.hrsa.gov/api/GenerateHPSAData/HPSADataType/Primary Care",
-                params={"StateAbbreviation": state.upper()},
-                timeout=12
-            )
-            data = r.json()
-            hpsas = data.get("HPSA_FullCounty", []) if isinstance(data, dict) else []
-            if fips and hpsas:
-                match = next(
-                    (h for h in hpsas if h.get("FIPS_County_CD", "").lstrip("0") == fips.lstrip("0")),
-                    None
-                )
-                if match:
-                    return {
-                        "shortage_area": True,
-                        "designation": match.get("HPSA_Status"),
-                        "score": match.get("HPSA_Score"),
-                        "message": (
-                            f"Your county is a Primary Care HPSA (score {match.get('HPSA_Score')}). "
-                            f"HMO plans may have limited in-network providers in your area."
-                        ),
-                    }
-            return {"shortage_area": False}
-        except Exception as e:
-            print(f"HRSA shortage check error: {e}")
-            return {"shortage_area": False, "error": str(e)}
-
-    return cached_call("hrsa_shortage", {"state": state.lower(), "fips": fips}, fetch)
-
-
 # ─── SEP ELIGIBILITY — pure date logic, no external API ─────────────────────
 
 _SEP_EVENTS = {
