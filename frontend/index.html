@@ -228,6 +228,13 @@
   .rec-body tr:last-child td { border-bottom: none; }
   .rec-body tr:hover td { background: rgba(255,255,255,0.02); }
   .rec-body { font-size:14px; line-height:1.8; color:var(--text2); }
+  .rec-body h2 { font-size:17px; font-weight:700; color:var(--text); margin:24px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .rec-body h3 { font-size:15px; font-weight:600; color:var(--accent2); margin:18px 0 8px; }
+  .rec-body h4 { font-size:13px; font-weight:600; color:var(--text2); margin:14px 0 6px; }
+  .rec-body ul { margin:8px 0 8px 20px; padding:0; }
+  .rec-body ul li { margin:4px 0; }
+  .rec-body strong { color:var(--text); font-weight:600; }
+  .rec-body em { color:var(--accent2); font-style:italic; }
 
   .plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px; }
   .plan-card { background:var(--bg2); border:1px solid var(--border);
@@ -1061,7 +1068,7 @@ async function doAnalyze(profile) {
 function formatInline(text) {
   if (!text) return '';
   return text
-    .replace(/\*\*\*\*/g, '') // Remove quadruple asterisks
+    .replace(/\*{4,}/g, '')
     .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -1071,7 +1078,7 @@ function formatInline(text) {
 function renderMarkdown(text) {
   if (!text) return '';
   const lines = text.split('\n');
-  let inTable = false;
+  let inTable = false, inList = false;
   const out = [];
 
   for (const rawLine of lines) {
@@ -1079,30 +1086,39 @@ function renderMarkdown(text) {
 
     // Table rows
     if (trimmed.startsWith('|')) {
+      if (inList) { inList = false; out.push('</ul>'); }
       const isFirstRow = !inTable;
       if (!inTable) { inTable = true; out.push('<div class="table-container"><table>'); }
-      // Skip separator rows (|---|---| or |:---:|)
       if (/^\|[\s\-:|]+\|$/.test(trimmed)) continue;
       const cells = trimmed.split('|').filter((_, i, a) => i > 0 && i < a.length - 1);
       const tag = isFirstRow ? 'th' : 'td';
       out.push(`<tr>${cells.map(c => `<${tag}>${formatInline(c.trim())}</${tag}>`).join('')}</tr>`);
       continue;
     }
-
-    // Close table if open
     if (inTable) { inTable = false; out.push('</table></div>'); }
 
-    // Headings (order: most # first)
-    if (/^#{4,}\s/.test(trimmed)) {
-      out.push(`<h5 style="margin-top:14px;color:var(--text2);font-size:14px">${formatInline(trimmed.replace(/^#+\s*/, ''))}</h5>`);
-    } else if (trimmed.startsWith('### ')) {
-      out.push(`<h4 style="margin-top:16px;color:var(--accent2)">${formatInline(trimmed.slice(4))}</h4>`);
-    } else if (trimmed.startsWith('## ')) {
-      out.push(`<h3 style="margin-top:20px;color:var(--text)">${formatInline(trimmed.slice(3))}</h3>`);
-    } else if (trimmed.startsWith('# ')) {
-      out.push(`<h2 style="margin-top:24px;color:var(--text)">${formatInline(trimmed.slice(2))}</h2>`);
-    } else if (/^[-─═]{3,}$/.test(trimmed)) {
-      // Horizontal rule: --- or ─── or ═══
+    // Bullet lists: lines starting with - or * or •
+    if (/^[-*•]\s/.test(trimmed)) {
+      if (!inList) { inList = true; out.push('<ul>'); }
+      out.push(`<li>${formatInline(trimmed.slice(2).trim())}</li>`);
+      continue;
+    }
+    if (inList) { inList = false; out.push('</ul>'); }
+
+    // Headings — strip leading # chars, require at least one non-# char after
+    const hMatch = trimmed.match(/^(#{1,6})\s*(.*)/);
+    if (hMatch) {
+      const level = hMatch[1].length;
+      const content = formatInline(hMatch[2]);
+      if (level >= 4) out.push(`<h4>${content}</h4>`);
+      else if (level === 3) out.push(`<h3>${content}</h3>`);
+      else if (level === 2) out.push(`<h2>${content}</h2>`);
+      else out.push(`<h2>${content}</h2>`);
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^[-─═━]{3,}$/.test(trimmed)) {
       out.push('<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
     } else if (trimmed === '') {
       out.push('<br>');
@@ -1111,6 +1127,7 @@ function renderMarkdown(text) {
     }
   }
   if (inTable) out.push('</table></div>');
+  if (inList) out.push('</ul>');
 
   return out.join('');
 }
@@ -1136,13 +1153,20 @@ function tierColor(tier) {
 }
 
 function tierCopay(tier) {
-  const t = (tier || '').toLowerCase();
-  if (t.includes('1')) return '$10';
-  if (t.includes('2')) return '$30';
-  if (t.includes('3')) return '$60';
-  if (t.includes('4')) return '$90';
-  if (t.includes('5')) return '$130+';
-  return '?';
+  const t = (tier || '').toUpperCase();
+  if (t === 'GENERIC' || t === 'PREFERRED-GENERIC') return '$10/mo';
+  if (t === 'NON-PREFERRED-GENERIC') return '$20/mo';
+  if (t === 'PREFERRED-BRAND' || t === 'BRAND') return '$45/mo';
+  if (t === 'NON-PREFERRED-BRAND') return '$75/mo';
+  if (t === 'SPECIALTY' || t === 'PREFERRED-SPECIALTY') return '$100/mo';
+  if (t === 'NON-PREFERRED-SPECIALTY') return '$150/mo';
+  const n = (tier || '').toLowerCase();
+  if (n.includes('1')) return '$10/mo';
+  if (n.includes('2')) return '$30/mo';
+  if (n.includes('3')) return '$60/mo';
+  if (n.includes('4')) return '$90/mo';
+  if (n.includes('5')) return '$130+/mo';
+  return '—';
 }
 
 function renderResults(data) {
@@ -1312,6 +1336,15 @@ function renderResults(data) {
   }
 
   // ── DRUG COVERAGE ───────────────────────────────────────────────────────────
+  // Build plan-level drug detail map: planId → rxcui → {copay_display, coverage, pa, st, ...}
+  const planDrugDetailMap = {};
+  for (const plan of plans) {
+    planDrugDetailMap[plan.id] = {};
+    for (const dd of (plan.drug_detail || [])) {
+      planDrugDetailMap[plan.id][String(dd.rxcui || '')] = dd;
+    }
+  }
+
   const resolvedDrugs = drugsData.resolved_drugs || [];
   const coverageDetails = drugsData.coverage_details || [];
   const genericSuggestions = drugsData.generic_suggestions || {};
@@ -1373,12 +1406,16 @@ function renderResults(data) {
             <td><strong>${d.name}</strong>${(genericSuggestions[d.name]||[]).length ? '<br><span style="font-size:10px;color:var(--green)">💊 generic avail.</span>' : ''}</td>
             ${topPlanIds.map(pid => {
               const c = planMap[pid];
-              if (!c) return '<td style="color:var(--text3)">—</td>';
-              if (c.coverage === 'NotCovered') return '<td style="color:var(--red)">✗ Not Covered</td>';
-              const tierClass = tierColor(c.drug_tier);
-              const pa = c.prior_authorization ? ' <span class="pa-badge">PA</span>' : '';
-              const st = c.step_therapy ? ' <span class="st-badge">ST</span>' : '';
-              return `<td><span class="tier-badge ${tierClass}">${c.drug_tier||'?'}</span> ${tierCopay(c.drug_tier)}/mo${pa}${st}</td>`;
+              const dd = (planDrugDetailMap[pid] || {})[rxcui];
+              if (!c && !dd) return '<td style="color:var(--red)">✗</td>';
+              if (c && c.coverage === 'NotCovered') return '<td style="color:var(--red)">✗ Not Covered</td>';
+              const tier = (c && c.drug_tier) || (dd && dd.tier) || '';
+              const tierClass = tierColor(tier);
+              const pa = (c && c.prior_authorization) || (dd && dd.pa) ? ' <span class="pa-badge">PA</span>' : '';
+              const st = (c && c.step_therapy) || (dd && dd.st) ? ' <span class="st-badge">ST</span>' : '';
+              const copay = (dd && dd.copay_display) || tierCopay(tier);
+              if (!tier && !copay) return '<td style="color:var(--red)">✗</td>';
+              return `<td><span class="tier-badge ${tierClass}">${tier||'—'}</span> ✓ ${copay}${pa}${st}</td>`;
             }).join('')}
           </tr>`;
         }).join('')}

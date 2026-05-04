@@ -18,7 +18,8 @@ try:
     from google.adk.tools import ToolContext
     from google.genai.types import Content, Part
     ADK_AVAILABLE = True
-except ImportError:
+except Exception as _import_err:
+    print(f"[ADK import error] {_import_err}")
     ADK_AVAILABLE = False
     ToolContext = object
 
@@ -279,7 +280,7 @@ def _ensure_runner():
 
     agent = Agent(
         name="coverwise_intake",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         description="Conversational intake agent for health insurance profile collection",
         instruction=INTAKE_INSTRUCTION,
         tools=[

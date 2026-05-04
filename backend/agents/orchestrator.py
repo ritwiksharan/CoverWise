@@ -6,8 +6,8 @@ import os
 import asyncio
 import json
 from typing import Optional
-import vertexai
-from vertexai.generative_models import GenerativeModel
+from google import genai
+from google.genai import types as genai_types
 
 from agents.sub_agents import (
     profile_agent, subsidy_agent, plan_search_agent,
@@ -20,8 +20,12 @@ from cache.cache_manager import get_cache_stats
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "coverwise-local")
 REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
 
-vertexai.init(project=PROJECT_ID, location=REGION)
-model = GenerativeModel("gemini-2.0-flash")
+_USE_VERTEXAI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "FALSE").upper() == "TRUE"
+
+def _make_client():
+    if _USE_VERTEXAI:
+        return genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
+    return genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 SYSTEM_PROMPT = """\
 You are CoverWise, an expert ACA health insurance advisor with deep knowledge of the \
@@ -431,7 +435,8 @@ class OrchestratorAgent:
         )
 
         try:
-            response = model.generate_content(prompt)
+            client = _make_client()
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             return response.text
         except Exception as e:
             return f"Recommendation error: {e}. Top plan by net premium: {plans[0]['name'] if plans else 'None'}"
@@ -450,7 +455,8 @@ class OrchestratorAgent:
         ) + "\\n\\nAssistant:"
 
         try:
-            response = model.generate_content(prompt)
+            client = _make_client()
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
             reply = response.text
             self.conversation_histories[user_id].append(f"Assistant: {reply}")
             return {"reply": reply, "memory_used": bool(memory_context)}

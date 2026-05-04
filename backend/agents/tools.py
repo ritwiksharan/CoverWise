@@ -58,6 +58,9 @@ def find_plans(zip_code: str, age: int, income: float, tobacco_use: bool = False
 
 def check_medication_coverage(drug_names: List[str], plan_ids: List[str]) -> dict:
     """Resolve drug names to RxCUIs and check their coverage and tiers across specific plans."""
+    if not drug_names:
+        print("[drug_agent] No drugs provided — skipping RxCUI resolution and formulary lookup.")
+        return {"resolved_drugs": [], "coverage_details": [], "generic_suggestions": {}}
     resolved = []
     rxcui_list = []
     for name in drug_names:
@@ -101,6 +104,9 @@ def _issuer_directory_url(issuer_name: str) -> str:
 def verify_doctors(doctor_names: List[str], state: str, zip_code: str,
                    plan_ids: List[str], plans: List[dict] = None) -> dict:
     """Verify doctors in NPPES registry, MIPS scores, and in-network status."""
+    if not doctor_names:
+        print("[doctor_agent] No doctors provided — skipping NPPES NPI lookup and MIPS scoring.")
+        return {"results": []}
     # Build plan_id → issuer map so we can include directory URLs
     plan_issuer: Dict[str, str] = {}
     plan_network_url: Dict[str, str] = {}

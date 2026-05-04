@@ -2,7 +2,9 @@
 
 An agentic AI system that helps Americans find their optimal ACA health insurance plan by analyzing income, medications, and doctors against live government data sources — all in one place, for free.
 
-**Live URL:** https://coverwise-272387131334.us-central1.run.app
+**Live URL:** https://coverwise-65446133790.us-central1.run.app
+
+**Branch:** `adk-insurance-advisor-release`
 
 ---
 
@@ -108,7 +110,7 @@ sequenceDiagram
         ORCH->>CMS: check_hrsa_shortage(state, fips)
     end
 
-    ORCH->>GEM: Synthesise recommendation with all context
+    ORCH->>GEM: Synthesise recommendation with all context (Gemini 2.5 Flash)
     GEM-->>ORCH: Markdown recommendation
     ORCH-->>API: {plans, subsidy, drugs, doctors, risks, recommendation}
     API-->>FE: JSON response
@@ -285,7 +287,7 @@ Reduces redundant API calls by ~70–80% for overlapping ZIP codes.
 | Layer | Technology |
 |---|---|
 | Backend | FastAPI + Python 3.11+ |
-| AI / LLM | Gemini 2.0 Flash via Vertex AI (Google ADK) |
+| AI / LLM | Gemini 2.5 Flash via Vertex AI (Google ADK) |
 | Agent framework | Google ADK (`google-adk`) |
 | Memory | mem0 + ChromaDB |
 | Caching | In-process TTL dict cache |

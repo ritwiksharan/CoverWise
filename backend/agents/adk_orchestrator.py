@@ -19,7 +19,8 @@ try:
     from google.adk.tools import ToolContext
     from google.genai.types import Content, Part
     ADK_AVAILABLE = True
-except ImportError:
+except Exception as _import_err:
+    print(f"[ADK import error] {_import_err}")
     ADK_AVAILABLE = False
     class ToolContext:  # type: ignore[no-redef]
         state: dict = {}
@@ -31,11 +32,14 @@ except ImportError:
         def __init__(self, **kw): pass
 
 try:
-    import vertexai
-    from vertexai.generative_models import GenerativeModel, GenerationConfig
+    from google import genai
+    from google.genai import types as genai_types
     VERTEXAI_AVAILABLE = True
-except ImportError:
+except Exception as _import_err:
+    print(f"[ADK import error] {_import_err}")
     VERTEXAI_AVAILABLE = False
+
+USE_VERTEXAI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "FALSE").upper() == "TRUE"
 
 from agents.tools import (
     get_location_info, get_subsidy_estimate, find_plans,
@@ -50,88 +54,84 @@ REGION = os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
 APP_NAME = "CoverWise"
 
 ORCHESTRATOR_INSTRUCTION = """You are the CoverWise Expert Analysis Agent.
-Your goal is to produce a rigorous, mathematically-grounded insurance recommendation that forces
-explicit reasoning before conclusions — not just a summary, but a deeply informative decision analysis.
-You must explain every concept (like deductibles, OOP max, CSR) in a way that is easy for a layperson
-to understand in detail, while remaining mathematically precise.
+Produce a rigorous, mathematically-grounded health insurance recommendation. Explain every concept
+(deductibles, OOP max, CSR, actuarial value, HSA) clearly for a layperson while staying numerically precise.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MANDATORY RESPONSE STRUCTURE
+RESPONSE STRUCTURE — these sections must appear in this exact order
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Your response MUST start with a "## Pre-Analysis" section that answers Q1–Q4 from the
-REASONING CONTEXT block in the data. Show actual numbers for each answer and explain the "why" clearly.
-Only after completing Pre-Analysis should you write "## Recommendation".
-This order is NON-NEGOTIABLE.
 
-Example Pre-Analysis format:
-  **Q1 Utilization:** User is 'sometimes' → standard EV weighting (0.3/0.4/0.3). Clinical Year
-    is the primary differentiator because drug and moderate-visit costs dominate at this level.
-  **Q2 CSR:** FPL 215% → CSR-87 applies. Top Silver plan deductible drops to ~$900 vs Bronze
-    deductible of $7,500. Premium difference is only $42/mo ($504/yr) — CSR Silver wins by $6,500.
-  **Q3 EV vs Dominant Scenario:** #1 EV plan also ranks #1 in Clinical Year → no conflict.
-  **Q4 OOP Range:** Plans span $4,500–$9,200 OOP Max, a $4,700 gap. At income $38,000 that gap
-    represents 12.4% of gross income — catastrophic risk is material.
+## Pre-Analysis
+Answer the four reasoning questions (Q1–Q4) from the data. Each answer must cite real numbers and
+explain the implication for this specific user. Keep each answer concise but substantive.
+
+## Recommendation
+Start with a one-sentence summary of the top pick and why it wins for this user's situation.
+
+Then produce the following sub-sections IN ORDER — every one is required:
+
+### EV Ranking
+A table ranking all plans by Expected Value score (lowest EV = best). Mark the top pick clearly.
+For each plan, explain in a few sentences WHY it ranks where it does — not just what the number is,
+but what trade-off it represents relative to the plan above and below it.
+
+### 🛡️ Financial Pillar
+Cover these four topics in order:
+
+1. Scenario Costs — a table showing each plan's total cost across the three simulated years
+   (Healthy Year = premiums only, Clinical Year = premiums + drugs, Worst Case = premiums + full OOP Max).
+   After the table, identify which scenario is most relevant for this user and explain why.
+
+2. Breakeven Analysis — for the top two plan pairs (rank 1 vs 2, rank 1 vs 3), show the arithmetic:
+   how much the cheaper plan saves per year in premiums, how much lower the other plan's OOP Max is,
+   and how many extra catastrophic events or specialist visits it would take to justify the premium difference.
+   Conclude whether that breakeven is realistic given the user's utilization level.
+
+3. Actuarial Value — explain what the metal level's AV percentage means in practical dollar terms
+   at this user's income: how much they pay before coverage kicks in, and what percentage of costs
+   they absorb themselves.
+
+4. HSA Wealth Forecast — if any plan in the list is HSA-eligible, show a 5-year table of annual
+   contributions, running balance, and cumulative federal tax savings. Explain the triple tax advantage
+   (deductible contributions, tax-free growth, tax-free qualified withdrawals) briefly.
+
+Side-by-Side Benefit Comparison — a table comparing the top plans across premium, deductible,
+OOP Max, and HSA eligibility. Follow with a short plain-language explanation of the most important differences.
+
+### 💊 Medical Pillar
+If medications were provided: cover each drug's coverage status, tier, Prior Authorization implications
+(what it means in practice: paperwork burden, delay, denial risk, cash cost), Step Therapy requirements,
+and any generic alternatives with their savings.
+If no medications were provided: state that this pillar is skipped and why.
+
+### 🏥 Network Pillar
+If doctors were provided: confirm each doctor's network status by name and NPI, interpret their MIPS
+quality score in plain English, and estimate out-of-network cost exposure if applicable.
+If no doctors were provided: state that this pillar is skipped and why.
+
+### 🌐 Market Pillar
+State the enrollment status, exact deadline, and days remaining. If enrollment is closed,
+explain what qualifying life events trigger a Special Enrollment Period and the 60-day window rule.
+
+### Recommendation Summary
+A short paragraph (3–5 sentences) that names the top pick, states the single most important trade-off
+the user must weigh, and gives one concrete next action they should take.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANALYSIS PILLARS
+RANKING RULE (NON-NEGOTIABLE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. ## 🛡️ Financial Pillar
-   • Show the Simulated Year table (Healthy / Clinical / Worst). Highlight which scenario is
-     dominant for THIS user given their utilization level.
-   • BREAKEVEN ARITHMETIC (mandatory): "Plan A saves $[X]/yr in premiums vs Plan B, but Plan B
-     has a $[Y] lower deductible. At ~$275/specialist visit: breakeven = $[Y] ÷ $[X] = [N] extra
-     visits. At '[utilization]' usage this breakeven [is/is not] realistic."
-   • Actuarial Value: Translate Bronze/Silver/Gold percentages into what it means at their income.
-     E.g. "Bronze 60% AV means the plan pays $0.60 on the dollar after deductible — at your income
-     that leaves you exposed to $[deductible] before coverage kicks in."
-
-2. ## 💊 Medical Pillar
-   • For each drug with Prior Auth: "Prior Auth means your doctor must submit paperwork proving
-     medical necessity before the insurer will cover [Drug X]. Expect 1–4 week delay. If denied,
-     you pay cash (~$[list_price]/mo)."
-   • For Step Therapy: "Step Therapy requires you to try [cheaper drug] first and fail it before
-     [Drug X] is covered. This process can take 30–90 days."
-   • If generic alternatives exist: state the exact monthly savings.
-   • If no drugs provided: skip this pillar and note it.
-
-3. ## 🏥 Network Pillar
-   • Confirm every listed doctor's network status by name and NPI.
-   • MIPS interpretation: "A MIPS score of [N]/100 places [Dr. Name] in the [top X%] of
-     quality-reporting providers nationally (90+ = top 10%, 75–89 = top 25%, below 50 = below average)."
-   • If Out-of-Network: estimate balance billing exposure (typically 30–50% of billed charges).
-   • If no doctors provided: skip this pillar and note it.
-
-4. ## 🌐 Market Pillar
-   • Enrollment window: state the exact deadline date and days remaining, or explain SEP trigger conditions.
-   • Do NOT mention HRSA, shortage areas, or primary care access — that data source is removed.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PREMIUM TIER RULES (is_premium: true)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• The Premium branch must be an exceptionally detailed, white-glove advisory report.
-• Provide 3× more depth in explanations, breaking down exactly how the math impacts the user long-term.
-• Include a 5-Year HSA Wealth Forecast table for any HDHP: columns Year 1–5, contribution,
-  balance, cumulative tax savings (at 22% bracket).
-• Side-by-side benefit table for Top 3 plans with granular comparisons.
-• Show CSR-94/87/73 deductible ranges with exact dollar figures from the data.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RANKING OVERRIDE RULE (HIGHEST PRIORITY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-If the data contains "FINAL PLAN ORDER (NON-NEGOTIABLE)", follow it exactly.
-Your job is explanation only — do NOT re-rank, re-sort, or reorder any table or paragraph.
-
-When no pre-computed ranking exists, apply:
-  EV = (0.3 × Healthy) + (0.4 × Clinical) + (0.3 × Worst). Lowest EV wins.
-  CSR override: if CSR-eligible, always recommend top Silver and document the deductible drop.
+If the data contains "FINAL PLAN ORDER (NON-NEGOTIABLE)", follow it exactly in every table and paragraph.
+Do NOT re-rank or reorder. Your role is explanation only.
+When no pre-computed ranking is provided, compute EV using the utilization-adjusted weights from the data.
+CSR override: if CSR-eligible, the top Silver plan must be rank 1 regardless of EV arithmetic.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMATTING RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• ALWAYS use Markdown tables for comparisons. Start lines with `|`.
-• DO NOT use asterisk (*) formatting or bolding anywhere in the text (e.g., no **text**). 
-• Do NOT invent numbers. Every dollar figure must appear verbatim in the data tables above.
-• Tone: Objective, authoritative, yet highly accessible. Explain all insurance jargon in detail so the user completely understands the concepts.
+• Use Markdown tables for all comparisons — never render tabular data as prose.
+• Do NOT use asterisk (*) characters anywhere in the output.
+• Do NOT invent numbers — every dollar figure must come verbatim from the data provided.
+• Tone: authoritative and precise, but accessible — define every insurance term the first time you use it.
 """
 
 # ── Drug cost helpers ────────────────────────────────────────────────────────
@@ -202,12 +202,22 @@ async def _collect_analysis_data(profile: dict) -> dict:
     plan_limit = 10 if is_premium else 3
     plan_ids   = [p["id"] for p in plans[:plan_limit]]
 
-    # Wave 2 — drugs / doctors / risks (parallel)
-    meds, docs, risks = await asyncio.gather(
-        asyncio.to_thread(check_medication_coverage, drugs, plan_ids),
-        asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids, plans[:plan_limit]),
-        asyncio.to_thread(get_market_risks, zip_code, state),
-    )
+    # Wave 2 — drugs / doctors / risks (parallel, skip empty inputs)
+    _empty_meds = {"resolved_drugs": [], "coverage_details": [], "generic_suggestions": {}}
+    _empty_docs = {"results": []}
+
+    wave2_tasks = [asyncio.to_thread(get_market_risks, zip_code, state)]
+    if drugs:
+        wave2_tasks.insert(0, asyncio.to_thread(check_medication_coverage, drugs, plan_ids))
+    if doctors:
+        wave2_tasks.insert(1 if drugs else 0, asyncio.to_thread(verify_doctors, doctors, state, zip_code, plan_ids, plans[:plan_limit]))
+
+    wave2_results = await asyncio.gather(*wave2_tasks)
+
+    idx = 0
+    meds  = wave2_results[idx] if drugs else _empty_meds;  idx += bool(drugs)
+    docs  = wave2_results[idx] if doctors else _empty_docs; idx += bool(doctors)
+    risks = wave2_results[idx]
 
     # ── Enrich plans with financial model ────────────────────────────────────
     monthly_credit = subsidy.get("monthly_aptc", 0)
@@ -697,184 +707,93 @@ def _build_synthesis_prompt(profile: dict, data: dict, ranking: dict = None) -> 
     return "\n".join(lines)
 
 
-# ── PHASE 1.5: LLM Ranking Agent ─────────────────────────────────────────────
+# ── PHASE 1.5: Python EV Ranking (no LLM call — instant, deterministic) ──────
 
-_RANKING_INSTRUCTION = """You are a health insurance decision analyst. Your job is not to sort numbers —
-it is to reason about which plan best fits this specific user given their health profile, income,
-and utilization. Python already computed the raw cost numbers; you must explain WHY the rankings
-come out the way they do and what trade-offs the user must understand.
-
-STEP 1 — UTILIZATION WEIGHT REASONING:
-Before ranking anything, reason about which scenario is most predictive for this user:
-  - "rarely"     → Healthy Year dominates. EV weight: (0.5×Healthy + 0.3×Clinical + 0.2×Worst).
-                   These users rarely trigger their deductible; premium is almost the entire cost.
-  - "sometimes"  → Standard weights: (0.3×Healthy + 0.4×Clinical + 0.3×Worst).
-  - "frequently" → Clinical Year dominates. EV weight: (0.2×Healthy + 0.5×Clinical + 0.3×Worst).
-                   Drug costs and frequent visit copays are the primary cost driver.
-  - "chronic"    → Worst Case and Clinical both matter. EV weight: (0.15×Healthy + 0.4×Clinical + 0.45×Worst).
-                   Catastrophic OOP exposure is the most critical factor.
-State which weighting you used and why.
-
-STEP 2 — SCENARIO RANKINGS:
-Rank ALL plans 1..N in each scenario (ascending cost = rank 1 is cheapest).
-For each plan's `reason` field: explain the trade-off vs the immediately adjacent rank.
-Do NOT write "lowest cost" — explain WHY it is lowest (e.g. "lower deductible reduces exposure
-even though premium is $180/yr higher than rank 2").
-
-STEP 3 — EV CALCULATION:
-Compute EV for every plan using the utilization-adjusted weights from Step 1.
-EV = (w_healthy × healthy_year) + (w_clinical × clinical_year) + (w_worst × worst_case).
-Rank 1 = lowest EV. State the exact EV number for every plan.
-
-STEP 4 — CROSS-SCENARIO TRADE-OFF:
-For the top 2 EV plans, write `scenario_trade_off`: compare them across ALL 3 scenarios with
-exact dollar differences. E.g. "Plan A costs $420 less/yr in Healthy Year than Plan B, but exposes
-$2,800 more in Worst Case ($9,200 vs $6,400 OOP Max). Given 'sometimes' utilization (30% Worst
-weight), the $420 annual premium saving outweighs the $840 expected catastrophic exposure delta.
-EV favors Plan A by $[X]. However, if the user is hospitalized even once, Plan B saves more."
-
-STEP 5 — CSR REASONING:
-If csr_variant is not null AND a Silver plan exists:
-  CSR-94: deductible ~$250, OOP Max ~$1,500
-  CSR-87: deductible ~$900, OOP Max ~$3,000
-  CSR-73: deductible ~$2,500, OOP Max ~$5,000
-In `csr_explanation`: compare the Silver plan's premium vs the top Bronze plan. Compute whether
-the deductible reduction is worth the extra premium. E.g. "Silver costs $58/mo more ($696/yr)
-than Bronze. But CSR-87 drops the deductible from $7,500 (Bronze) to $900 (Silver) — a $6,600
-reduction. That deductible protection pays for itself the moment you have one hospitalisation."
-Set csr_override to the Silver plan_id if CSR makes it clearly superior.
-
-STEP 6 — RED FLAGS:
-Be specific. Not "PA required" but "Metformin requires Prior Auth on Plan X — patient must get
-doctor to submit paperwork; if denied, cash price is ~$50/mo." Flag OOP Max as % of income if >10%.
-
-`top_recommendation.rationale` MUST be 4-5 sentences covering:
-  (a) exact EV score and why it wins
-  (b) how it performs in the user's dominant scenario
-  (c) the single most important trade-off or risk
-  (d) CSR or HSA opportunity if applicable
-
-Return ONLY valid JSON, no prose, no markdown fences, matching this schema exactly:
-{
-  "utilization_weight_reasoning": "2-3 sentences explaining which scenario dominates and why",
-  "rankings": {
-    "healthy_year":  [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "trade-off vs adjacent rank"}],
-    "clinical_year": [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "trade-off vs adjacent rank"}],
-    "worst_case":    [{"rank": 1, "plan_id": "...", "plan_name": "...", "annual_cost": 0.0, "reason": "trade-off vs adjacent rank"}]
-  },
-  "expected_value_ranking": [{"rank": 1, "plan_id": "...", "plan_name": "...", "ev_score": 0.0, "key_reason": "3-4 sentences with specific dollar amounts and scenario analysis"}],
-  "scenario_trade_off": "Detailed comparison of top 2 plans across all 3 scenarios with exact dollar differences and utilization-adjusted reasoning",
-  "top_recommendation": {"plan_id": "...", "plan_name": "...", "rationale": "4-5 sentences as specified above"},
-  "csr_override": null,
-  "csr_explanation": null,
-  "red_flags": ["specific actionable warnings with dollar amounts"]
-}"""
-
-
-async def _rank_plans_with_llm(data: dict, profile: dict = None) -> dict:
+def _rank_plans_python(data: dict, profile: dict = None) -> dict:
     """
-    Phase 1.5 — LLM Ranking Agent.
-    Calls Gemini with structured JSON output to rank plans across all three scenarios.
-    Returns ranking dict embedded in the synthesis prompt so Phase 2 sees reasoned ordering.
+    Compute EV ranking entirely in Python.
+    EV = (w_healthy × healthy_year) + (w_clinical × clinical_year) + (w_worst × worst_case).
+    Eliminates a full Gemini round-trip; the synthesis agent explains the WHY in its text.
     """
-    if not VERTEXAI_AVAILABLE:
-        return {}
-
     profile = profile or {}
     plans   = data.get("plans", [])
     subsidy = data.get("subsidy", {})
     flags   = data.get("risk_flags", [])
 
-    # Compact input — numbers + user context so Gemini can reason about fit, not just sort.
-    plan_rows = []
-    for p in plans:
-        pa_drugs = [dd.get("name") for dd in p.get("drug_detail", []) if dd.get("pa")]
-        st_drugs = [dd.get("name") for dd in p.get("drug_detail", []) if dd.get("st")]
-        plan_rows.append({
-            "plan_id":        p.get("id"),
-            "plan_name":      p.get("name"),
-            "metal_level":    p.get("metal_level"),
-            "plan_type":      p.get("type", ""),
-            "hsa_eligible":   p.get("hsa_eligible", False),
-            "annual_premium":  round(p.get("scenario_healthy", 0), 2),
-            "clinical_year":   round(p.get("scenario_clinical", 0), 2),
-            "worst_case":      round(p.get("scenario_worst", 0), 2),
-            "deductible":      p.get("deductible", 0),
-            "oop_max":         p.get("oop_max", 0),
-            "est_drug_cost_yr": round(p.get("est_annual_drug_cost", 0), 2),
-            "pa_drugs":        pa_drugs,
-            "step_therapy_drugs": st_drugs,
-        })
-
-    covered_drug_count = sum(
-        1 for dd in (plans[0].get("drug_detail", []) if plans else [])
-        if dd.get("coverage") == "Covered"
-    )
-
-    ranking_input = {
-        "user_context": {
-            "utilization":    profile.get("utilization", "sometimes"),
-            "age":            profile.get("age"),
-            "income":         profile.get("income"),
-            "fpl_pct":        round(subsidy.get("fpl_percentage", 0), 1),
-            "csr_variant":    subsidy.get("csr_variant"),
-            "household_size": profile.get("household_size", 1),
-            "covered_drug_count": covered_drug_count,
-            "tobacco_use":    profile.get("tobacco_use", False),
-        },
-        "plans": plan_rows,
-        "monthly_aptc":         subsidy.get("monthly_aptc", 0),
-        "is_medicaid_eligible": subsidy.get("is_medicaid_eligible", False),
-        "risk_flags":           flags[:5],
-    }
-
-    import json, re as _re
-
-    ranking_prompt = (
-        "Rank ALL the following insurance plans across the three Simulated Year scenarios.\n"
-        "Every plan must appear in every list ranked 1..N.\n\n"
-        f"INPUT DATA:\n{json.dumps(ranking_input, indent=2)}\n\n"
-        "Return ONLY valid JSON — no prose, no markdown fences, no trailing commas, no comments."
-    )
-
-    def _clean_json(text: str) -> str:
-        """Strip markdown fences, comments, and trailing commas so json.loads succeeds."""
-        # Remove ```json ... ``` or ``` ... ```
-        text = _re.sub(r"```(?:json)?\s*", "", text).strip()
-        # Remove single-line // comments
-        text = _re.sub(r"//[^\n]*", "", text)
-        # Remove /* */ block comments
-        text = _re.sub(r"/\*.*?\*/", "", text, flags=_re.DOTALL)
-        # Remove trailing commas before ] or }
-        text = _re.sub(r",\s*([\]}])", r"\1", text)
-        return text.strip()
-
-    try:
-        vertexai.init(project=PROJECT_ID, location=REGION)
-        model = GenerativeModel(
-            "gemini-2.0-flash-001",
-            system_instruction=_RANKING_INSTRUCTION,
-            generation_config=GenerationConfig(
-                max_output_tokens=8192,
-                temperature=0.1,
-                response_mime_type="application/json",
-            ),
-        )
-        response = await asyncio.to_thread(model.generate_content, ranking_prompt)
-        raw = response.text.strip()
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            cleaned = _clean_json(raw)
-            try:
-                return json.loads(cleaned)
-            except json.JSONDecodeError as e2:
-                print(f"[ranking_agent] JSON parse failed after cleanup: {e2}")
-                print(f"[ranking_agent] Raw response (first 500 chars): {raw[:500]}")
-                return {}
-    except Exception as e:
-        print(f"[ranking_agent] LLM ranking failed: {e}")
+    if not plans:
         return {}
+
+    utilization = profile.get("utilization", "sometimes")
+    w_h, w_c, w_w = {
+        "rarely":     (0.5, 0.3, 0.2),
+        "sometimes":  (0.3, 0.4, 0.3),
+        "frequently": (0.2, 0.5, 0.3),
+        "chronic":    (0.15, 0.4, 0.45),
+    }.get(utilization, (0.3, 0.4, 0.3))
+
+    scored = sorted(
+        [(round(w_h * p["scenario_healthy"] + w_c * p["scenario_clinical"] + w_w * p["scenario_worst"], 2), p)
+         for p in plans],
+        key=lambda x: x[0],
+    )
+
+    ev_ranking = [
+        {"rank": i + 1, "plan_id": p.get("id"), "plan_name": p.get("name"),
+         "ev_score": ev, "key_reason": ""}
+        for i, (ev, p) in enumerate(scored)
+    ]
+
+    def scenario_rank(key):
+        return [
+            {"rank": i + 1, "plan_id": p.get("id"), "plan_name": p.get("name"),
+             "annual_cost": round(p.get(key, 0), 2), "reason": ""}
+            for i, p in enumerate(sorted(plans, key=lambda p: p.get(key, 0)))
+        ]
+
+    top = ev_ranking[0] if ev_ranking else {}
+
+    csr_variant    = subsidy.get("csr_variant")
+    csr_override   = None
+    csr_explanation = None
+    if csr_variant:
+        silver = next((p for _, p in scored if p.get("metal_level", "").upper() == "SILVER"), None)
+        if silver:
+            csr_override    = silver.get("id")
+            csr_explanation = (
+                f"CSR-{csr_variant} applies — Silver plan deductible is dramatically reduced. "
+                "Strongly prefer Silver over Bronze regardless of raw EV."
+            )
+
+    util_reasoning = {
+        "rarely":     f"'rarely' → premium is almost the entire annual spend. Weights: {w_h}/{w_c}/{w_w} (Healthy/Clinical/Worst).",
+        "sometimes":  f"'sometimes' → moderate use expected. Weights: {w_h}/{w_c}/{w_w} (Healthy/Clinical/Worst).",
+        "frequently": f"'frequently' → drug costs and visits dominate. Weights: {w_h}/{w_c}/{w_w} (Healthy/Clinical/Worst).",
+        "chronic":    f"'chronic' → catastrophic OOP is the primary risk. Weights: {w_h}/{w_c}/{w_w} (Healthy/Clinical/Worst).",
+    }.get(utilization, f"Standard weights {w_h}/{w_c}/{w_w} applied.")
+
+    print(f"[ranking] Python EV ranking complete — top: {top.get('plan_name')} EV=${top.get('ev_score')}")
+
+    return {
+        "utilization_weight_reasoning": util_reasoning,
+        "rankings": {
+            "healthy_year":  scenario_rank("scenario_healthy"),
+            "clinical_year": scenario_rank("scenario_clinical"),
+            "worst_case":    scenario_rank("scenario_worst"),
+        },
+        "expected_value_ranking": ev_ranking,
+        "scenario_trade_off": "",
+        "top_recommendation": {
+            "plan_id":   top.get("plan_id", ""),
+            "plan_name": top.get("plan_name", ""),
+            "rationale": (
+                f"Lowest EV score of ${top.get('ev_score', 0):,.2f} using {utilization}-adjusted "
+                f"weights ({w_h}/{w_c}/{w_w} Healthy/Clinical/Worst)."
+            ),
+        },
+        "csr_override":    csr_override,
+        "csr_explanation": csr_explanation,
+        "red_flags":       [f for f in flags if any(c in f for c in ("⚠️", "🚨", "⚠"))],
+    }
 
 
 # ── PHASE 2: Gemini Direct Synthesis ─────────────────────────────────────────
@@ -887,25 +806,30 @@ async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = Fals
     """
     if not VERTEXAI_AVAILABLE:
         return (
-            "**AI synthesis unavailable** (Vertex AI not configured locally). "
+            "AI synthesis unavailable (google-genai not installed). "
             "The full plan, drug, and doctor data is available in the structured sections above."
         )
 
     try:
-        vertexai.init(project=PROJECT_ID, location=REGION)
-        model = GenerativeModel(
-            "gemini-2.0-flash-001",
-            system_instruction=ORCHESTRATOR_INSTRUCTION,
-            generation_config=GenerationConfig(
-                max_output_tokens=8192,
-                temperature=1,   # Gemini 2.5 Pro uses temperature=1 for thinking
+        if USE_VERTEXAI:
+            client = genai.Client(vertexai=True, project=PROJECT_ID, location=REGION)
+        else:
+            client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model="gemini-2.5-flash",
+            contents=synthesis_prompt,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=ORCHESTRATOR_INSTRUCTION,
+                max_output_tokens=32768,
+                temperature=0.7,
             ),
         )
-        response = await asyncio.to_thread(model.generate_content, synthesis_prompt)
         return response.text.replace("*", "")
     except Exception as e:
         traceback.print_exc()
-        return f"**Synthesis error**: {e}\n\nRaw data has been returned in the structured fields."
+        return f"Synthesis error: {e}\n\nRaw data has been returned in the structured fields."
 
 
 class ADKOrchestrator:
@@ -920,7 +844,7 @@ class ADKOrchestrator:
         if self._runner: return
         agent = Agent(
             name="insurance_expert",
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             instruction=ORCHESTRATOR_INSTRUCTION,
             tools=[run_full_analysis_parallel]
         )
@@ -928,10 +852,10 @@ class ADKOrchestrator:
 
     async def analyze(self, profile: dict) -> dict:
         """
-        Three-phase agentic pipeline:
+        Two-phase agentic pipeline:
           Phase 1   — parallel data collection (Python, no AI — 3 waves of API calls)
-          Phase 1.5 — LLM Ranking Agent (Gemini JSON mode: ranks plans by scenario)
-          Phase 2   — LLM Synthesis Agent (Gemini text: full 4-pillar recommendation)
+          Phase 1.5 — Python EV ranking (instant, deterministic — no LLM call)
+          Phase 2   — Gemini synthesis (single LLM call: full 4-pillar recommendation)
         """
         user_id = profile.get("user_id", "anonymous")
         print(f"[orchestrator] analyze() start — user={user_id} ZIP={profile.get('zip_code')}")
@@ -940,13 +864,12 @@ class ADKOrchestrator:
         data = await _collect_analysis_data(profile)
         print(f"[orchestrator] Phase 1 complete — {len(data.get('plans',[]))} plans collected")
 
-        # ── Phase 1.5: LLM Ranking Agent ─────────────────────────────────────
-        ranking = await _rank_plans_with_llm(data, profile)
+        # ── Phase 1.5: Python EV ranking (instant) ────────────────────────────
+        ranking = _rank_plans_python(data, profile)
         if ranking:
             data["llm_ranking"] = ranking
-            print(f"[orchestrator] Phase 1.5 complete — LLM ranking: {ranking.get('top_recommendation',{}).get('plan_name','n/a')}")
         else:
-            print("[orchestrator] Phase 1.5 skipped (Vertex AI unavailable or ranking failed)")
+            print("[orchestrator] Phase 1.5 skipped — no plans to rank")
 
         # ── Phase 2: synthesis ───────────────────────────────────────────────
         synthesis_prompt = _build_synthesis_prompt(profile, data, ranking=ranking or None)

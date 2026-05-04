@@ -1,9 +1,9 @@
 fastapi>=0.124.1,<1.0.0
 uvicorn>=0.34.0
-google-cloud-aiplatform
-vertexai
+google-cloud-aiplatform>=1.132.0
 google-adk>=1.0.0
-requests==2.32.3
+Deprecated>=1.2.0
+requests>=2.32.4
 python-dotenv==1.0.1
 mem0ai==0.1.29
 chromadb==0.5.3

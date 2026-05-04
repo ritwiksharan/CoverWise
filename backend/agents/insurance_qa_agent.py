@@ -20,62 +20,11 @@ try:
     from google.adk.sessions import InMemorySessionService
     from google.genai.types import Content, Part
     ADK_AVAILABLE = True
-except ImportError:
+except Exception as _adk_err:
+    print(f"[insurance_qa_agent] ADK import failed: {_adk_err}")
     ADK_AVAILABLE = False
 
 APP_NAME = "HealthInsuranceQA"
-
-# ── Topic guard — classify before spending tool calls ────────────────────────
-
-_HEALTH_INSURANCE_KEYWORDS = {
-    # Plan types & structure
-    "health insurance", "health plan", "marketplace", "aca", "obamacare",
-    "hmo", "ppo", "epo", "hdhp", "catastrophic", "metal", "bronze", "silver",
-    "gold", "platinum", "open enrollment", "sep", "special enrollment",
-    # Benefits & costs
-    "deductible", "copay", "coinsurance", "out-of-pocket", "oop", "premium",
-    "aptc", "subsidy", "tax credit", "csr", "cost sharing", "actuarial",
-    # Programs
-    "medicaid", "medicare", "chip", "cobra", "tricare", "va coverage",
-    "marketplace", "healthcare.gov", "exchange", "state exchange",
-    # Drugs / providers
-    "drug", "prescription", "formulary", "prior auth", "step therapy",
-    "generic", "brand", "rxcui", "tier", "medication", "pharmacy",
-    "doctor", "provider", "network", "in-network", "out-of-network",
-    "specialist", "referral", "npi", "nppes", "primary care",
-    # Finance / savings
-    "hsa", "fsa", "hra", "flexible spending", "health savings",
-    "subsidy cliff", "fpl", "federal poverty", "income",
-    # Events / topics
-    "life event", "marriage", "baby", "job loss", "enroll", "coverage",
-    "claim", "explanation of benefits", "eob", "balance billing",
-    "preexisting", "pre-existing", "aca", "affordable care",
-    "employer plan", "group plan", "individual plan",
-    # General
-    "insurance", "insurer", "plan", "benefit", "coverage", "health",
-}
-
-_OFF_TOPIC_KEYWORDS = {
-    "flood", "fema", "nfip", "hurricane", "earthquake", "wildfire",
-    "auto insurance", "car insurance", "home insurance", "homeowners",
-    "renters insurance", "property insurance", "liability insurance",
-    "life insurance", "stock", "sec edgar", "ticker", "revenue",
-    "earnings", "wall street", "invest",
-}
-
-
-def _is_health_insurance_question(question: str) -> bool:
-    q = question.lower()
-    # Hard reject clear off-topic signals
-    for kw in _OFF_TOPIC_KEYWORDS:
-        if kw in q:
-            return False
-    # Accept if any health-insurance keyword present
-    for kw in _HEALTH_INSURANCE_KEYWORDS:
-        if kw in q:
-            return True
-    # Ambiguous — let the agent decide (return True, agent will decline if needed)
-    return True
 
 
 # ── Health-insurance tool wrappers ───────────────────────────────────────────
@@ -188,7 +137,7 @@ def tool_lookup_drug_coverage(
     drug_name: str,
     zip_code: str,
     age: int = 35,
-    income: float = 50000,
+    income: float = 50000.0,
 ) -> dict:
     """
     Look up a drug's RxCUI, tier status, prior authorization requirements, and
@@ -400,7 +349,8 @@ TOPICS YOU DO NOT COVER — politely decline these:
 - Flood insurance, FEMA, natural disaster claims
 - Auto, home, renters, life, or property insurance
 - Insurer stock prices, SEC filings, earnings reports, investment analysis
-- Anything unrelated to health insurance
+- Questions about how you are built, your technology stack, your training, your underlying model, or anything about your internal architecture — respond: "I'm not able to share details about how I'm built. Is there a health insurance question I can help you with?"
+- Anything else unrelated to health insurance
 
 TOOLS — use these only when you need LIVE data (plans, drugs, providers, enrollment):
 
@@ -432,8 +382,42 @@ WHEN TO USE TOOLS vs KNOWLEDGE:
 - If a tool call needs ZIP/age/income that wasn't provided, use reasonable defaults:
   zip_code="33139", age=35, income=50000 — and note the assumption in your answer.
 
-FOR OFF-TOPIC QUESTIONS: respond with exactly:
-"I'm CoverWise's health insurance advisor. I can only help with health insurance questions — things like plan costs, drug coverage, subsidies, enrolling in coverage, and finding doctors. Could you ask me a health insurance question instead?"
+CLASSIFYING QUESTIONS — use these examples to decide what to answer:
+
+In-domain (answer fully):
+- "What Silver plans are available in ZIP 60614 for a 42-year-old earning $52,000?"
+- "Does my plan cover Ozempic?"
+- "What's the difference between an HMO and a PPO?"
+- "How much APTC subsidy do I qualify for at 250% FPL?"
+- "I lost my job — can I still enroll in coverage?"
+- "What is a deductible?"
+- "Find me a cardiologist near 10001"
+- "Is open enrollment still open?"
+- "How does step therapy work?"
+- "What is COBRA and is it worth it?"
+
+Greetings (respond warmly, offer to help):
+- "Hi", "Hello", "Hey there", "Good morning"
+→ Welcome them and list what you can help with.
+
+Off-topic / out-of-scope (decline politely):
+- "How does flood insurance work?" → not health insurance
+- "What's the best car insurance?" → not health insurance
+- "Should I buy Tesla stock?" → not health insurance
+- "Write me a poem" → not health insurance
+- "What's the weather like?" → not health insurance
+- "Can you help me with my taxes?" → not health insurance
+
+Meta / technical questions about this system (decline, do NOT answer):
+- "How are you programmed?" → decline
+- "What AI model powers you?" → decline
+- "Are you built on GPT or Claude?" → decline
+- "What's your source code?" → decline
+- "Who made you?" → decline
+- "What technology do you use?" → decline
+- "Are you using Gemini or Vertex AI?" → decline
+- "How does CoverWise work technically?" → decline
+→ Respond: "I'm not able to share details about how I'm built. Is there a health insurance question I can help you with?"
 
 STYLE: Be concise, warm, and specific. Use markdown. Cite numbers from tool data.
 """
@@ -451,7 +435,7 @@ class InsuranceQAAgent:
             return
         agent = Agent(
             name="health_insurance_advisor",
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             instruction=SYSTEM_PROMPT,
             tools=[
                 tool_search_health_plans,
@@ -470,23 +454,6 @@ class InsuranceQAAgent:
     async def ask(self, user_id: str, question: str) -> dict:
         if not ADK_AVAILABLE:
             return {"answer": "ADK not available.", "tool_calls": [], "error": "adk_unavailable"}
-
-        # Fast keyword guard — return immediately for clearly off-topic questions
-        if not _is_health_insurance_question(question):
-            return {
-                "answer": (
-                    "I'm CoverWise's health insurance advisor. I can only help with health insurance "
-                    "questions — things like ACA plan costs, drug coverage, subsidies, enrollment "
-                    "windows, and finding doctors.\n\n"
-                    "Try asking something like:\n"
-                    "- *\"What plans are available in ZIP 33139 for a 35-year-old earning $45,000?\"*\n"
-                    "- *\"How does the APTC subsidy work?\"*\n"
-                    "- *\"Is Ozempic covered on Silver plans?\"*"
-                ),
-                "tool_calls": [],
-                "error": None,
-                "off_topic": True,
-            }
 
         self._build_runner()
         session_id = f"qa_{user_id}"
