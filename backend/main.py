@@ -1,4 +1,5 @@
 import os
+import asyncio
 import traceback
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,8 +10,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Core conversational orchestrator (always available) ───────────────────────
 from agents.orchestrator import ConversationalOrchestrator
 
+# ── ADK orchestrator (optional - needs google-adk) ────────────────────────────
 try:
     from agents.adk_orchestrator import ADKOrchestrator
     adk_orchestrator = ADKOrchestrator()
@@ -21,24 +24,36 @@ except Exception as e:
     adk_orchestrator = None
     ADK_AVAILABLE = False
 
+# ── Insurance Q&A agent (optional - needs google-adk) ────────────────────────
 try:
     from agents.insurance_qa_agent import get_agent as get_qa_agent
     QA_AVAILABLE = ADK_AVAILABLE
-    print("Insurance QA agent ready")
 except Exception as e:
     print("QA agent not available: " + str(e))
     QA_AVAILABLE = False
 
 app = FastAPI(title="CoverWise - AI Health Insurance Advisor")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"])
 
 conv_orchestrator = ConversationalOrchestrator()
-
 FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
 
 
-# ── MODELS ────────────────────────────────────────────────────────────────────
+# ── Startup: pre-seed formulary RAG (background, non-blocking) ────────────────
+@app.on_event("startup")
+async def seed_formulary():
+    def _seed():
+        try:
+            from rag.formulary_store import seed_issuer
+            seed_issuer("36096", blocking=False)
+        except Exception as e:
+            print("[startup] formulary seed skipped: " + str(e))
+    import threading
+    threading.Thread(target=_seed, daemon=True).start()
 
+
+# ── Models ────────────────────────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     user_id: str
     message: str
@@ -71,6 +86,7 @@ class IntakeStart(BaseModel):
 class QARequest(BaseModel):
     user_id: str
     question: str
+    is_premium: bool = False
 
 class SpecialtySearchRequest(BaseModel):
     user_id: str
@@ -94,8 +110,7 @@ class HospitalSearchRequest(BaseModel):
     plan_ids: List[str] = []
 
 
-# ── CONVERSATIONAL INTAKE ──────────────────────────────────────────────────────
-
+# ── Conversational intake ─────────────────────────────────────────────────────
 @app.post("/api/start")
 async def start(req: StartRequest):
     try:
@@ -117,8 +132,7 @@ async def reset(req: StartRequest):
     return conv_orchestrator.reset(req.user_id)
 
 
-# ── ADK INTAKE ─────────────────────────────────────────────────────────────────
-
+# ── ADK intake ────────────────────────────────────────────────────────────────
 @app.post("/api/intake/start")
 async def intake_start(req: IntakeStart):
     try:
@@ -138,13 +152,12 @@ async def intake_message(req: IntakeMessage):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ADK DEEP ANALYSIS ──────────────────────────────────────────────────────────
-
+# ── ADK deep analysis ─────────────────────────────────────────────────────────
 @app.post("/api/analyze")
 async def analyze(profile: UserProfile):
     try:
         if not ADK_AVAILABLE or adk_orchestrator is None:
-            raise HTTPException(status_code=503, detail="ADK not available.")
+            raise HTTPException(status_code=503, detail="ADK not available locally.")
         result = await adk_orchestrator.analyze(profile.dict())
         return result
     except HTTPException:
@@ -154,32 +167,29 @@ async def analyze(profile: UserProfile):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── INSURANCE Q&A AGENT (Bhuvi) ────────────────────────────────────────────────
-
-@app.post("/api/qa")
+# ── Insurance Q&A (Bhuvi's ADK agent) ────────────────────────────────────────
+@app.post("/api/insurance-qa")
 async def insurance_qa(req: QARequest):
     try:
         if not QA_AVAILABLE:
-            raise HTTPException(status_code=503, detail="QA agent not available.")
+            return {"answer": "QA agent not available.", "tool_calls": [], "tool_used": "none"}
         agent = get_qa_agent()
         result = await agent.ask(req.user_id, req.question)
-        return result
-    except HTTPException:
-        raise
+        return {"answer": result["answer"], "tool_calls": result.get("tool_calls", []),
+                "tool_used": ", ".join(result.get("tool_calls", [])) or "gemini"}
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"answer": "Sorry, I encountered an error: " + str(e), "tool_calls": [], "tool_used": "error"}
 
 
-# ── SPECIALTY SEARCH ───────────────────────────────────────────────────────────
-
+# ── Specialty search ──────────────────────────────────────────────────────────
 @app.post("/api/specialty-search")
 async def specialty_search(req: SpecialtySearchRequest):
     try:
         from tools.gov_apis import (
             get_fips_from_zip, _fips_to_state, map_condition_to_specialty,
             search_providers_by_specialty, get_doctor_quality_score,
-            check_doctor_in_plan_network, get_specialist_copay
+            check_doctor_in_plan_network
         )
         fips = get_fips_from_zip(req.zip_code)
         state = req.state or (_fips_to_state(fips) if fips else "TX")
@@ -192,87 +202,74 @@ async def specialty_search(req: SpecialtySearchRequest):
             if p.get("npi"):
                 for pid in req.plan_ids[:3]:
                     networks[pid] = check_doctor_in_plan_network(pid, str(p["npi"]), req.zip_code)
-            enriched.append({**p, "mips_score": quality.get("mips_score"), "telehealth": quality.get("telehealth", False), "network_status": networks})
-        plan_copays = {}
-        for pid in req.plan_ids[:3]:
-            plan_copays[pid] = get_specialist_copay(pid, specialty_info.get("benefit_type", "SPECIALIST_VISIT"))
-        return {
-            "condition": req.condition,
-            "specialty": specialty_info["specialty"],
-            "providers": enriched,
-            "plan_copays": plan_copays,
-            "benefit_type": specialty_info.get("benefit_type", "SPECIALIST_VISIT"),
-        }
+            enriched.append({**p, "mips_score": quality.get("mips_score"),
+                              "telehealth": quality.get("telehealth", False),
+                              "network_status": networks})
+        return {"condition": req.condition, "specialty": specialty_info.get("specialty", req.condition),
+                "providers": enriched}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── PROCEDURE COST ESTIMATOR ───────────────────────────────────────────────────
-
-PROCEDURE_COSTS = {
+# ── Procedure cost estimator ──────────────────────────────────────────────────
+PROCEDURES = {
     "knee_replacement": ("Knee Replacement", 35000, "Surgery"),
     "hip_replacement": ("Hip Replacement", 32000, "Surgery"),
     "appendectomy": ("Appendectomy", 18000, "Surgery"),
     "back_surgery": ("Spinal Fusion", 45000, "Surgery"),
-    "heart_bypass": ("Coronary Bypass", 95000, "Cardiac Surgery"),
+    "heart_bypass": ("Coronary Bypass", 95000, "Cardiac"),
     "colonoscopy": ("Colonoscopy", 3500, "Diagnostic"),
     "mri": ("MRI Scan", 2600, "Diagnostic"),
     "ct_scan": ("CT Scan", 2000, "Diagnostic"),
     "er_visit": ("ER Visit", 3200, "Emergency"),
-    "ambulance": ("Ambulance Ride", 1800, "Emergency"),
+    "ambulance": ("Ambulance", 1800, "Emergency"),
     "childbirth_vaginal": ("Vaginal Birth", 12000, "Maternity"),
     "childbirth_csection": ("C-Section", 20000, "Maternity"),
     "inpatient_3day": ("3-Day Hospital Stay", 22000, "Inpatient"),
 }
-
-METAL_COINSURANCE = {"Bronze": 0.40, "Silver": 0.30, "Gold": 0.20, "Platinum": 0.10}
+COINSURANCE = {"Bronze": 0.40, "Silver": 0.30, "Gold": 0.20, "Platinum": 0.10}
 
 @app.post("/api/procedure-cost")
 async def procedure_cost(req: ProcedureCostRequest):
-    proc = PROCEDURE_COSTS.get(req.procedure_key)
+    proc = PROCEDURES.get(req.procedure_key)
     if not proc:
-        raise HTTPException(status_code=400, detail="Unknown procedure key.")
+        raise HTTPException(status_code=400, detail="Unknown procedure.")
     name, total_cost, category = proc
     results = []
     for plan in req.plans[:5]:
-        deductible = plan.get("deductible", 0) or 0
+        ded = plan.get("deductible", 0) or 0
         oop_max = plan.get("oop_max", 9450) or 9450
         metal = plan.get("metal_level", "Silver")
-        coinsurance = METAL_COINSURANCE.get(metal, 0.30)
+        coins = COINSURANCE.get(metal, 0.30)
         net_premium = plan.get("premium_w_credit") or plan.get("premium_after_subsidy") or plan.get("premium", 0)
-        after_deductible = max(0, total_cost - deductible)
-        coinsurance_amt = after_deductible * coinsurance
-        patient_oop = min(deductible + coinsurance_amt, oop_max)
-        insurance_pays = max(0, total_cost - patient_oop)
+        after_ded = max(0, total_cost - ded)
+        patient_oop = min(ded + after_ded * coins, oop_max)
         results.append({
-            "plan_name": plan.get("name", "Unknown"),
-            "metal_level": metal,
-            "net_premium": round(net_premium, 0),
-            "deductible": deductible,
-            "coinsurance_pct": round(coinsurance * 100),
+            "plan_name": plan.get("name", "Unknown"), "metal_level": metal,
+            "net_premium": round(net_premium), "deductible": ded,
+            "coinsurance_pct": round(coins * 100),
             "patient_oop": round(patient_oop),
-            "insurance_pays": round(insurance_pays),
+            "insurance_pays": round(max(0, total_cost - patient_oop)),
         })
     results.sort(key=lambda x: x["patient_oop"])
     return {"procedure": name, "total_cost": total_cost, "category": category, "results": results}
 
 
-# ── HOSPITAL SEARCH ────────────────────────────────────────────────────────────
-
+# ── Hospital search ───────────────────────────────────────────────────────────
 @app.get("/api/hospitals/nearby/{zip_code}")
 async def hospitals_nearby(zip_code: str, plan_ids: str = ""):
     try:
         from tools.gov_apis import search_providers_by_specialty, get_fips_from_zip, _fips_to_state, check_doctor_in_plan_network
         fips = get_fips_from_zip(zip_code)
         state = _fips_to_state(fips) if fips else "TX"
-        hospitals = search_providers_by_specialty("282N00000X", state, limit=5)  # General Acute Care Hospital
-        pids = [p for p in plan_ids.split(",") if p] if plan_ids else []
+        hospitals = search_providers_by_specialty("282N00000X", state, limit=5)
+        pids = [p for p in plan_ids.split(",") if p][:3]
         enriched = []
         for h in hospitals[:5]:
             networks = {}
             if h.get("npi") and pids:
-                for pid in pids[:3]:
+                for pid in pids:
                     networks[pid] = check_doctor_in_plan_network(pid, str(h["npi"]), zip_code)
             enriched.append({**h, "network_status": networks})
         return {"hospitals": enriched}
@@ -283,9 +280,13 @@ async def hospitals_nearby(zip_code: str, plan_ids: str = ""):
 @app.post("/api/hospital-search")
 async def hospital_search(req: HospitalSearchRequest):
     try:
-        from tools.gov_apis import lookup_npi_registry, check_doctor_in_plan_network
-        result = lookup_npi_registry(req.name, state=req.state, entity_type="2")
-        hospitals = result if isinstance(result, list) else [result] if result.get("npi") else []
+        from tools.gov_apis import lookup_npi_registry, check_doctor_in_plan_network, get_fips_from_zip, _fips_to_state
+        state = req.state
+        if not state and req.zip_code:
+            fips = get_fips_from_zip(req.zip_code)
+            state = _fips_to_state(fips) if fips else ""
+        result = lookup_npi_registry(req.name, state=state, entity_type="2")
+        hospitals = result if isinstance(result, list) else ([result] if result.get("npi") else [])
         enriched = []
         for h in hospitals[:5]:
             networks = {}
@@ -299,8 +300,7 @@ async def hospital_search(req: HospitalSearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── UTILITY ────────────────────────────────────────────────────────────────────
-
+# ── Utility ───────────────────────────────────────────────────────────────────
 @app.get("/api/memory/{user_id}")
 async def get_memory(user_id: str):
     from memory.mem0_client import get_user_memories

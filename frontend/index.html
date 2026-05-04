@@ -4,740 +4,564 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoverWise — AI Health Insurance Advisor</title>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #080c14;
-    --bg2: #0e1420;
-    --bg3: #141c2e;
-    --border: #1a2540;
-    --border2: #243358;
-    --text: #eef2ff;
-    --text2: #7b91c4;
-    --text3: #3d5080;
-    --accent: #4f8cff;
-    --accent2: #7eb3ff;
-    --green: #22d3a0;
-    --yellow: #fbbf24;
-    --red: #f87171;
-    --purple: #a78bfa;
-    --r: 12px;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
-
-  /* NOISE OVERLAY */
-  body::before {
-    content:''; position:fixed; inset:0; z-index:0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events:none;
-  }
-
-  /* HEADER */
-  header {
-    position:relative; z-index:10;
-    display:flex; align-items:center; justify-content:space-between;
-    padding:16px 24px; border-bottom:1px solid var(--border);
-    background:rgba(8,12,20,0.8); backdrop-filter:blur(20px);
-  }
-  .logo { display:flex; align-items:center; gap:10px; }
-  .logo-icon {
-    width:34px; height:34px; border-radius:8px;
-    background:linear-gradient(135deg,#4f8cff,#a78bfa);
-    display:flex; align-items:center; justify-content:center; font-size:16px;
-  }
-  .logo-name { font-family:'Instrument Serif',serif; font-size:20px; }
-  .logo-sub { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; letter-spacing:1px; text-transform:uppercase; }
-  .header-right { display:flex; align-items:center; gap:12px; }
-  .status-dot {
-    display:flex; align-items:center; gap:6px;
-    font-size:11px; font-family:'DM Mono',monospace; color:var(--green);
-    padding:4px 10px; border:1px solid rgba(34,211,160,0.3); border-radius:20px;
-    background:rgba(34,211,160,0.06);
-  }
-  .status-dot::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
-  .reset-btn {
-    font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);
-    padding:4px 10px; border:1px solid var(--border2); border-radius:20px;
-    background:none; cursor:pointer; transition:all 0.2s;
-  }
-  .reset-btn:hover { color:var(--text2); border-color:var(--accent); }
-
-  /* MAIN LAYOUT */
-  .main { flex:1; display:flex; overflow:hidden; position:relative; z-index:1; }
-
-  /* CHAT PANEL */
-  .chat-panel { flex:1; display:flex; flex-direction:column; min-width:0; }
-  .messages {
-    flex:1; overflow-y:auto; padding:24px;
-    display:flex; flex-direction:column; gap:16px;
-    scrollbar-width:thin; scrollbar-color:var(--border) transparent;
-  }
-  .messages::-webkit-scrollbar { width:4px; }
-  .messages::-webkit-scrollbar-track { background:transparent; }
-  .messages::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-  /* MESSAGES */
-  .msg { display:flex; gap:10px; animation:msgIn 0.3s ease; max-width:78%; }
-  @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-  .msg.user { align-self:flex-end; flex-direction:row-reverse; }
-  .msg.assistant { align-self:flex-start; }
-
-  .msg-avatar {
-    width:32px; height:32px; border-radius:8px; flex-shrink:0;
-    display:flex; align-items:center; justify-content:center; font-size:14px;
-  }
-  .msg.assistant .msg-avatar { background:linear-gradient(135deg,#4f8cff,#a78bfa); }
-  .msg.user .msg-avatar { background:var(--bg3); border:1px solid var(--border2); }
-
-  .msg-bubble {
-    padding:12px 16px; border-radius:var(--r); font-size:14px; line-height:1.7;
-    max-width:100%;
-  }
-  .msg.assistant .msg-bubble {
-    background:var(--bg2); border:1px solid var(--border);
-    border-bottom-left-radius:4px; color:var(--text2);
-  }
-  .msg.user .msg-bubble {
-    background:rgba(79,140,255,0.15); border:1px solid rgba(79,140,255,0.3);
-    border-bottom-right-radius:4px; color:var(--text);
-  }
-  .msg-bubble strong { color:var(--text); }
-  .msg-bubble em { color:var(--accent2); font-style:normal; }
-
-  /* TYPING INDICATOR */
-  .typing { display:none; align-self:flex-start; }
-  .typing.active { display:flex; }
-  .typing-dots {
-    display:flex; gap:4px; padding:14px 16px;
-    background:var(--bg2); border:1px solid var(--border); border-radius:var(--r); border-bottom-left-radius:4px;
-  }
-  .typing-dot { width:6px; height:6px; border-radius:50%; background:var(--text3); animation:typingDot 1.2s infinite; }
-  .typing-dot:nth-child(2) { animation-delay:0.2s; }
-  .typing-dot:nth-child(3) { animation-delay:0.4s; }
-  @keyframes typingDot { 0%,60%,100%{transform:none;opacity:0.3} 30%{transform:translateY(-4px);opacity:1} }
-
-  /* INPUT */
-  .input-area {
-    padding:16px 24px; border-top:1px solid var(--border);
-    background:rgba(8,12,20,0.6); backdrop-filter:blur(20px);
-  }
-  .input-row { display:flex; gap:10px; align-items:flex-end; }
-  .input-box {
-    flex:1; background:var(--bg2); border:1px solid var(--border2);
-    border-radius:var(--r); padding:12px 16px;
-    color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px;
-    outline:none; resize:none; min-height:46px; max-height:120px;
-    transition:border-color 0.2s; line-height:1.5;
-  }
-  .input-box:focus { border-color:var(--accent); }
-  .input-box::placeholder { color:var(--text3); }
-  .send-btn {
-    width:46px; height:46px; border-radius:var(--r);
-    background:linear-gradient(135deg,var(--accent),var(--purple));
-    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
-    font-size:18px; transition:opacity 0.2s, transform 0.1s; flex-shrink:0;
-  }
-  .send-btn:hover { opacity:0.9; }
-  .send-btn:active { transform:scale(0.95); }
-  .send-btn:disabled { opacity:0.4; cursor:not-allowed; }
-
-  /* RESULTS PANEL */
-  .results-panel {
-    width:420px; border-left:1px solid var(--border);
-    display:flex; flex-direction:column; overflow:hidden;
-    background:var(--bg2);
-    transform:translateX(100%); transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
-  }
-  .results-panel.open { transform:translateX(0); }
-  .results-header {
-    padding:16px 20px; border-bottom:1px solid var(--border);
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  .results-header h2 { font-family:'Instrument Serif',serif; font-size:18px; }
-  .results-body { flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; }
-  .results-body::-webkit-scrollbar { width:4px; }
-  .results-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-  /* RESULT CARDS */
-  .result-stat-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .result-stat {
-    background:var(--bg3); border:1px solid var(--border);
-    border-radius:var(--r); padding:12px 14px;
-  }
-  .result-stat-label { font-size:10px; font-family:'DM Mono',monospace; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
-  .result-stat-val { font-family:'Instrument Serif',serif; font-size:22px; font-weight:400; }
-  .result-stat-val.green { color:var(--green); }
-  .result-stat-val.blue { color:var(--accent2); }
-  .result-stat-val.yellow { color:var(--yellow); }
-
-  .route-badge {
-    display:inline-flex; align-items:center; gap:6px;
-    padding:6px 12px; border-radius:20px; font-size:12px;
-    font-family:'DM Mono',monospace;
-  }
-  .route-badge.subsidized { background:rgba(34,211,160,0.1); border:1px solid var(--green); color:var(--green); }
-  .route-badge.marketplace { background:rgba(79,140,255,0.1); border:1px solid var(--accent); color:var(--accent2); }
-  .route-badge.medicaid { background:rgba(167,139,250,0.1); border:1px solid var(--purple); color:var(--purple); }
-  .route-badge.state_exchange { background:rgba(167,139,250,0.1); border:1px solid var(--purple); color:var(--purple); }
-
-  .plan-card {
-    background:var(--bg3); border:1px solid var(--border);
-    border-radius:var(--r); padding:14px; transition:border-color 0.2s;
-  }
-  .plan-card:hover { border-color:var(--border2); }
-  .plan-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-  .metal-badge {
-    font-size:10px; font-family:'DM Mono',monospace;
-    padding:2px 8px; border-radius:8px; border:1px solid;
-  }
-  .metal-badge.Gold { color:#fbbf24; border-color:#fbbf24; background:rgba(251,191,36,0.1); }
-  .metal-badge.Silver { color:#94a3b8; border-color:#94a3b8; background:rgba(148,163,184,0.1); }
-  .metal-badge.Bronze { color:#d97706; border-color:#d97706; background:rgba(217,119,6,0.1); }
-  .metal-badge.Platinum { color:#e879f9; border-color:#e879f9; background:rgba(232,121,249,0.1); }
-  .plan-name { font-family:'Instrument Serif',serif; font-size:15px; margin-bottom:2px; }
-  .plan-issuer { font-size:11px; color:var(--text3); margin-bottom:10px; }
-  .plan-price { font-family:'DM Mono',monospace; font-size:22px; color:var(--accent2); margin-bottom:2px; }
-  .plan-price-sub { font-size:11px; color:var(--text3); margin-bottom:10px; }
-  .plan-details { display:flex; flex-direction:column; gap:0; }
-  .plan-detail { display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-top:1px solid var(--border); }
-  .plan-detail-label { color:var(--text3); }
-  .plan-detail-val { color:var(--text2); font-family:'DM Mono',monospace; }
-
-  .warnings-card {
-    background:rgba(251,191,36,0.05); border:1px solid rgba(251,191,36,0.2);
-    border-radius:var(--r); padding:14px;
-  }
-  .warnings-card h3 { font-size:13px; font-weight:600; margin-bottom:10px; }
-  .warning-item { font-size:12px; color:var(--text2); line-height:1.6; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
-  .warning-item:last-child { border-bottom:none; }
-
-  .cache-bar {
-    background:var(--bg3); border:1px solid var(--border);
-    border-radius:var(--r); padding:10px 14px;
-    font-size:11px; font-family:'DM Mono',monospace; color:var(--text3);
-    display:flex; gap:12px; flex-wrap:wrap;
-  }
-  .cache-bar span { color:var(--green); }
-
-  .state-exchange-card {
-    background:rgba(167,139,250,0.05); border:1px solid rgba(167,139,250,0.3);
-    border-radius:var(--r); padding:16px;
-  }
-  .state-exchange-card h3 { font-family:'Instrument Serif',serif; font-size:16px; margin-bottom:8px; }
-  .state-exchange-card p { font-size:13px; color:var(--text2); line-height:1.6; margin-bottom:14px; }
-  .exchange-link {
-    display:inline-flex; align-items:center; gap:6px;
-    background:linear-gradient(135deg,var(--accent),var(--purple));
-    color:white; text-decoration:none; padding:10px 18px;
-    border-radius:var(--r); font-size:13px; font-weight:600;
-  }
-
-  /* CONFIRM CARD */
-  .confirm-card {
-    background:rgba(79,140,255,0.05); border:1px solid rgba(79,140,255,0.3);
-    border-radius:var(--r); padding:14px; margin-top:4px;
-  }
-  .confirm-card h4 { font-size:12px; font-family:'DM Mono',monospace; color:var(--accent2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
-  .confirm-item { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid var(--border); }
-  .confirm-item:last-child { border-bottom:none; }
-  .confirm-label { color:var(--text3); }
-  .confirm-val { color:var(--text); font-weight:500; }
-  .confirm-actions { display:flex; gap:8px; margin-top:12px; }
-  .confirm-yes {
-    flex:1; background:var(--green); color:var(--bg); border:none;
-    border-radius:8px; padding:10px; font-size:13px; font-weight:600;
-    cursor:pointer; transition:opacity 0.2s;
-  }
-  .confirm-yes:hover { opacity:0.9; }
-  .confirm-no {
-    flex:1; background:none; color:var(--text2); border:1px solid var(--border2);
-    border-radius:8px; padding:10px; font-size:13px;
-    cursor:pointer; transition:all 0.2s;
-  }
-  .confirm-no:hover { border-color:var(--red); color:var(--red); }
-
-  /* MEM0 BADGE */
-  .mem0-badge {
-    display:inline-flex; align-items:center; gap:6px;
-    font-size:11px; font-family:'DM Mono',monospace; color:var(--purple);
-    padding:3px 8px; border-radius:20px;
-    background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.3);
-  }
-  .premium-badge {
-    display:inline-flex; align-items:center; gap:6px;
-    font-size:11px; font-family:'DM Mono',monospace; color:var(--yellow);
-    padding:3px 8px; border-radius:20px;
-    background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3);
-  }
-  .hsa-card {
-    background:rgba(34,211,160,0.05); border:1px solid rgba(34,211,160,0.2);
-    border-radius:var(--r); padding:14px; margin-top:8px;
-  }
-  .hsa-card h4 { font-size:12px; font-family:'DM Mono',monospace; color:var(--green); margin-bottom:8px; text-transform:uppercase; }
-  .hsa-table { width:100%; font-size:11px; border-collapse:collapse; }
-  .hsa-table th { color:var(--text3); padding:4px 6px; text-align:left; border-bottom:1px solid var(--border); }
-  .hsa-table td { color:var(--text2); padding:4px 6px; font-family:'DM Mono',monospace; border-bottom:1px solid var(--border); }
-
-  /* WELCOME */
-  .welcome {
-    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    text-align:center; padding:40px; gap:16px;
-  }
-  .welcome-icon { font-size:48px; }
-  .welcome h1 { font-family:'Instrument Serif',serif; font-size:clamp(28px,4vw,42px); line-height:1.2; }
-  .welcome h1 em { color:var(--accent2); font-style:italic; }
-  .welcome p { font-size:15px; color:var(--text2); max-width:440px; line-height:1.7; }
-  .concepts { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-  .concept { font-size:11px; font-family:'DM Mono',monospace; padding:4px 10px; border-radius:20px; border:1px solid var(--border2); color:var(--text3); }
-  .concept.active { color:var(--accent2); border-color:var(--accent); background:rgba(79,140,255,0.08); }
-
-  @media (max-width: 768px) {
-    .results-panel { position:fixed; inset:0; width:100%; z-index:50; transform:translateY(100%); }
-    .results-panel.open { transform:translateY(0); }
-  }
+:root{--bg:#030b18;--bg2:#071020;--bg3:#0c1a30;--border:#0d2040;--border2:#153060;--text:#ddeeff;--text2:#6a9ac4;--text3:#2d5070;--accent:#1d6cf0;--accent2:#5da8ff;--green:#0dc47a;--yellow:#f59e0b;--red:#f04040;--orange:#f97316;--purple:#7c3aed;--gold:#fbbf24;--r:10px;--r2:16px;--ff:'Outfit',sans-serif;--fd:'Syne',sans-serif;--fm:'JetBrains Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--ff);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(29,108,240,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(29,108,240,.04) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
+.bg-glow{position:fixed;top:-300px;left:50%;transform:translateX(-50%);width:1200px;height:600px;background:radial-gradient(ellipse,rgba(29,108,240,.12) 0%,transparent 65%);pointer-events:none;z-index:0}
+.app{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:0 24px 80px}
+header{padding:32px 0 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);margin-bottom:36px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,#1d6cf0,#7c3aed);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 0 24px rgba(29,108,240,.35)}
+.logo-name{font-family:var(--fd);font-size:20px;font-weight:700}
+.logo-sub{font-size:10px;color:var(--text3);font-family:var(--fm);letter-spacing:1.2px;text-transform:uppercase}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.hbadge{font-size:11px;font-family:var(--fm);padding:4px 12px;border-radius:20px;border:1px solid;cursor:pointer;transition:all .2s}
+.hbadge.live{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.07)}
+.hbadge.live::before{content:'● ';font-size:8px}
+.hbadge.reset{color:var(--text3);border-color:var(--border2);background:none}
+.hbadge.reset:hover{color:var(--text2);border-color:var(--accent)}
+.hbadge.prem{color:var(--gold);border-color:var(--gold);background:rgba(251,191,36,.08)}
+.hero{text-align:center;margin-bottom:36px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--fm);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent2);background:rgba(29,108,240,.1);border:1px solid rgba(93,168,255,.2);padding:5px 14px;border-radius:20px;margin-bottom:18px}
+.hero h1{font-family:var(--fd);font-size:clamp(32px,5vw,54px);font-weight:800;line-height:1.1;margin-bottom:14px}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,#5da8ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:15px;color:var(--text2);max-width:520px;margin:0 auto 20px;line-height:1.8}
+.tags{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+.tag{font-size:10px;font-family:var(--fm);padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:var(--text3)}
+.tag.on{color:var(--accent2);border-color:var(--accent);background:rgba(29,108,240,.08)}
+.tabs{display:flex;margin-bottom:20px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.tab{flex:1;padding:13px 20px;background:none;border:none;color:var(--text2);font-family:var(--ff);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;text-align:center}
+.tab.on{background:rgba(29,108,240,.1);color:var(--accent2);border-bottom:2px solid var(--accent)}
+.tab:hover:not(.on){background:rgba(255,255,255,.03)}
+.intake{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:28px}
+.intake-hdr{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.ai-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.intake-title{font-family:var(--fd);font-size:15px;font-weight:700}
+.intake-sub{font-size:11px;color:var(--text3)}
+.msgs{padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-height:180px;max-height:360px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.msg{padding:11px 15px;border-radius:var(--r);font-size:13px;line-height:1.65;max-width:88%}
+.msg.agent{background:var(--bg3);border:1px solid var(--border);align-self:flex-start;color:var(--text2)}
+.msg.user{background:rgba(29,108,240,.14);border:1px solid rgba(29,108,240,.3);align-self:flex-end;color:var(--text)}
+.msg.sys{background:rgba(13,196,122,.07);border:1px solid rgba(13,196,122,.2);align-self:center;color:var(--green);font-size:11px;font-family:var(--fm)}
+.inp-row{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:10px}
+.inp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;transition:border-color .2s}
+.inp:focus{border-color:var(--accent)}
+.inp::placeholder{color:var(--text3)}
+.sbtn{background:var(--accent);color:white;border:none;border-radius:var(--r);padding:9px 18px;font-size:13px;cursor:pointer;font-family:var(--ff);font-weight:600}
+.sbtn:hover{opacity:.9}.sbtn:disabled{opacity:.4;cursor:not-allowed}
+.dots{display:inline-flex;gap:4px;padding:2px 0}
+.dots span{width:5px;height:5px;background:var(--text3);border-radius:50%;animation:bounce .9s infinite}
+.dots span:nth-child(2){animation-delay:.15s}.dots span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+.form-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:28px;margin-bottom:28px}
+.form-ttl{font-family:var(--fd);font-size:18px;font-weight:700;margin-bottom:4px}
+.form-sub{font-size:12px;color:var(--text2);margin-bottom:24px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg.full{grid-column:1/-1}
+label{font-size:11px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+input,select{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 12px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;transition:border-color .2s;width:100%}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--text3)}
+select option{background:var(--bg2)}
+.btn{background:linear-gradient(135deg,var(--accent),var(--purple));color:white;border:none;border-radius:var(--r);padding:13px 24px;font-family:var(--ff);font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:6px;transition:opacity .2s,transform .1s;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn:hover{opacity:.9}.btn:active{transform:scale(.99)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.confirm{background:var(--bg2);border:2px solid var(--accent);border-radius:var(--r2);padding:26px;margin-bottom:28px;animation:fadeIn .4s ease}
+.confirm h3{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:5px;color:var(--accent2)}
+.confirm p{font-size:12px;color:var(--text2);margin-bottom:18px}
+.ctable{width:100%;border-collapse:collapse;margin-bottom:18px}
+.ctable tr td{padding:7px 11px;font-size:12px;border-bottom:1px solid var(--border)}
+.ctable tr td:first-child{color:var(--text3);font-family:var(--fm);font-size:10px;text-transform:uppercase;width:38%}
+.ctable tr td:last-child{color:var(--text);font-weight:500}
+.cactions{display:flex;gap:10px}
+.cbtn-yes{background:linear-gradient(135deg,var(--green),#059669);color:white;border:none;border-radius:var(--r);padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff)}
+.cbtn-no{background:none;color:var(--text2);border:1px solid var(--border2);border-radius:var(--r);padding:11px 22px;font-size:13px;cursor:pointer;font-family:var(--ff)}
+.loading{display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:36px 28px;text-align:center;margin-bottom:28px}
+.loading.on{display:block}
+.spinner{width:38px;height:38px;margin:0 auto 18px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.agent-rows{display:flex;flex-direction:column;gap:7px;max-width:300px;margin:14px auto 0}
+.agent-row{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--text2);animation:fadeIn .4s ease both}
+.adot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.results{display:none}.results.on{display:block;animation:fadeIn .5s ease}
+.rbadge{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;font-size:12px;font-family:var(--fm);margin-bottom:20px}
+.rbadge.subsidized{background:rgba(13,196,122,.09);border:1px solid var(--green);color:var(--green)}
+.rbadge.marketplace{background:rgba(29,108,240,.09);border:1px solid var(--accent);color:var(--accent2)}
+.rbadge.medicaid{background:rgba(124,58,237,.09);border:1px solid var(--purple);color:var(--purple)}
+.rbadge.state_exchange{background:rgba(124,58,237,.09);border:1px solid var(--purple);color:var(--purple)}
+.rbadge.full_price{background:rgba(245,158,11,.09);border:1px solid var(--yellow);color:var(--yellow)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px}
+.stat-l{font-size:10px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.stat-v{font-family:var(--fd);font-size:22px;font-weight:700}
+.stat-v.g{color:var(--green)}.stat-v.b{color:var(--accent2)}.stat-v.y{color:var(--gold)}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:24px;margin-bottom:20px}
+.card h2{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-body{font-size:13px;line-height:1.8;color:var(--text2)}
+.plans-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.plans-grid.wide{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.pcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px;transition:border-color .2s}
+.pcard.best{border-color:var(--accent);background:rgba(29,108,240,.04)}
+.phdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.metal{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:6px;border:1px solid;font-weight:500}
+.metal.Gold{color:var(--gold);border-color:var(--gold);background:rgba(251,191,36,.09)}
+.metal.Silver{color:#8fb0cc;border-color:#8fb0cc;background:rgba(143,176,204,.09)}
+.metal.Bronze{color:#d97706;border-color:#d97706;background:rgba(161,98,7,.09)}
+.metal.Platinum{color:#e879f9;border-color:#e879f9;background:rgba(232,121,249,.09)}
+.prank{font-size:10px;font-family:var(--fm);color:var(--text3);margin-bottom:3px}
+.pname{font-family:var(--fd);font-size:14px;font-weight:700;margin-bottom:3px}
+.pissuer{font-size:11px;color:var(--text3);margin-bottom:12px}
+.pprice{font-family:var(--fm);font-size:21px;color:var(--accent2);margin-bottom:2px}
+.pprice span{font-size:13px;color:var(--text3)}
+.plbl{font-size:10px;color:var(--text3);margin-bottom:10px}
+.pdets{display:flex;flex-direction:column}
+.pdet{display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-top:1px solid var(--border)}
+.pdetl{color:var(--text3)}.pdetv{color:var(--text2);font-family:var(--fm)}
+.tac-b{font-size:10px;font-family:var(--fm);color:var(--text2);padding:2px 7px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid var(--border2)}
+.warn-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-bottom:20px}
+.warn-card h2{font-family:var(--fd);font-size:16px;font-weight:700;margin-bottom:12px}
+.wi{font-size:12px;color:var(--text2);line-height:1.65;padding:9px 0;border-bottom:1px solid var(--border)}
+.wi:last-child{border-bottom:none;padding-bottom:0}
+.wi.alert{color:var(--red)}.wi.tip{color:var(--green)}
+.cache-bar{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;display:flex;align-items:center;gap:14px;font-size:11px;color:var(--text3);margin-bottom:20px;font-family:var(--fm);flex-wrap:wrap}
+.cache-bar em{font-style:normal;color:var(--green)}
+.drug-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
+.drug-row:last-child{border-bottom:none}
+.dname{color:var(--text);font-weight:500}
+.dbs{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.tier{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;border:1px solid}
+.t1{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.09)}
+.t2{color:var(--accent2);border-color:var(--accent);background:rgba(29,108,240,.09)}
+.t3{color:var(--yellow);border-color:var(--yellow);background:rgba(245,158,11,.09)}
+.t4{color:var(--orange);border-color:var(--orange);background:rgba(249,115,22,.09)}
+.t5{color:var(--red);border-color:var(--red);background:rgba(240,64,64,.09)}
+.pa-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--red);border:1px solid var(--red);background:rgba(240,64,64,.09)}
+.st-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--orange);border:1px solid var(--orange);background:rgba(249,115,22,.09)}
+.gen-b{font-size:10px;font-family:var(--fm);padding:2px 7px;border-radius:5px;color:var(--green);border:1px solid var(--green);background:rgba(13,196,122,.09)}
+.doc-row{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
+.doc-row:last-child{border-bottom:none}
+.doc-info{flex:1;min-width:200px}
+.dname2{font-weight:600;color:var(--text);font-size:13px}
+.dmeta{font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:3px}
+.dnets{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.net{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:5px;border:1px solid;white-space:nowrap;text-decoration:none}
+.net.in{color:var(--green);border-color:var(--green);background:rgba(13,196,122,.09)}
+.net.out{color:var(--red);border-color:var(--red);background:rgba(240,64,64,.09)}
+.net.unk{color:var(--text3);border-color:var(--border2);background:var(--bg3)}
+.mips{font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:5px;border:1px solid var(--purple);color:var(--purple);background:rgba(124,58,237,.09)}
+.prem-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--fm);color:var(--gold);padding:4px 10px;border-radius:20px;background:rgba(251,191,36,.09);border:1px solid var(--gold);margin-bottom:12px}
+.mem-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--fm);color:var(--purple);padding:4px 10px;border-radius:20px;background:rgba(124,58,237,.09);border:1px solid var(--purple);margin-bottom:12px}
+.chat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-top:20px}
+.chat-card h2{font-family:var(--fd);font-size:16px;font-weight:700;margin-bottom:14px}
+.chat-msgs{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;max-height:280px;overflow-y:auto}
+.cmsg{padding:9px 13px;border-radius:var(--r);font-size:12px;line-height:1.6;max-width:84%}
+.cmsg.user{background:rgba(29,108,240,.14);border:1px solid rgba(29,108,240,.3);align-self:flex-end;color:var(--text)}
+.cmsg.ai{background:var(--bg3);border:1px solid var(--border);align-self:flex-start;color:var(--text2)}
+.chat-inp-row{display:flex;gap:9px}
+.chat-inp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;width:auto}
+.chat-inp:focus{border-color:var(--accent)}
+.chat-btn{background:var(--accent);color:white;border:none;border-radius:var(--r);padding:9px 16px;font-size:13px;cursor:pointer;font-family:var(--ff);font-weight:600}
+.tbl-wrap{overflow-x:auto;margin:12px 0;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.05)}
+.tbl-wrap table{width:100%;border-collapse:collapse;font-size:12px}
+.tbl-wrap th{padding:9px 11px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg3);font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:500}
+.tbl-wrap td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--border)}
+.tbl-wrap tr:last-child td{border-bottom:none}
+.tbl-wrap tr:hover td{background:rgba(255,255,255,.02)}
+.hsa-t{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.hsa-t th{padding:8px;text-align:center;background:var(--bg3);font-family:var(--fm);font-size:10px;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border)}
+.hsa-t td{padding:8px;text-align:center;border-bottom:1px solid var(--border);font-family:var(--fm)}
+.hsa-t tr:last-child td{border-bottom:none;font-weight:600;color:var(--green)}
+.spec-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px;margin-bottom:20px}
+.spec-card h2{font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:5px}
+.spec-row{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.spec-inp{flex:1;min-width:180px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:9px 13px;color:var(--text);font-family:var(--ff);font-size:13px;outline:none;width:auto}
+.spec-inp:focus{border-color:var(--accent)}
+.spec-btn{background:linear-gradient(135deg,var(--accent),var(--purple));color:white;border:none;border-radius:var(--r);padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);white-space:nowrap}
+.spec-btn:disabled{opacity:.5;cursor:not-allowed}
+.scard{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-top:10px}
+.sname{font-weight:600;font-size:13px;color:var(--text)}
+.ssub{font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:2px}
+.sim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.sim-stat{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center}
+.sim-lbl{font-size:10px;font-family:var(--fm);color:var(--text3);text-transform:uppercase;margin-bottom:3px}
+.sim-val{font-size:18px;font-weight:700;font-family:var(--fm)}
+.sim-val.g{color:var(--green)}.sim-val.y{color:var(--yellow)}.sim-val.r{color:var(--red)}
+.ab{padding:10px 13px;border-radius:var(--r);font-size:12px;border:1px solid;margin-top:10px}
+.ab.open{background:rgba(13,196,122,.07);border-color:var(--green);color:var(--green)}
+.ab.warn{background:rgba(240,64,64,.07);border-color:var(--red);color:var(--red)}
+.ab.info{background:rgba(255,255,255,.03);border-color:var(--border2);color:var(--text2)}
+.upsell{border:2px dashed var(--accent);background:rgba(29,108,240,.04);border-radius:var(--r2);padding:22px;margin-top:20px}
+.upsell h2{font-family:var(--fd);font-size:17px;color:var(--accent2);margin-bottom:12px}
+#landingScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;position:relative;z-index:1}
+.lflow{display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;max-width:720px}
+.lcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:28px;text-align:center;cursor:pointer;transition:transform .2s,border-color .2s;position:relative;overflow:hidden}
+.lcard:hover{transform:translateY(-4px);border-color:var(--accent)}
+.lcard.prem{border-color:rgba(93,168,255,.35);background:rgba(29,108,240,.04)}
+.lbadge{position:absolute;top:10px;right:10px;font-size:10px;font-family:var(--fm);padding:2px 8px;border-radius:10px}
+.lb-free{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.lb-paid{background:rgba(29,108,240,.1);color:var(--accent2);border:1px solid var(--accent)}
+.licon{font-size:30px;margin-bottom:14px;display:block}
+.lcard h3{font-family:var(--fd);font-size:22px;font-weight:700;margin-bottom:8px}
+.lcard p{font-size:12px;color:var(--text3);line-height:1.6}
+@media print{.bg-grid,.bg-glow,.hero,.tabs,.intake,.form-card,.loading,button,.chat-card,.spec-card,.upsell,#landingScreen{display:none!important}body{background:white!important;color:black!important}.app{max-width:100%!important;padding:0!important}.card,.pcard,.warn-card{border:1px solid #ccc!important;page-break-inside:avoid}}
+@media(max-width:700px){.fgrid,.stats{grid-template-columns:1fr 1fr}.plans-grid{grid-template-columns:1fr}.sim-grid{grid-template-columns:1fr 1fr}.lflow{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
 
-<header>
-  <div class="logo">
+<div id="landingScreen">
+  <div class="logo" style="margin-bottom:40px">
     <div class="logo-icon">🛡️</div>
-    <div>
-      <div class="logo-name">CoverWise</div>
-      <div class="logo-sub">AI Insurance Advisor</div>
-    </div>
+    <div><div class="logo-name" style="font-size:28px">CoverWise</div><div class="logo-sub">AI Insurance Advisor</div></div>
   </div>
-  <div class="header-right">
-    <div class="status-dot">Live</div>
-    <button class="reset-btn" onclick="resetChat()">New Chat</button>
+  <div style="text-align:center;margin-bottom:32px;max-width:520px">
+    <h1 style="font-family:var(--fd);font-size:clamp(28px,5vw,46px);font-weight:800;line-height:1.15;margin-bottom:12px">Find your <em style="font-style:normal;background:linear-gradient(135deg,#5da8ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">best health plan</em> in 30 seconds</h1>
+    <p style="font-size:14px;color:var(--text2);line-height:1.7">Live CMS data. Real plans. Your medications, your doctors, your subsidy — ranked by true annual cost.</p>
   </div>
-</header>
-
-<div class="main">
-  <div class="chat-panel">
-    <div class="messages" id="messages">
-      <div class="welcome" id="welcome">
-        <div class="welcome-icon">🛡️</div>
-        <h1>Find your <em>best health plan</em> in 30 seconds</h1>
-        <p>CoverWise analyzes every ACA marketplace plan against your income, medications, and doctors — then tells you exactly which plan saves you the most money.</p>
-        <div class="concepts">
-          <span class="concept active">Multi-Agent</span>
-          <span class="concept active">Agent Handoff</span>
-          <span class="concept active">mem0 Memory</span>
-          <span class="concept active">TTL Caching</span>
-          <span class="concept active">Human-in-Loop</span>
-          <span class="concept">Parallel Execution</span>
-        </div>
-      </div>
+  <div class="lflow">
+    <div class="lcard" onclick="startFlow(false)">
+      <span class="lbadge lb-free">No Credit Card</span>
+      <span class="licon">🔍</span>
+      <h3>Find my plan — Free</h3>
+      <p style="margin-top:6px">One-time plan recommendation.<br>Basic drug & doctor check.</p>
     </div>
-    <div class="msg typing" id="typing">
-      <div class="msg-avatar">🛡️</div>
-      <div class="typing-dots">
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-        <div class="typing-dot"></div>
-      </div>
+    <div class="lcard prem" onclick="startFlow(true)">
+      <span class="lbadge lb-paid">Unlimited Access</span>
+      <span class="licon">🪄</span>
+      <h3>Year-round advisor — $19/mo</h3>
+      <p style="margin-top:6px">HSA forecasts, unlimited checks,<br>saved profile & advisor access.</p>
     </div>
-    <div class="input-area">
-      <div class="input-row">
-        <textarea class="input-box" id="inputBox" placeholder="Type your message..." rows="1"
-          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="results-panel" id="resultsPanel">
-    <div class="results-header">
-      <h2>Your Analysis</h2>
-      <button class="reset-btn" onclick="closeResults()">✕</button>
-    </div>
-    <div class="results-body" id="resultsBody"></div>
   </div>
 </div>
 
-<script>
-const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
-let started = false;
-let currentState = 'idle';
-
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-}
-
-async function init() {
-  if (started) return;
-  started = true;
-  document.getElementById('welcome').style.display = 'none';
-  showTyping();
-  try {
-    const res = await fetch('/api/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: USER_ID})
-    });
-    const data = await res.json();
-    hideTyping();
-    if (data.returning_user) {
-      appendMsg('assistant', data.reply + '\n\n<span class="mem0-badge">🧠 mem0 — profile loaded from memory</span>');
-    } else {
-      appendMsg('assistant', data.reply);
-    }
-    currentState = data.state;
-  } catch(e) {
-    hideTyping();
-    appendMsg('assistant', "Welcome to CoverWise! To find your best health plan, what is your ZIP code?");
-    currentState = 'intake';
-  }
-}
-
-async function sendMessage() {
-  const input = document.getElementById('inputBox');
-  const msg = input.value.trim();
-  if (!msg) return;
-
-  if (!started) {
-    document.getElementById('welcome').style.display = 'none';
-    started = true;
-  }
-
-  input.value = '';
-  input.style.height = 'auto';
-  document.getElementById('sendBtn').disabled = true;
-
-  appendMsg('user', msg);
-  showTyping();
-
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: USER_ID, message: msg})
-    });
-    const data = await res.json();
-    hideTyping();
-    document.getElementById('sendBtn').disabled = false;
-
-    if (data.state === 'confirm' && data.profile) {
-      appendMsg('assistant', data.reply);
-      appendConfirmCard(data.profile);
-    } else if (data.state === 'complete' && data.analysis) {
-      appendMsg('assistant', formatReply(data.reply));
-      renderResults(data.analysis);
-    } else {
-      appendMsg('assistant', formatReply(data.reply));
-    }
-    currentState = data.state;
-  } catch(e) {
-    hideTyping();
-    document.getElementById('sendBtn').disabled = false;
-    appendMsg('assistant', 'Something went wrong. Please try again.');
-  }
-}
-
-function appendMsg(role, content) {
-  const messages = document.getElementById('messages');
-  const welcome = document.getElementById('welcome');
-  if (welcome) welcome.style.display = 'none';
-
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
-  const avatar = document.createElement('div');
-  avatar.className = 'msg-avatar';
-  avatar.textContent = role === 'assistant' ? '🛡️' : '👤';
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble';
-  bubble.innerHTML = formatReply(content);
-  div.appendChild(avatar);
-  div.appendChild(bubble);
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-function appendConfirmCard(profile) {
-  const messages = document.getElementById('messages');
-  const drugs = (profile.drugs || []).join(', ') || 'None';
-  const doctors = (profile.doctors || []).join(', ') || 'None';
-  const income = parseFloat(profile.income || 0).toLocaleString('en-US', {minimumFractionDigits:0});
-
-  const div = document.createElement('div');
-  div.className = 'msg assistant';
-  div.style.maxWidth = '85%';
-  div.innerHTML = `
-    <div class="msg-avatar">🛡️</div>
-    <div class="confirm-card">
-      <h4>Profile Confirmation</h4>
-      <div class="confirm-item"><span class="confirm-label">ZIP Code</span><span class="confirm-val">${profile.zip_code}</span></div>
-      <div class="confirm-item"><span class="confirm-label">Age</span><span class="confirm-val">${profile.age}</span></div>
-      <div class="confirm-item"><span class="confirm-label">Annual Income</span><span class="confirm-val">$${income}</span></div>
-      <div class="confirm-item"><span class="confirm-label">Household Size</span><span class="confirm-val">${profile.household_size}</span></div>
-      <div class="confirm-item"><span class="confirm-label">Medications</span><span class="confirm-val">${drugs}</span></div>
-      <div class="confirm-item"><span class="confirm-label">Doctors</span><span class="confirm-val">${doctors}</span></div>
-      <div class="confirm-actions">
-        <button class="confirm-yes" onclick="confirmProfile()">✓ Looks correct — analyze my plans</button>
-        <button class="confirm-no" onclick="correctProfile()">✗ Something is wrong</button>
+<div class="app" id="mainApp" style="display:none">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🛡️</div>
+      <div><div class="logo-name">CoverWise</div><div class="logo-sub">AI Insurance Advisor</div></div>
+    </div>
+    <div class="hdr-right">
+      <span class="hbadge live" id="liveBadge">All APIs Free</span>
+      <span class="hbadge reset" onclick="resetApp()">New Analysis</span>
+    </div>
+  </header>
+  <div class="hero">
+    <div class="eyebrow">⚡ AI-Powered · Live CMS Data · Multi-Agent</div>
+    <h1>Find your <em>best health plan</em><br>in 30 seconds</h1>
+    <p>Enter your ZIP, income, and medications. CoverWise pulls live ACA data, checks drug coverage, verifies doctors, and ranks every plan by true annual cost.</p>
+    <div class="tags">
+      <span class="tag on">Multi-Agent Orchestration</span><span class="tag on">Google ADK</span><span class="tag on">mem0 Memory</span><span class="tag on">TTL Caching</span><span class="tag on">Human-in-Loop</span><span class="tag on">Parallel Execution</span>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" id="tabChat" onclick="switchTab('chat')">💬 Chat Intake <span style="font-size:10px;color:var(--green);margin-left:4px">Recommended</span></button>
+    <button class="tab" id="tabForm" onclick="switchTab('form')">📋 Quick Form</button>
+  </div>
+  <div id="panelChat">
+    <div class="intake">
+      <div class="intake-hdr">
+        <div class="ai-av">🤖</div>
+        <div><div class="intake-title">CoverWise Assistant</div><div class="intake-sub">Powered by Google ADK · ~90 seconds</div></div>
       </div>
-    </div>`;
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-async function confirmProfile() {
-  document.querySelectorAll('.confirm-actions').forEach(el => el.style.display = 'none');
-  appendMsg('user', 'Yes, that looks correct');
-  showTyping();
-  document.getElementById('sendBtn').disabled = true;
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: USER_ID, message: 'yes'})
-    });
-    const data = await res.json();
-    hideTyping();
-    document.getElementById('sendBtn').disabled = false;
-    if (data.analysis) {
-      appendMsg('assistant', formatReply(data.reply));
-      renderResults(data.analysis);
-    } else {
-      appendMsg('assistant', formatReply(data.reply));
-    }
-    currentState = data.state;
-  } catch(e) {
-    hideTyping();
-    document.getElementById('sendBtn').disabled = false;
-  }
-}
-
-function correctProfile() {
-  document.querySelectorAll('.confirm-actions').forEach(el => el.style.display = 'none');
-  appendMsg('user', 'Something is wrong, let me correct it');
-  appendMsg('assistant', 'No problem — what would you like to correct?');
-  currentState = 'intake';
-}
-
-function formatReply(text) {
-  if (!text) return '';
-  return text
-    .replace(/\\\$/g, '$')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>');
-}
-
-function showTyping() {
-  const t = document.getElementById('typing');
-  t.classList.add('active');
-  const messages = document.getElementById('messages');
-  messages.appendChild(t);
-  messages.scrollTop = messages.scrollHeight;
-}
-
-function hideTyping() {
-  document.getElementById('typing').classList.remove('active');
-}
-
-function renderResults(data) {
-  const panel = document.getElementById('resultsPanel');
-  const body = document.getElementById('resultsBody');
-  body.innerHTML = '';
-
-  const route = data.route || 'marketplace';
-  const routeLabels = {
-    subsidized: '✓ Subsidy-Eligible',
-    marketplace: '→ Full Marketplace',
-    medicaid: '✓ Medicaid Eligible',
-    state_exchange: '→ State Exchange',
-  };
-
-  // Premium badge
-  if (data.is_premium) {
-    const pb = document.createElement('div');
-    pb.className = 'premium-badge';
-    pb.textContent = '★ Premium Analysis — HSA Forecasts + 3x Detail';
-    body.appendChild(pb);
-  }
-
-  // Route badge
-  const badge = document.createElement('div');
-  badge.className = 'route-badge ' + route;
-  badge.textContent = routeLabels[route] || route;
-  body.appendChild(badge);
-
-  // State exchange
-  if (route === 'state_exchange' && data.state_exchange) {
-    const ex = data.state_exchange;
-    const card = document.createElement('div');
-    card.className = 'state-exchange-card';
-    card.innerHTML = `
-      <h3>🏛️ ${ex.state} State Exchange</h3>
-      <p>${ex.message}</p>
-      <a href="${ex.exchange_url}" target="_blank" class="exchange-link">🔗 Visit ${ex.exchange_name} →</a>`;
-    body.appendChild(card);
-    panel.classList.add('open');
-    return;
-  }
-
-  // Medicaid
-  if (route === 'medicaid' && data.medicaid) {
-    const card = document.createElement('div');
-    card.className = 'state-exchange-card';
-    card.innerHTML = `<h3>🏥 Medicaid Eligible</h3><p>${data.medicaid.message}</p>`;
-    body.appendChild(card);
-    panel.classList.add('open');
-    return;
-  }
-
-  // Stats
-  const subsidy = data.subsidy || {};
-  const monthly = subsidy.monthly_credit || subsidy.monthly_aptc || subsidy.monthly_subsidy || subsidy.aptc_monthly || 0;
-  const annual = subsidy.annual_credit || subsidy.annual_aptc || subsidy.aptc_annual || (monthly * 12) || 0;
-  const fpl = data.fpl_percentage || (data.profile && data.profile.fpl_percentage) || (data.subsidy && data.subsidy.fpl_percentage) || 0;
-  const statsRow = document.createElement('div');
-  statsRow.className = 'result-stat-row';
-  statsRow.innerHTML = `
-    <div class="result-stat">
-      <div class="result-stat-label">Monthly Subsidy</div>
-      <div class="result-stat-val green">$${monthly.toFixed(0)}</div>
+      <div class="msgs" id="msgs"><div class="msg sys">Starting session...</div></div>
+      <div class="inp-row">
+        <input class="inp" id="chatIn" placeholder="Type your answer..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" disabled>
+        <button class="sbtn" id="chatSend" onclick="sendChat()" disabled>Send</button>
+      </div>
     </div>
-    <div class="result-stat">
-      <div class="result-stat-label">Annual Credit</div>
-      <div class="result-stat-val blue">$${annual.toFixed(0)}</div>
-    </div>
-    <div class="result-stat">
-      <div class="result-stat-label">FPL %</div>
-      <div class="result-stat-val yellow">${fpl}%</div>
-    </div>
-    <div class="result-stat">
-      <div class="result-stat-label">Best Plan From</div>
-      <div class="result-stat-val green">${plans.length > 0 ? '$' + Math.max(0, (plans[0].premium_w_credit || plans[0].premium_after_subsidy || Math.max(0, (plans[0].premium || 0) - monthly))).toFixed(0) + '/mo' : monthly > 0 ? 'Subsidy: $' + monthly.toFixed(0) + '/mo' : 'See chat'}</div>
-    </div>`;
-  body.appendChild(statsRow);
-
-  // Cache stats
-  const cache = data.cache_stats;
-  if (cache && cache.total_calls > 0) {
-    const cacheBar = document.createElement('div');
-    cacheBar.className = 'cache-bar';
-    cacheBar.innerHTML = `⚡ Cache: <span>${cache.hits} hits</span> / ${cache.total_calls} calls — <span>${cache.hit_rate_pct}% hit rate</span> | <span>${cache.hits} API calls saved</span>`;
-    body.appendChild(cacheBar);
-  }
-
-  // Plans
-  const plans = (data.plans || []).filter(p => p.name && p.premium);
-  if (plans.length) {
-    const header = document.createElement('div');
-    header.style.cssText = 'font-family:"Instrument Serif",serif;font-size:16px;font-weight:400;margin-bottom:4px;';
-    header.textContent = 'Available Plans';
-    const sub = document.createElement('div');
-    sub.style.cssText = 'font-size:11px;color:var(--text3);font-family:"DM Mono",monospace;margin-bottom:12px;';
-    sub.textContent = 'Reference table — see AI recommendation in chat';
-    body.appendChild(header);
-    body.appendChild(sub);
-
-    plans.slice(0, 3).forEach(plan => {
-      const netPremium = plan.premium_w_credit ?? plan.premium_after_subsidy ?? Math.max(0, (plan.premium || 0) - monthly);
-      const card = document.createElement('div');
-      card.className = 'plan-card';
-      card.innerHTML = `
-        <div class="plan-header">
-          <span class="metal-badge ${plan.metal_level}">${plan.metal_level}</span>
+  </div>
+  <div id="panelForm" style="display:none">
+    <div class="form-card">
+      <div class="form-ttl">Your Profile</div>
+      <div class="form-sub">All data stays local. Used only to find your best plan.</div>
+      <div class="fgrid">
+        <div class="fg"><label>ZIP Code</label><input type="text" id="fzip" placeholder="e.g. 77001" maxlength="5"></div>
+        <div class="fg"><label>Age</label><input type="number" id="fage" placeholder="e.g. 34" min="18" max="64"></div>
+        <div class="fg"><label>Annual Household Income ($)</label><input type="number" id="fincome" placeholder="e.g. 52000"></div>
+        <div class="fg"><label>Household Size</label><input type="number" id="fhh" placeholder="1" min="1" max="10" value="1"></div>
+        <div class="fg full"><label>Healthcare Use</label>
+          <select id="futil"><option value="rarely">Rarely (0–1 visits/year)</option><option value="sometimes" selected>Sometimes (2–4 visits/year)</option><option value="frequently">Frequently (5+ visits/year)</option><option value="chronic">Chronic conditions — ongoing care</option></select>
         </div>
-        <div class="plan-name">${plan.name}</div>
-        <div class="plan-issuer">${plan.issuer}</div>
-        <div class="plan-price">$${netPremium.toFixed(0)}<span style="font-size:13px;color:var(--text3)">/mo</span></div>
-        <div class="plan-price-sub">after $${monthly.toFixed(0)} subsidy</div>
-        <div class="plan-details">
-          <div class="plan-detail"><span class="plan-detail-label">Full Premium</span><span class="plan-detail-val">$${(plan.premium||0).toFixed(0)}/mo</span></div>
-          <div class="plan-detail"><span class="plan-detail-label">Deductible</span><span class="plan-detail-val">$${(plan.deductible||0).toLocaleString()}</span></div>
-          <div class="plan-detail"><span class="plan-detail-label">OOP Max</span><span class="plan-detail-val">$${(plan.oop_max||0).toLocaleString()}</span></div>
-          <div class="plan-detail"><span class="plan-detail-label">Issuer</span><span class="plan-detail-val">${plan.issuer}</span></div>
-          ${plan.true_annual_cost ? `<div class="plan-detail"><span class="plan-detail-label">True Annual Cost</span><span class="plan-detail-val" style="color:var(--accent2)">$${plan.true_annual_cost.toLocaleString()}</span></div>` : ""}
-          ${plan.pa_warning ? `<div class="plan-detail"><span class="plan-detail-label" style="color:var(--red)">⚠️ Prior Auth Required</span><span class="plan-detail-val" style="color:var(--red)">Yes</span></div>` : ""}
-        </div>
-        ${plan.hsa_eligible && plan.hsa_5yr_growth ? `
-        <div class="hsa-card">
-          <h4>💰 HSA Wealth Forecast</h4>
-          <table class="hsa-table">
-            <tr><th>Year</th><th>Contributions</th><th>Balance (7% growth)</th></tr>
-            ${[1,2,3,4,5].map(y => `<tr><td>Year ${y}</td><td>$${(4150*y).toLocaleString()}</td><td>$${Math.round(4150*y*Math.pow(1.07,y/2)).toLocaleString()}</td></tr>`).join("")}
-          </table>
-          <div style="font-size:11px;color:var(--green);margin-top:6px;">Est. 5-year balance: $${plan.hsa_5yr_growth.toLocaleString()} | Tax savings: $${plan.hsa_tax_savings?.toLocaleString()}/yr</div>
-        </div>` : ""}`;
-      body.appendChild(card);
-    });
-  }
+        <div class="fg full"><label>Medications (comma-separated)</label><input type="text" id="fdrugs" placeholder="e.g. Ozempic, Metformin, Lisinopril"></div>
+        <div class="fg full"><label>Doctors to keep (comma-separated)</label><input type="text" id="fdocs" placeholder="e.g. Dr. Sarah Chen, Dr. James Park"></div>
+      </div>
+      <button class="btn" id="analyzeBtn" onclick="formAnalyze()">🔍 Analyze My Coverage Options</button>
+    </div>
+  </div>
+  <div class="confirm" id="confirmCard" style="display:none">
+    <h3>✅ Confirm Your Profile</h3>
+    <p>Verify this is correct — one wrong income digit can change your subsidy by thousands of dollars.</p>
+    <table class="ctable" id="confirmTbl"></table>
+    <div class="cactions">
+      <button class="cbtn-yes" onclick="doAnalyze()">Looks correct — Find my plans</button>
+      <button class="cbtn-no" onclick="editProfile()">Edit</button>
+    </div>
+  </div>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div style="font-family:var(--fd);font-size:17px;margin-bottom:6px">Analyzing your options...</div>
+    <div style="font-size:12px;color:var(--text2)">Running 7 specialized agents in parallel</div>
+    <div class="agent-rows" id="agentRows"></div>
+  </div>
+  <div class="results" id="results"></div>
+</div>
 
-  // Warnings
-  const drugs = data.drugs || {};
-  const risks = data.risks || {};
-  const allWarnings = [...(drugs.warnings || []), ...(risks.flags || [])];
-  if (allWarnings.length) {
-    const wCard = document.createElement('div');
-    wCard.className = 'warnings-card';
-    wCard.innerHTML = '<h3>⚠️ Flags & Warnings</h3>' +
-      allWarnings.map(w => `<div class="warning-item">${w}</div>`).join('');
-    body.appendChild(wCard);
-  }
+<script>
+const USER_ID='user_'+Math.random().toString(36).substr(2,9);
+let currentProfile=null,pendingProfile=null,isPremium=false,specCount=0;
+const AGENTS=["Profile agent → routing by income & FPL","Subsidy agent → calculating APTC credit","Plan search agent → querying CMS Marketplace","Drug agent → resolving RxCUI, tier, PA, step therapy","Doctor agent → NPPES NPI Registry + MIPS quality","Risk agent → SEP check, HRSA shortage, gaps","Metal tier agent → Bronze/Silver/Gold analysis","Recommendation agent → synthesizing with Gemini"];
 
-  panel.classList.add('open');
+function startFlow(p){
+  isPremium=p;
+  document.getElementById('landingScreen').style.display='none';
+  document.getElementById('mainApp').style.display='block';
+  if(isPremium){const b=document.getElementById('liveBadge');b.className='hbadge prem';b.textContent='Premium Advisor';}
+  initIntake();
 }
-
-function closeResults() {
-  document.getElementById('resultsPanel').classList.remove('open');
+function switchTab(t){
+  document.getElementById('panelChat').style.display=t==='chat'?'':'none';
+  document.getElementById('panelForm').style.display=t==='form'?'':'none';
+  document.getElementById('tabChat').classList.toggle('on',t==='chat');
+  document.getElementById('tabForm').classList.toggle('on',t==='form');
 }
+async function initIntake(){
+  try{
+    const r=await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID})});
+    const d=await r.json();clearSys();
+    if(d.returning_user){addMsg('agent',d.reply);addMsg('sys','🧠 mem0 — returning user profile loaded');}
+    else addMsg('agent',d.reply||"Hi! I'm CoverWise. What's your ZIP code?");
+    enableIn();
+  }catch(e){clearSys();addMsg('agent',"Hi! I'm CoverWise. What's your ZIP code?");enableIn();}
+}
+async function sendChat(){
+  const inp=document.getElementById('chatIn');const msg=inp.value.trim();if(!msg)return;
+  addMsg('user',msg);inp.value='';disableIn();
+  const tid='t'+Date.now();addTyping(tid);
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:msg})});
+    const d=await r.json();removeTyping(tid);
+    if(d.state==='confirm'&&d.profile){addMsg('agent',d.reply);pendingProfile={...d.profile,is_premium:isPremium};setTimeout(()=>showConfirm(pendingProfile),400);}
+    else if(d.state==='complete'&&d.analysis){addMsg('agent',(d.reply||'').split('\n')[0]||'Analysis complete!');renderResults(d.analysis);}
+    else{addMsg('agent',d.reply||'No response.');enableIn();}
+  }catch(e){removeTyping(tid);addMsg('agent','Something went wrong. Please try again.');enableIn();}
+}
+function addMsg(role,text){const el=document.getElementById('msgs');const d=document.createElement('div');d.className='msg '+role;d.innerHTML=fmt(text);el.appendChild(d);el.scrollTop=el.scrollHeight;}
+function addTyping(id){const el=document.getElementById('msgs');const d=document.createElement('div');d.className='msg agent';d.id=id;d.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';el.appendChild(d);el.scrollTop=el.scrollHeight;}
+function removeTyping(id){const e=document.getElementById(id);if(e)e.remove();}
+function clearSys(){const e=document.querySelector('.msg.sys');if(e)e.remove();}
+function enableIn(){document.getElementById('chatIn').disabled=false;document.getElementById('chatSend').disabled=false;document.getElementById('chatIn').focus();}
+function disableIn(){document.getElementById('chatIn').disabled=true;document.getElementById('chatSend').disabled=true;}
+function fmt(t){return(t||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');}
+function formAnalyze(){
+  const zip=document.getElementById('fzip').value.trim(),age=parseInt(document.getElementById('fage').value),income=parseFloat(document.getElementById('fincome').value),hh=parseInt(document.getElementById('fhh').value),util=document.getElementById('futil').value;
+  const drugs=document.getElementById('fdrugs').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const docs=document.getElementById('fdocs').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!zip||!age||!income||!hh){alert('Please fill in ZIP, age, income, and household size.');return;}
+  pendingProfile={zip_code:zip,age,income,household_size:hh,utilization:util,tobacco_use:false,drugs,doctors:docs,is_premium:isPremium};
+  showConfirm(pendingProfile);
+}
+function showConfirm(p){
+  p={...p,is_premium:isPremium};
+  const labels={zip_code:'ZIP Code',age:'Age',income:'Annual Income',household_size:'Household Size',drugs:'Medications',doctors:'Doctors',utilization:'Healthcare Use',tobacco_use:'Tobacco',is_premium:'Service Tier'};
+  const fmt2=(k,v)=>{if(k==='is_premium')return v?'💎 Premium':'🔍 Free';if(k==='income')return'$'+Number(v).toLocaleString();if(k==='tobacco_use')return v?'Yes':'No';if(Array.isArray(v))return v.length?v.join(', '):'None';return v;};
+  document.getElementById('confirmTbl').innerHTML=Object.entries(labels).filter(([k])=>p[k]!==undefined).map(([k,l])=>`<tr><td>${l}</td><td>${fmt2(k,p[k])}</td></tr>`).join('');
+  document.getElementById('confirmCard').style.display='';
+  document.getElementById('confirmCard').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function editProfile(){
+  document.getElementById('confirmCard').style.display='none';
+  if(pendingProfile){switchTab('form');const p=pendingProfile;if(p.zip_code)document.getElementById('fzip').value=p.zip_code;if(p.age)document.getElementById('fage').value=p.age;if(p.income)document.getElementById('fincome').value=p.income;if(p.household_size)document.getElementById('fhh').value=p.household_size;if(p.drugs)document.getElementById('fdrugs').value=p.drugs.join(', ');if(p.doctors)document.getElementById('fdocs').value=p.doctors.join(', ');}
+}
+async function doAnalyze(){
+  const profile=pendingProfile||currentProfile;if(!profile)return;
+  document.getElementById('confirmCard').style.display='none';
+  currentProfile={...profile,user_id:USER_ID,is_premium:isPremium};
+  startLoading();
+  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:'yes'})});const d=await r.json();if(d.analysis){stopLoading();renderResults(d.analysis);return;}}catch(e){}
+  try{const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(currentProfile)});const d=await r.json();stopLoading();renderResults(d);}
+  catch(e){stopLoading();renderResults(getMock(currentProfile));}
+}
+function startLoading(){
+  document.getElementById('loading').classList.add('on');document.getElementById('results').classList.remove('on');
+  const el=document.getElementById('agentRows');el.innerHTML='';
+  AGENTS.forEach((msg,i)=>setTimeout(()=>{const r=document.createElement('div');r.className='agent-row';r.style.animationDelay=`${i*0.1}s`;r.innerHTML=`<div class="adot"></div><span>${msg}</span>`;el.appendChild(r);},i*600));
+}
+function stopLoading(){document.getElementById('loading').classList.remove('on');}
+function fmtMd(text){
+  if(!text)return'';const lines=text.split('\n');let inT=false;const out=[];
+  for(const raw of lines){const t=raw.trim();
+    if(t.startsWith('|')){if(!inT){inT=true;out.push('<div class="tbl-wrap"><table>');}if(/^\|[\s\-:|]+\|$/.test(t))continue;const cells=t.split('|').filter((_,i,a)=>i>0&&i<a.length-1);out.push(`<tr>${cells.map(c=>`<td>${fmtI(c.trim())}</td>`).join('')}</tr>`);continue;}
+    if(inT){inT=false;out.push('</table></div>');}
+    if(/^#{3,}\s/.test(t))out.push(`<h4 style="margin-top:14px;color:var(--accent2)">${fmtI(t.replace(/^#+\s*/,''))}</h4>`);
+    else if(t.startsWith('## '))out.push(`<h3 style="margin-top:18px;color:var(--text)">${fmtI(t.slice(3))}</h3>`);
+    else if(t.startsWith('# '))out.push(`<h2 style="margin-top:22px;color:var(--text)">${fmtI(t.slice(2))}</h2>`);
+    else if(/^[-─]{3,}$/.test(t))out.push('<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">');
+    else if(t==='')out.push('<br>');
+    else out.push(fmtI(raw)+'<br>');
+  }
+  if(inT)out.push('</table></div>');return out.join('');
+}
+function fmtI(t){return(t||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`(.*?)`/g,'<code style="background:var(--bg3);padding:1px 5px;border-radius:4px;font-size:11px">$1</code>');}
+function buildDM(details){const m={};(details||[]).forEach(c=>{const k=String(c.rxcui||'');if(!m[k])m[k]={};m[k][c.plan_id]=c;});return m;}
+function tClass(tier){const t=(tier||'').toLowerCase();if(t.includes('1'))return't1';if(t.includes('2'))return't2';if(t.includes('3'))return't3';if(t.includes('4'))return't4';return't5';}
+function tCost(tier){const t=(tier||'').toLowerCase();if(t.includes('1'))return'$10';if(t.includes('2'))return'$30';if(t.includes('3'))return'$60';if(t.includes('4'))return'$90';return'$130+';}
 
-async function resetChat() {
-  await fetch('/api/reset', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({user_id: USER_ID})
-  });
-  document.getElementById('messages').innerHTML = '';
-  document.getElementById('resultsPanel').classList.remove('open');
-  started = true;
-  currentState = 'intake';
-
-  // restart conversation immediately
-  showTyping();
-  try {
-    const res = await fetch('/api/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({user_id: USER_ID})
+function renderResults(data){
+  const el=document.getElementById('results');
+  const route=data.route||'marketplace';const subsidy=data.subsidy||{};
+  const plans=(data.plans||[]).filter(p=>p.name&&(p.premium||p.premium_w_credit));
+  const drugs=data.drugs||{};const doctors=data.doctors||{};const risks=data.risks||{};
+  const cache=data.cache_stats||{};const flags=risks.flags||[];const memUsed=data.memory_used;
+  const rL={state_exchange:'→ State-Based Exchange',subsidized:'✓ Subsidy-Eligible Route',medicaid:'✓ Medicaid Route',marketplace:'→ Full Marketplace',full_price:'→ Full Price Route'};
+  let html='';
+  if(memUsed)html+=`<div class="mem-badge">🧠 mem0 — returning user profile loaded</div><br>`;
+  if(isPremium)html+=`<div class="prem-badge">★ Premium Analysis — HSA Forecasts + 3x Detail + Year-Round Advisor</div><br>`;
+  if(route==='state_exchange'&&data.state_exchange){
+    const ex=data.state_exchange;
+    html+=`<div class="rbadge state_exchange">→ ${ex.state} State Exchange</div><div class="card"><h2>🏛️ ${ex.state} State Exchange</h2><p style="font-size:13px;color:var(--text2);margin-bottom:14px">${ex.message}</p><a href="${ex.exchange_url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--accent),var(--purple));color:white;text-decoration:none;padding:10px 18px;border-radius:var(--r);font-size:13px;font-weight:600">🔗 Visit ${ex.exchange_name} →</a></div>`;
+    el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  if(route==='medicaid'){
+    html+=`<div class="rbadge medicaid">✓ Medicaid Route</div><div class="card"><h2>🏥 Medicaid Eligible</h2><p style="font-size:13px;color:var(--text2)">${(data.medicaid||{}).message||'You may qualify for free or near-free Medicaid coverage.'}</p></div>`;
+    el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  html+=`<div class="rbadge ${route}">${rL[route]||route}</div>`;
+  const monthly=subsidy.monthly_credit||subsidy.monthly_aptc||0;
+  const annual=subsidy.annual_credit||subsidy.annual_aptc||(monthly*12)||0;
+  const fpl=data.fpl_percentage||subsidy.fpl_percentage||0;
+  const lowest=plans.length?Math.min(...plans.map(p=>p.premium_w_credit??Math.max(0,(p.premium||0)-monthly))):0;
+  html+=`<div class="stats"><div class="stat"><div class="stat-l">Monthly Subsidy</div><div class="stat-v g">$${monthly.toFixed(0)}</div></div><div class="stat"><div class="stat-l">Annual Credit</div><div class="stat-v b">$${annual.toFixed(0)}</div></div><div class="stat"><div class="stat-l">FPL %</div><div class="stat-v y">${Number(fpl).toFixed(0)}%</div></div><div class="stat"><div class="stat-l">Best Plan From</div><div class="stat-v g">${lowest<=0?'Subsidy covers it':'$'+lowest.toFixed(0)+'/mo'}</div></div></div>`;
+  if(cache.total_calls>0)html+=`<div class="cache-bar">⚡ Cache: <em>${cache.hits} hits</em> / ${cache.total_calls} calls — <em>${cache.hit_rate_pct}% hit rate</em> | <em>${cache.hits} API calls saved</em></div>`;
+  if(plans.length){
+    html+=`<div style="font-family:var(--fd);font-size:17px;font-weight:700;margin-bottom:6px">${isPremium?'Top '+plans.length+' Ranked Plans':'Top 3 Ranked Plans'}</div><div style="font-size:11px;color:var(--text3);margin-bottom:14px;font-family:var(--fm)">Ranked by True Annual Cost</div><div class="plans-grid${isPremium?' wide':''}">`;
+    plans.slice(0,isPremium?10:3).forEach((plan,i)=>{
+      const net=plan.premium_w_credit??Math.max(0,(plan.premium||0)-monthly);
+      const rank=i===0?'🏆 Best Value':i===1?'2nd':i===2?'3rd':'#'+(i+1);
+      // Compute true annual cost if not provided by backend
+      const util=(currentProfile&&currentProfile.utilization)||'sometimes';
+      const oopW={rarely:0.1,sometimes:0.25,frequently:0.5,chronic:0.8};
+      const oopFactor=oopW[util]||0.25;
+      const computedTAC=plan.true_annual_cost||(Math.round(net*12+(plan.deductible||0)*oopFactor+(plan.est_annual_drug_cost||0)));
+      html+=`<div class="pcard${i===0?' best':''}"><div class="prank">${rank}</div><div class="phdr"><span class="metal ${plan.metal_level}">${plan.metal_level||'—'}</span><span class="tac-b">$${computedTAC.toLocaleString()}/yr</span></div><div class="pname">${plan.name}</div><div class="pissuer">${plan.issuer}${plan.type?' · '+plan.type:''}</div><div class="pprice">$${net.toFixed(0)}<span>/mo</span></div><div class="plbl">after $${monthly.toFixed(0)} APTC subsidy</div><div class="pdets"><div class="pdet"><span class="pdetl">Deductible</span><span class="pdetv">$${(plan.deductible||0).toLocaleString()}</span></div><div class="pdet"><span class="pdetl">OOP Max</span><span class="pdetv">$${(plan.oop_max||0).toLocaleString()}</span></div>${plan.est_annual_drug_cost?`<div class="pdet"><span class="pdetl">Est. Drug Cost</span><span class="pdetv">$${plan.est_annual_drug_cost.toLocaleString()}/yr</span></div>`:''}${plan.quality_rating?`<div class="pdet"><span class="pdetl">Quality</span><span class="pdetv">${plan.quality_rating}★</span></div>`:''}${plan.hsa_eligible?`<div class="pdet"><span class="pdetl">HSA</span><span class="pdetv" style="color:var(--green)">Eligible ✓</span></div>`:''}${plan.pa_warning?`<div class="pdet"><span class="pdetl" style="color:var(--red)">⚠ PA Required</span><span class="pdetv" style="color:var(--red)">Your drug</span></div>`:''}</div>${isPremium&&plan.hsa_eligible&&plan.hsa_tax_savings?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);font-size:10px;color:var(--green)">💡 HSA saves ~$${plan.hsa_tax_savings}/yr · 5yr ~$${plan.hsa_5yr_growth}</div>`:''}</div>`;
     });
-    const data = await res.json();
-    hideTyping();
-    if (data.returning_user) {
-      appendMsg('assistant', data.reply + '\n\n<span class="mem0-badge">🧠 mem0 — profile loaded from memory</span>');
-    } else {
-      appendMsg('assistant', data.reply);
+    html+='</div>';
+  }
+  if(isPremium&&subsidy.csr_eligible&&subsidy.csr_variant){
+    const cv=subsidy.csr_variant;const cm={'94':{label:'CSR-94 (100–150% FPL)',ded:'~$300',cop:'~$5–$15',oop:'~$1,000',tier:'Platinum-equivalent'},'87':{label:'CSR-87 (150–200% FPL)',ded:'~$900',cop:'~$15–$30',oop:'~$2,500',tier:'Gold-equivalent'},'73':{label:'CSR-73 (200–250% FPL)',ded:'~$2,500',cop:'~$25–$45',oop:'~$5,000',tier:'Silver-plus'}};const c=cm[cv]||{};
+    html+=`<div class="card" style="border-color:var(--green)"><h2>💡 CSR Cost-Sharing Reduction — ${c.label}</h2><p style="font-size:12px;color:var(--text2);margin-bottom:12px">You qualify for CSR. Only applies to Silver plans. Choosing Gold or Bronze forfeits thousands in benefits.</p><div class="tbl-wrap"><table><tr><th>Metric</th><th>Standard Silver</th><th>Your CSR-${cv} Silver</th></tr><tr><td>Deductible</td><td>~$4,500</td><td style="color:var(--green)">${c.ded}</td></tr><tr><td>Primary Care Copay</td><td>~$40–$65</td><td style="color:var(--green)">${c.cop}</td></tr><tr><td>OOP Max</td><td>~$9,000</td><td style="color:var(--green)">${c.oop}</td></tr><tr><td>Actuarial Value</td><td>Silver (70%)</td><td style="color:var(--green)">${c.tier}</td></tr></table></div></div>`;
+  }
+  if(isPremium){
+    const hsaP=plans.filter(p=>p.hsa_eligible);
+    if(hsaP.length){const p2=currentProfile||{};const hhSz=p2.household_size||1;const inc=p2.income||50000;const hsaLim=hhSz>1?8300:4150;let taxR=inc>100525?0.24:inc>47150?0.22:inc>11600?0.12:0.10;const annTax=Math.round(hsaLim*taxR);
+      html+=`<div class="card" style="border-color:var(--purple)"><h2>💰 HSA 5-Year Wealth Forecast</h2><p style="font-size:12px;color:var(--text2);margin-bottom:12px">Contributing IRS max (${hhSz>1?'family':'individual'}: $${hsaLim.toLocaleString()}/yr) at your ${Math.round(taxR*100)}% bracket. Assumes 7% annual growth.</p><div class="tbl-wrap"><table class="hsa-t"><tr><th>Year</th><th>Contributed</th><th>Tax Saved</th><th>Balance (7% growth)</th></tr>${[1,2,3,4,5].map(yr=>{const c=hsaLim*yr,tx=annTax*yr,b=Math.round(hsaLim*((Math.pow(1.07,yr)-1)/0.07));return`<tr><td>Year ${yr}</td><td>$${c.toLocaleString()}</td><td style="color:var(--green)">$${tx.toLocaleString()}</td><td style="color:var(--accent2)">$${b.toLocaleString()}</td></tr>`;}).join('')}</table></div><p style="font-size:10px;color:var(--text3);margin-top:7px">HSA funds roll over indefinitely. Medical withdrawals are tax-free at any age.</p></div>`;
     }
-    currentState = data.state;
-  } catch(e) {
-    hideTyping();
-    appendMsg('assistant', 'Welcome back! What is your ZIP code?');
-    currentState = 'intake';
   }
+  if(data.recommendation)html+=`<div class="card"><h2>🤖 AI Recommendation${isPremium?' (ADK Expert)':''}</h2><div class="card-body">${fmtMd(data.recommendation)}</div></div>`;
+  if(flags.length)html+=`<div class="warn-card"><h2>⚠️ Risk Analysis & Flags</h2>${flags.map(w=>`<div class="wi ${w.startsWith('🚨')?'alert':(w.startsWith('💡')||w.startsWith('📅')||w.startsWith('🏥'))?'tip':''}">${w}</div>`).join('')}</div>`;
+  const rD=drugs.resolved_drugs||[];const cD=drugs.coverage_details||[];const gens=drugs.generic_suggestions||{};const dM=buildDM(cD);const tP=plans.slice(0,isPremium?5:3).map(p=>p.id);
+  if(rD.length){
+    html+=`<div class="card"><h2>💊 Medication Coverage${!isPremium?' (1 drug — free tier)':''}</h2>`;
+    rD.forEach(d=>{const rx=String(d.rxcui||'');const pm=dM[rx]||{};const g=gens[d.name]||[];
+      html+=`<div class="drug-row"><div style="flex:1"><div class="dname">${d.name}${d.full_name&&d.full_name!==d.name?` <span style="color:var(--text3);font-size:10px">(${d.full_name})</span>`:''}</div><div style="font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:2px">RxCUI: ${rx}${d.strength?' · '+d.strength:''}</div></div><div class="dbs">${tP.map(pid=>{const c=pm[pid];if(!c)return'';if(c.coverage==='NotCovered')return`<span class="tier t5">Not Covered</span>`;if(c.drug_tier){const tc=tClass(c.drug_tier);return`<span class="tier ${tc}">${c.drug_tier} ~${tCost(c.drug_tier)}</span>${c.prior_authorization?'<span class="pa-b">PA</span>':''}${c.step_therapy?'<span class="st-b">ST</span>':''}`;}return`<span class="tier" style="color:var(--text3);border-color:var(--border2)">N/A</span>`;}).join('')}${g.length?`<span class="gen-b">💊 Generic: ${g[0]}</span>`:''}</div></div>`;
+    });
+    html+='</div>';
+  }
+  const dR=(doctors.results||[]);
+  if(dR.length){
+    html+=`<div class="card"><h2>🏥 Doctor & Provider Check${!isPremium?' (1 doctor — free tier)':''}</h2>`;
+    dR.forEach(doc=>{const nets=Object.entries(doc.network_status||{});
+      html+=`<div class="doc-row"><div class="doc-info"><div class="dname2">${doc.name}${doc.credential?', '+doc.credential:''}</div><div class="dmeta">NPI: ${doc.npi||'Not found'} · ${doc.specialty||''} · ${doc.city||''}${doc.state?', '+doc.state:''}</div>${doc.mips_score!=null?`<div style="margin-top:3px"><span class="mips">MIPS: ${doc.mips_score}/100</span>${doc.telehealth?' <span class="mips" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>':''}</div>`:''}</div><div class="dnets">${nets.length?nets.map(([pid,net])=>{const pn=(plans.find(p=>p.id===pid)||{}).name||pid;const sh=pn.length>20?pn.slice(0,18)+'…':pn;if(net.in_network===false)return`<span class="net out">✗ OON: ${sh}</span>`;if(net.in_network===true)return`<span class="net in">✓ In-Net: ${sh}</span>`;return`<span class="net unk">? ${sh}</span>`;}).join(''):'<span style="font-size:10px;color:var(--text3)">No network data</span>'}</div></div>`;
+    });
+    html+='</div>';
+  }
+  html+=`<div class="spec-card"><h2>🔬 Find a Specialist</h2><p style="font-size:12px;color:var(--text2);margin-bottom:8px">Type a condition or specialty — finds local providers, checks network status, shows copays.</p>${!isPremium?'<p style="font-size:10px;color:var(--text3);margin-bottom:12px">Free tier: 1 search per session.</p>':'<p style="font-size:10px;color:var(--green);margin-bottom:12px">💎 Premium: unlimited searches</p>'}<div class="spec-row"><input class="spec-inp" id="condIn" placeholder="e.g. diabetes, cardiology, back pain…" onkeydown="if(event.key==='Enter')runSpec()"><button class="spec-btn" id="specBtn" onclick="runSpec()">Find Specialists</button></div><div id="specRes"></div></div>`;
+  html+=`<div class="card"><h2>🩺 Procedure Cost Estimator</h2><p style="font-size:12px;color:var(--text2);margin-bottom:14px">Select a procedure to see what you'd pay on each plan.</p><div class="spec-row"><select class="spec-inp" id="procSel" style="flex:1"><option value="">Select a procedure…</option><optgroup label="Surgery"><option value="knee_replacement">Knee Replacement (~$35,000)</option><option value="hip_replacement">Hip Replacement (~$32,000)</option><option value="appendectomy">Appendectomy (~$18,000)</option><option value="back_surgery">Spinal Fusion (~$45,000)</option><option value="heart_bypass">Coronary Bypass (~$95,000)</option></optgroup><optgroup label="Diagnostic"><option value="colonoscopy">Colonoscopy (~$3,500)</option><option value="mri">MRI Scan (~$2,600)</option><option value="ct_scan">CT Scan (~$2,000)</option></optgroup><optgroup label="Emergency"><option value="er_visit">ER Visit (~$3,200)</option><option value="ambulance">Ambulance (~$1,800)</option></optgroup><optgroup label="Maternity"><option value="childbirth_vaginal">Vaginal Birth (~$12,000)</option><option value="childbirth_csection">C-Section (~$20,000)</option></optgroup><optgroup label="Inpatient"><option value="inpatient_3day">3-Day Hospital Stay (~$22,000)</option></optgroup></select><button class="spec-btn" id="procBtn" onclick="runProc()">Estimate My Cost</button></div><div id="procRes"></div></div>`;
+  const simInc=(currentProfile&&currentProfile.income)||55000;
+  const simHH=(currentProfile&&currentProfile.household_size)||1;
+  html+=`<div class="card"><h2>📊 Income Change Simulator</h2><p style="font-size:12px;color:var(--text2);margin-bottom:16px">Drag to see how income changes affect your subsidy. Watch for the 400% FPL cliff.</p><div style="margin:12px 0"><label style="font-size:11px;color:var(--text3);font-family:var(--fm)">Simulated Annual Income: <strong id="simLbl" style="color:var(--accent2)">$${Number(simInc).toLocaleString()}</strong></label><input type="range" id="simSlider" min="10000" max="150000" step="1000" value="${simInc}" data-hh="${simHH}" style="width:100%;margin-top:8px;accent-color:var(--accent)" oninput="updateSim()"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--fm);margin-top:3px"><span>$10k</span><span>$40k</span><span>$80k</span><span>$120k</span><span>$150k+</span></div></div><div id="simRes"></div></div>`;
+  if(isPremium){html+=`<div class="chat-card"><h2>💬 Year-Round Advisor — Ask Anything</h2><p style="font-size:12px;color:var(--text3);margin-bottom:12px">Ask about plan changes, life events, employer coverage, or anything insurance-related.</p><div class="chat-msgs" id="chatMsgs"></div><div class="chat-inp-row"><input class="chat-inp" id="chatFollowIn" placeholder="e.g. My employer offered coverage — is it better?" onkeydown="if(event.key==='Enter')sendFollowUp()"><button class="chat-btn" onclick="sendFollowUp()">Ask</button></div></div>`;}
+  else{html+=`<div class="chat-card"><h2>💬 Ask a Follow-Up Question</h2><div class="chat-msgs" id="chatMsgs"></div><div class="chat-inp-row"><input class="chat-inp" id="chatFollowIn" placeholder="e.g. Which plan covers Ozempic best?" onkeydown="if(event.key==='Enter')sendFollowUp()"><button class="chat-btn" onclick="sendFollowUp()">Ask</button></div></div>`;}
+  if(!isPremium){html+=`<div class="upsell"><h2>🪄 Unlock the Full Analysis</h2><p style="font-size:13px;color:var(--text2);margin-bottom:14px">Premium unlocks unlimited drug & doctor checks, HSA wealth calculator, CSR deductible table, 10-plan comparison, year-round advisor access, and PDF export.</p><div class="tbl-wrap"><table><tr><th>Feature</th><th>Free</th><th style="color:var(--accent2)">Premium $19/mo</th></tr>${[['Plans compared','3','10'],['Drug checks','1 medication','All meds'],['Doctor checks','1 doctor','All doctors'],['CSR explanation','Flag only','Full table'],['HSA forecast','Flag only','5-yr calc'],['Year-round advisor','—','✓'],['PDF export','—','✓']].map(([f,fr,p])=>`<tr><td>${f}</td><td style="color:var(--text3)">${fr}</td><td style="color:var(--green)">${p}</td></tr>`).join('')}</table></div><button class="btn" onclick="location.reload()" style="max-width:280px;margin:14px auto 0">Upgrade to Premium — $19/mo</button></div>`;}
+  else{html+=`<div class="card" style="text-align:center;background:var(--bg3);margin-top:16px"><h2 style="justify-content:center">📄 Download PDF Report</h2><p style="font-size:12px;color:var(--text2);margin-bottom:14px">Generate a clean PDF to share with a financial advisor or family member.</p><button class="btn" onclick="window.print()" style="max-width:240px;margin:0 auto">Print / Save as PDF</button></div>`;}
+  window._lastResults=data;el.innerHTML=html;el.classList.add('on');el.scrollIntoView({behavior:'smooth',block:'start'});
+  setTimeout(()=>{if(document.getElementById('simSlider'))updateSim();},50);
 }
 
-// Start on first click or enter
-document.getElementById('inputBox').addEventListener('focus', () => {
-  if (!started) init();
-}, {once: true});
+async function sendFollowUp(){
+  const inp=document.getElementById('chatFollowIn');const msg=inp.value.trim();if(!msg)return;
+  const msgs=document.getElementById('chatMsgs');const u=document.createElement('div');u.className='cmsg user';u.textContent=msg;msgs.appendChild(u);inp.value='';
+  const ld=document.createElement('div');ld.className='cmsg ai';ld.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';msgs.appendChild(ld);msgs.scrollTop=msgs.scrollHeight;
+  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,message:msg})});const d=await r.json();ld.innerHTML=fmtMd(d.reply||'No response.');msgs.scrollTop=msgs.scrollHeight;}
+  catch(e){ld.textContent='Sorry, something went wrong.';}
+}
 
-// Auto-start after short delay
-setTimeout(() => { if (!started) init(); }, 800);
+async function runSpec(){
+  const inp=document.getElementById('condIn');const condition=inp.value.trim();if(!condition)return;
+  if(!isPremium&&specCount>=1){document.getElementById('specRes').innerHTML=`<div style="padding:14px;background:rgba(29,108,240,.06);border:1px dashed var(--accent);border-radius:var(--r);text-align:center;font-size:12px;color:var(--text2)">Free tier limit reached. <a href="#" onclick="location.reload();return false" style="color:var(--accent2)">Upgrade to Premium</a> for unlimited searches.</div>`;return;}
+  const btn=document.getElementById('specBtn'),el=document.getElementById('specRes');
+  btn.disabled=true;btn.textContent='Searching…';el.innerHTML=`<div class="msg agent" style="margin-top:8px"><div class="dots"><span></span><span></span><span></span></div></div>`;
+  const profile=currentProfile||{};const plans=(window._lastResults||{}).plans||[];const planIds=plans.slice(0,isPremium?5:3).map(p=>p.id);
+  try{
+    const r=await fetch('/api/specialty-search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,condition,zip_code:profile.zip_code||'',state:'',plan_ids:planIds,is_premium:isPremium})});
+    const data=await r.json();specCount++;inp.value='';const providers=data.providers||[];
+    if(!providers.length){el.innerHTML=`<div style="font-size:12px;color:var(--text2);padding:10px 0">No providers found for "${condition}". Try a different condition name.</div>`;}
+    else{el.innerHTML=`<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${providers.length} provider${providers.length!==1?'s':''} found — specialty: ${data.specialty||condition}</div>`+providers.map((p,i)=>{const nets=Object.entries(p.network_status||{});return`<div class="scard"><div class="sname">${p.name}${p.credential?', '+p.credential:''} ${i===0?'<span style="font-size:10px;color:var(--green)">● Top Match</span>':''}</div><div class="ssub">NPI: ${p.npi||'N/A'} · ${p.specialty||''} · ${p.city||''}${p.state?', '+p.state:''}</div>${p.address?`<div class="ssub">${p.address}</div>`:''}${p.phone?`<div class="ssub">📞 ${p.phone}</div>`:''}${p.mips_score!=null?`<div style="margin-top:6px"><span class="mips">MIPS: ${p.mips_score}/100</span>${p.telehealth?' <span class="mips" style="border-color:var(--green);color:var(--green)">Telehealth ✓</span>':''}</div>`:''}<div class="dnets" style="margin-top:8px">${nets.length?nets.map(([pid,net])=>{const pn=(plans.find(pl=>pl.id===pid)||{}).name||pid;const sh=pn.length>20?pn.slice(0,18)+'…':pn;if(net.in_network===false)return`<span class="net out">✗ OON: ${sh}</span>`;if(net.in_network===true)return`<span class="net in">✓ In-Net: ${sh}</span>`;return`<span class="net unk">? ${sh}</span>`;}).join(''):'<span style="font-size:10px;color:var(--text3)">Network not verified</span>'}</div></div>`;}).join('');}
+  }catch(e){el.innerHTML=`<div style="color:var(--red);font-size:12px">Error. Please try again.</div>`;}
+  finally{btn.disabled=false;btn.textContent='Find Specialists';}
+}
+
+async function runProc(){
+  const key=document.getElementById('procSel').value;if(!key){alert('Please select a procedure.');return;}
+  const btn=document.getElementById('procBtn'),el=document.getElementById('procRes');
+  btn.disabled=true;btn.textContent='Calculating…';el.innerHTML=`<div class="msg agent" style="margin-top:8px"><div class="dots"><span></span><span></span><span></span></div></div>`;
+  const plans=(window._lastResults||{}).plans||[];
+  try{
+    const r=await fetch('/api/procedure-cost',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID,procedure_key:key,plans})});
+    const data=await r.json();if(data.error){el.innerHTML=`<div style="color:var(--red);font-size:12px">${data.error}</div>`;return;}
+    const results=data.results||[];
+    el.innerHTML=`<div style="margin:12px 0 8px;font-size:12px;color:var(--text2)"><strong style="color:var(--text)">${data.procedure}</strong> · National avg: <strong style="color:var(--accent2)">$${(data.total_cost||0).toLocaleString()}</strong></div><div class="tbl-wrap"><table><tr><th>Plan</th><th>Metal</th><th>Net Premium</th><th>Deductible</th><th>You Pay</th><th>Insurance Pays</th></tr>${results.map((r,i)=>`<tr${i===0?' style="background:rgba(13,196,122,.04)"':''}><td>${(r.plan_name||'').length>22?(r.plan_name||'').slice(0,20)+'…':(r.plan_name||'—')}${i===0?' <span style="font-size:10px;color:var(--green)">● Best</span>':''}</td><td><span class="metal ${r.metal_level}" style="font-size:10px">${r.metal_level}</span></td><td style="font-family:var(--fm)">$${r.net_premium}/mo</td><td style="font-family:var(--fm)">$${(r.deductible||0).toLocaleString()}</td><td style="font-family:var(--fm);color:${i===0?'var(--green)':'var(--yellow)'}"><strong>$${(r.patient_oop||0).toLocaleString()}</strong></td><td style="font-family:var(--fm);color:var(--text3)">$${(r.insurance_pays||0).toLocaleString()}</td></tr>`).join('')}</table></div><p style="font-size:10px;color:var(--text3);margin-top:6px">OOP capped at plan maximum. Assumes in-network care.</p>`;
+  }catch(e){el.innerHTML=`<div style="color:var(--red);font-size:12px">Error estimating costs.</div>`;}
+  finally{btn.disabled=false;btn.textContent='Estimate My Cost';}
+}
+
+function updateSim(){
+  const slider=document.getElementById('simSlider');if(!slider)return;
+  const income=Number(slider.value);const lbl=document.getElementById('simLbl');if(lbl)lbl.textContent='$'+income.toLocaleString();
+  const hhSz=Number(slider.getAttribute('data-hh'))||(currentProfile&&currentProfile.household_size)||1;
+  const bases={1:14580,2:19720,3:24860,4:30000,5:35140,6:40280};
+  const base=bases[Math.min(hhSz,6)]||30000;
+  const fpl=Math.round(income/base*100)/10;const isMed=fpl<138,hasSub=fpl>=100&&fpl<=400,nearCliff=fpl>=390&&fpl<=410;
+  const csrV=fpl<150?'94':fpl<200?'87':fpl<250?'73':null;
+  let aptc=0;if(hasSub){const pct=fpl<=150?0.02:fpl<=200?0.04:fpl<=250?0.06:0.085;aptc=Math.max(0,Math.round(500-income*pct/12));}
+  const el=document.getElementById('simRes');if(!el)return;
+  let html=`<div class="sim-grid"><div class="sim-stat"><div class="sim-lbl">FPL %</div><div class="sim-val ${fpl>400?'r':fpl<138?'g':'y'}">${fpl.toFixed(0)}%</div></div><div class="sim-stat"><div class="sim-lbl">Monthly Subsidy</div><div class="sim-val g">$${aptc}</div></div><div class="sim-stat"><div class="sim-lbl">Medicaid</div><div class="sim-val ${isMed?'g':'r'}">${isMed?'Eligible ✓':'Not Eligible'}</div></div><div class="sim-stat"><div class="sim-lbl">CSR</div><div class="sim-val ${csrV?'g':'r'}">${csrV?'CSR-'+csrV+' ✓':'None'}</div></div></div>`;
+  if(nearCliff){const gap=Math.round(400/100*base-income);html+=`<div class="ab warn">🚨 Subsidy Cliff Warning: At ${fpl.toFixed(0)}% FPL, earning ~$${Math.abs(gap).toLocaleString()} ${gap<0?'more pushes you past the cliff':'more could eliminate your entire subsidy'}.</div>`;}
+  if(isMed)html+=`<div class="ab open">🏥 At this income, you may qualify for Medicaid — free or near-free coverage.</div>`;
+  else if(csrV)html+=`<div class="ab info">💡 CSR-${csrV} eligible: Enroll in a Silver plan for dramatically lower deductibles at no extra premium cost.</div>`;
+  el.innerHTML=html;
+}
+
+async function resetApp(){
+  try{await fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:USER_ID})});}catch(e){}
+  currentProfile=null;pendingProfile=null;specCount=0;
+  document.getElementById('msgs').innerHTML='<div class="msg sys">Starting session...</div>';
+  document.getElementById('confirmCard').style.display='none';
+  document.getElementById('results').classList.remove('on');document.getElementById('results').innerHTML='';
+  document.getElementById('loading').classList.remove('on');
+  disableIn();await initIntake();
+}
+
+function getMock(profile){
+  const bases={1:14580,2:19720,3:24860,4:30000};const base=bases[Math.min(profile.household_size||1,4)]||30000;const fpl=Math.round((profile.income||50000)/base*1000)/10;const credit=fpl<=400?Math.max(0,Math.round(450-(profile.income||50000)*0.085/12)):0;
+  return{route:fpl<138?'medicaid':fpl<=400?'subsidized':'marketplace',fpl_percentage:fpl,subsidy:{monthly_credit:credit,annual_credit:credit*12,fpl_percentage:fpl,csr_eligible:fpl<=250,csr_variant:fpl<=150?'94':fpl<=200?'87':fpl<=250?'73':null,is_medicaid_eligible:fpl<138},plans:[{id:'P1',name:'BlueCross Silver Select',metal_level:'Silver',type:'HMO',premium:342,premium_w_credit:Math.max(0,342-credit),deductible:3500,oop_max:7000,issuer:'BlueCross',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,342-credit)*12+875},{id:'P2',name:'Aetna Bronze HSA Plus',metal_level:'Bronze',type:'PPO',premium:218,premium_w_credit:Math.max(0,218-credit),deductible:6000,oop_max:8700,issuer:'Aetna',hsa_eligible:true,quality_rating:3,true_annual_cost:Math.max(0,218-credit)*12+600},{id:'P3',name:'UHC Gold Complete',metal_level:'Gold',type:'PPO',premium:487,premium_w_credit:Math.max(0,487-credit),deductible:1500,oop_max:5000,issuer:'UnitedHealthcare',hsa_eligible:false,quality_rating:4,true_annual_cost:Math.max(0,487-credit)*12+750}],drugs:{resolved_drugs:[],coverage_details:[],generic_suggestions:{}},doctors:{results:[]},risks:{flags:['⚠️ Backend unavailable — showing estimated results.']},recommendation:`## Your Plan Analysis\n\nAt **${fpl.toFixed(0)}% FPL** with **$${credit}/month** subsidy.\n\n*Backend unavailable — estimated figures only.*`,cache_stats:{hits:0,misses:0,total_calls:0,hit_rate_pct:0,cached_entries:0},memory_used:false};
+}
 </script>
 </body>
 </html>

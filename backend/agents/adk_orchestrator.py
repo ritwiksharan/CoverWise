@@ -16,6 +16,9 @@ try:
     ADK_AVAILABLE = True
 except ImportError:
     ADK_AVAILABLE = False
+    Agent = None
+    Runner = None
+    InMemorySessionService = None
     ToolContext = None
     Content = None
     Part = None

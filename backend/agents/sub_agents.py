@@ -120,10 +120,11 @@ async def drug_check_agent(profile: dict, plans: list) -> dict:
     for drug in profile["drugs"]:
         # Check against first plan as representative (production: check all)
         plan_id = plans[0]["id"] if plans else "DEMO"
-        info = check_drug_coverage(drug, plan_id)
+        raw = check_drug_coverage([drug] if isinstance(drug, str) else drug, [plan_id] if isinstance(plan_id, str) else plan_id)
+        info = raw[0] if isinstance(raw, list) and raw else {}
         results.append(info)
         
-        if info["tier"] >= 4:
+        if isinstance(info, dict) and info.get("tier", 0) and str(info.get("tier","")).isdigit() and int(info.get("tier",0)) >= 4:
             warnings.append(f"⚠️ {drug} is Tier {info['tier']} — estimated ${info['monthly_cost']}/month. Consider plans with better formulary coverage.")
         if info.get("prior_auth"):
             warnings.append(f"🔒 {drug} requires prior authorization on most plans.")

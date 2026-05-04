@@ -226,7 +226,25 @@ class ConversationalOrchestrator:
         drugs, risks, metal = wave2
         monthly_credit = subsidy.get("monthly_credit", 0)
         for plan in plans:
-            plan["premium_after_subsidy"] = max(0, plan.get("premium", 0) - monthly_credit)
+            net = max(0, plan.get("premium", 0) - monthly_credit)
+            plan["premium_after_subsidy"] = net
+            plan["premium_w_credit"] = net
+            # Mark bronze plans hsa_eligible (CMS API often omits this flag)
+            if plan.get("metal_level") == "Bronze" and not plan.get("hsa_eligible"):
+                plan["hsa_eligible"] = True
+            # Compute true annual cost
+            util = profile.get("utilization", "sometimes")
+            oop_w = {"rarely": 0.1, "sometimes": 0.25, "frequently": 0.5, "chronic": 0.8}
+            oop_factor = oop_w.get(util, 0.25)
+            plan["true_annual_cost"] = round(net * 12 + plan.get("deductible", 0) * oop_factor)
+            # HSA tax savings estimate
+            if plan.get("hsa_eligible"):
+                hh = int(profile.get("household_size", 1))
+                income = float(profile.get("income", 50000))
+                hsa_limit = 8300 if hh > 1 else 4150
+                tax_rate = 0.24 if income > 100525 else 0.22 if income > 47150 else 0.12
+                plan["hsa_tax_savings"] = round(hsa_limit * tax_rate)
+                plan["hsa_5yr_growth"] = round(hsa_limit * ((1.07**5 - 1) / 0.07))
         memory_context = build_memory_context(user_id) or ""
         recommendation = await self._synthesize(profile, fpl_pct, subsidy, plans, drugs, doctors, risks, metal, memory_context)
         return {
