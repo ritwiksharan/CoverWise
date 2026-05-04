@@ -971,18 +971,38 @@ function renderResults(data) {
 
   // ── PLANS ───────────────────────────────────────────────────────────────────
   if (plans.length) {
-    const planLabel = isPremium ? `Top ${plans.length} Ranked Plans` : 'Top 3 Ranked Plans';
+    // Re-order plan cards to match the LLM EV ranking so cards and AI recommendation agree.
+    // If llm_ranking is absent (Vertex AI unavailable), fall back to true_annual_cost order.
+    const evRanking = (data.llm_ranking || {}).expected_value_ranking || [];
+    let displayPlans = [...plans];
+    if (evRanking.length) {
+      const rankMap = {};
+      evRanking.forEach(r => { rankMap[r.plan_id] = r.rank; });
+      displayPlans.sort((a, b) => {
+        const ra = rankMap[a.id] ?? 999;
+        const rb = rankMap[b.id] ?? 999;
+        return ra - rb;
+      });
+    }
+
+    const rankingSource = evRanking.length ? 'AI Expected Value Ranking (Premiums × Scenarios × Utilization)' : 'True Annual Cost (Premiums + Est. OOP + Drug Costs)';
+    const planLabel = isPremium ? `Top ${displayPlans.length} Ranked Plans` : 'Top 3 Ranked Plans';
     html += `<div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:8px">${planLabel}</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Ranked by True Annual Cost (Premiums + Est. OOP + Drug Costs)</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;font-family:var(--mono)">Ranked by ${rankingSource}</div>
       <div class="${isPremium ? 'plans-grid-premium' : 'plans-grid'}">`;
-    plans.forEach((plan, i) => {
+    displayPlans.forEach((plan, i) => {
       const net = plan.premium_w_credit ?? Math.max(0, plan.premium - monthlyCredit);
       const rankLabel = i === 0 ? '🏆 Best Value' : i === 1 ? '2nd' : i === 2 ? '3rd' : `#${i+1}`;
+      const evEntry = evRanking.find(r => r.plan_id === plan.id);
+      const evScore = evEntry ? evEntry.ev_score : null;
+      const costBadge = evScore != null
+        ? `EV Score: $${Math.round(evScore).toLocaleString()}`
+        : `True Cost: $${(plan.true_annual_cost||0).toLocaleString()}`;
       html += `<div class="plan-card${i === 0 ? ' best' : ''}">
         <div class="plan-rank">${rankLabel}</div>
         <div class="plan-header">
           <span class="metal-badge ${plan.metal_level}">${plan.metal_level || '—'}</span>
-          <span class="true-annual-badge">True Cost: $${(plan.true_annual_cost||0).toLocaleString()}</span>
+          <span class="true-annual-badge">${costBadge}</span>
         </div>
         <div class="plan-name">${plan.name}</div>
         <div class="plan-issuer">${plan.issuer}${plan.type ? ' · ' + plan.type : ''}</div>
