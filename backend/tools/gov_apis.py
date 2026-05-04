@@ -90,11 +90,11 @@ def get_fips_from_zip(zip_code: str) -> Optional[str]:
 
     def fetch():
         try:
-            url = BASE_MARKETPLACE + "/counties/by/zip/" + zip_code + ".json"
-            params = {}
-            if CMS_MARKETPLACE_KEY:
-                params["apikey"] = CMS_MARKETPLACE_KEY
-            r = requests.get(url, params=params, timeout=10)
+            r = requests.get(
+                f"{BASE_MARKETPLACE}/counties/by/zip/{zip_code}",
+                params={"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {}, 
+                timeout=10
+            )
             data = r.json()
             counties = data.get("counties", [])
             return counties[0].get("fips") if counties else None
