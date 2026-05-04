@@ -381,22 +381,25 @@ def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, 
 
     def fetch():
         nonlocal fips
-        if not fips:
-            # Try nearby ZIPs — use nearby ZIP itself to avoid county mismatch
-            prefix = zip_code[:2]
-            for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50,100,-100]:
-                nearby = str(int(zip_code) + delta).zfill(5)
-                if nearby[:2] != prefix:
-                    continue
-                nearby_fips = get_fips_from_zip(nearby)
-                if not nearby_fips:
-                    continue
-                plans = _try_zip(nearby, nearby_fips)
-                if plans:
-                    print(f"ZIP {zip_code} no plans — using nearby {nearby}")
-                    return plans
-        if not fips:
-            raise RuntimeError(f"No plans found for ZIP {zip_code} or nearby ZIPs")
+        # Try original ZIP first
+        if fips:
+            plans = _try_zip(zip_code, fips)
+            if plans:
+                return plans
+        # Try nearby ZIPs — handles PO Box ZIPs and county mismatches
+        prefix = zip_code[:2]
+        for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50,100,-100]:
+            nearby = str(int(zip_code) + delta).zfill(5)
+            if nearby[:2] != prefix:
+                continue
+            nearby_fips = get_fips_from_zip(nearby)
+            if not nearby_fips:
+                continue
+            plans = _try_zip(nearby, nearby_fips)
+            if plans:
+                print(f"ZIP {zip_code} no plans — using nearby {nearby}")
+                return plans
+        raise RuntimeError(f"No plans found for ZIP {zip_code} or nearby ZIPs")
 
     return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income), "tobacco": tobacco_use}, fetch)
 
