@@ -382,58 +382,21 @@ def search_plans(zip_code: str, age: int, income: float, fips: str, state: str, 
     def fetch():
         nonlocal fips
         if not fips:
-            # Try nearby ZIPs — handles PO Box ZIPs not in census file
-            prefix = zip_code[:3]
-            for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50]:
+            # Try nearby ZIPs — use nearby ZIP itself to avoid county mismatch
+            prefix = zip_code[:2]
+            for delta in [1,-1,2,-2,3,-3,5,-5,10,-10,15,-15,20,-20,30,-30,50,-50,100,-100]:
                 nearby = str(int(zip_code) + delta).zfill(5)
-                if nearby[:2] != prefix[:2]:
+                if nearby[:2] != prefix:
                     continue
                 nearby_fips = get_fips_from_zip(nearby)
-                if nearby_fips:
-                    print(f"ZIP {zip_code} no FIPS — using nearby {nearby} ({nearby_fips})")
-                    fips = nearby_fips
-                    break
-            if not fips:
-                # Last resort: try CMS counties API for nearby ZIPs
-                import requests as _req
-                prefix2 = zip_code[:2]
-                for delta in range(-100, 100):
-                    nearby = str(int(zip_code) + delta).zfill(5)
-                    if nearby[:2] != prefix2:
-                        continue
-                    try:
-                        r = _req.get(
-                            f"https://marketplace.api.healthcare.gov/api/v1/counties/by/zip/{nearby}",
-                            params={"apikey": CMS_MARKETPLACE_KEY} if CMS_MARKETPLACE_KEY else {},
-                            timeout=5
-                        )
-                        counties = r.json().get("counties", [])
-                        if counties:
-                            fips = counties[0].get("fips")
-                            print(f"ZIP {zip_code} — CMS county API found FIPS via {nearby}: {fips}")
-                            break
-                    except Exception:
-                        continue
-            if not fips:
-                raise RuntimeError(f"Cannot search plans: no FIPS for ZIP {zip_code}")
-        # Try original ZIP first
-        plans = _try_zip(zip_code, fips)
-        if plans:
-            return plans
-        # Try nearby ZIPs (PO Box ZIPs often have no plans directly)
-        prefix = zip_code[:3]
-        for delta in [1, -1, 2, -2, 5, -5, 10, -10, 20, -20]:
-            nearby = str(int(zip_code) + delta).zfill(5)
-            if nearby[:3] != prefix:
-                continue
-            nearby_fips = get_fips_from_zip(nearby)
-            if not nearby_fips:
-                continue
-            plans = _try_zip(nearby, nearby_fips)
-            if plans:
-                print(f"ZIP {zip_code} has no plans, using nearby {nearby}")
-                return plans
-        raise RuntimeError(f"No plans found for ZIP {zip_code} or nearby ZIPs")
+                if not nearby_fips:
+                    continue
+                plans = _try_zip(nearby, nearby_fips)
+                if plans:
+                    print(f"ZIP {zip_code} no plans — using nearby {nearby}")
+                    return plans
+        if not fips:
+            raise RuntimeError(f"No plans found for ZIP {zip_code} or nearby ZIPs")
 
     return cached_call("plans", {"zip": zip_code, "age": age, "income": int(income), "tobacco": tobacco_use}, fetch)
 
