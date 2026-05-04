@@ -567,14 +567,6 @@
   .sep-alert { padding:10px 14px; border-radius:var(--radius); font-size:13px; border:1px solid; }
   .sep-open { background:rgba(16,185,129,.08); border-color:var(--green); color:var(--green); }
   .sep-closed { background:rgba(255,255,255,.04); border-color:var(--border2); color:var(--text2); }
-  .sim-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-  @media(max-width:600px) { .sim-grid { grid-template-columns:repeat(2,1fr); } }
-  .sim-stat { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius); padding:12px; text-align:center; }
-  .sim-label { font-size:10px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; margin-bottom:4px; }
-  .sim-value { font-size:20px; font-weight:700; font-family:var(--mono); }
-  .sim-value.green { color:var(--green); }
-  .sim-value.yellow { color:var(--yellow); }
-  .sim-value.red { color:var(--red); }
 
   /* ── INSURANCE Q&A ── */
   .qa-answer { background:var(--bg3); border:1px solid var(--border2);
@@ -1208,36 +1200,6 @@ function renderResults(data) {
     <div id="employerResults"></div>
   </div>`;
 
-  // ── FEATURE: INCOME CHANGE SIMULATOR ──────────────────────────────────────────
-  const simIncome = currentProfile ? (currentProfile.income || 50000) : 50000;
-  html += `<div class="feature-card" id="incomeSimSection">
-    <h2>📊 Income Change Simulator</h2>
-    <p>Drag the slider to see how changes in your income affect your subsidy, FPL%, and Medicaid eligibility in real time. Watch for the 400% FPL subsidy cliff.</p>
-    <div style="margin:16px 0">
-      <label style="font-size:12px;color:var(--text3);font-family:var(--mono)">Simulated Annual Income: <strong id="simIncomeLabel" style="color:var(--accent2)">$${Number(simIncome).toLocaleString()}</strong></label>
-      <input type="range" id="incomeSlider" min="10000" max="150000" step="1000" value="${simIncome}" style="width:100%;margin-top:8px;accent-color:var(--accent)" oninput="updateIncomeSim()">
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:4px"><span>$10k</span><span>$40k</span><span>$80k</span><span>$120k</span><span>$150k+</span></div>
-    </div>
-    <div id="incomeSimResults"></div>
-  </div>`;
-
-  // ── FEATURE: HOSPITAL NETWORK CHECK ───────────────────────────────────────────
-  const zipForHospitals = (currentProfile || {}).zip_code || '';
-  const planIdsForHospitals = (results.plans || []).slice(0,3).map(p=>p.id).join(',');
-  html += `<div class="feature-card" id="hospitalSection">
-    <h2>🏥 Hospitals Near You${zipForHospitals ? ' — ZIP ' + zipForHospitals : ''}</h2>
-    <p>Nearby hospitals and their in-network status across your top plans. Search by name below for a specific facility.</p>
-    <div id="hospitalNearby"><div class="intake-msg agent" style="margin-top:0"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>
-    <div class="specialist-input-row" style="margin-top:14px">
-      <input class="specialist-input" id="hospitalInput" placeholder="Search a specific hospital name…" onkeydown="if(event.key==='Enter')runHospitalSearch()">
-      <button class="specialist-btn" id="hospitalBtn" onclick="runHospitalSearch()">Search</button>
-    </div>
-    <div id="hospitalResults"></div>
-  </div>`;
-  // Auto-load nearby hospitals after render
-  if (zipForHospitals) {
-    setTimeout(() => loadNearbyHospitals(zipForHospitals, planIdsForHospitals), 100);
-  }
 
   // ── DOCTOR RESULTS ──────────────────────────────────────────────────────────
   const doctorResults = doctorsData.results || [];
@@ -1347,7 +1309,6 @@ function renderResults(data) {
   el.innerHTML = html;
   el.classList.add('active');
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => { if (document.getElementById('incomeSlider')) updateIncomeSim(); }, 50);
 }
 
 // ── FOLLOW-UP CHAT ────────────────────────────────────────────────────────────
@@ -1631,119 +1592,6 @@ function runEmployerComparison() {
   </div>`;
 }
 
-// ── INCOME CHANGE SIMULATOR ───────────────────────────────────────────────────
-function updateIncomeSim() {
-  const slider = document.getElementById('incomeSlider');
-  if (!slider) return;
-  const income = Number(slider.value);
-  const label = document.getElementById('simIncomeLabel');
-  if (label) label.textContent = '$' + income.toLocaleString();
-  const hhSize = currentProfile ? (currentProfile.household_size || 1) : 1;
-  const fplBases = {1:14580,2:19720,3:24860,4:30000,5:35140,6:40280};
-  const base = fplBases[Math.min(hhSize, 6)] || 30000;
-  const fpl = Math.round(income / base * 10) / 10;
-  const isMedicaid = fpl < 138;
-  const hasSubsidy = fpl >= 100 && fpl <= 400;
-  const nearCliff = fpl >= 390 && fpl <= 410;
-  const csrVariant = fpl < 150 ? '94' : fpl < 200 ? '87' : fpl < 250 ? '73' : null;
-  let aptc = 0;
-  if (hasSubsidy) {
-    const benchmark = 500;
-    const pctIncome = fpl <= 150 ? 0.02 : fpl <= 200 ? 0.04 : fpl <= 250 ? 0.06 : 0.085;
-    aptc = Math.max(0, Math.round(benchmark - income * pctIncome / 12));
-  }
-  const el = document.getElementById('incomeSimResults');
-  if (!el) return;
-  let html = `<div class="sim-grid">
-    <div class="sim-stat"><div class="sim-label">FPL %</div><div class="sim-value ${fpl>400?'red':fpl<138?'green':'yellow'}">${fpl.toFixed(0)}%</div></div>
-    <div class="sim-stat"><div class="sim-label">Est. Monthly Subsidy</div><div class="sim-value green">$${aptc}</div></div>
-    <div class="sim-stat"><div class="sim-label">Medicaid</div><div class="sim-value ${isMedicaid?'green':'red'}">${isMedicaid?'Eligible ✓':'Not Eligible'}</div></div>
-    <div class="sim-stat"><div class="sim-label">CSR</div><div class="sim-value ${csrVariant?'green':'red'}">${csrVariant?'CSR-'+csrVariant+' ✓':'None'}</div></div>
-  </div>`;
-  if (nearCliff) {
-    const gapToCliff = Math.round(400 / 100 * base - income);
-    html += `<div class="sep-alert" style="background:rgba(239,68,68,.08);border-color:var(--red);color:var(--red);margin-top:10px">🚨 Subsidy Cliff Warning: At ${fpl.toFixed(0)}% FPL, earning ~$${gapToCliff.toLocaleString()} more could eliminate your entire subsidy (${gapToCliff<0?'you are past it':'you are close'}).</div>`;
-  }
-  if (isMedicaid) html += `<div class="sep-alert sep-open" style="margin-top:10px">🏥 At this income, you may qualify for Medicaid — free or near-free coverage. Visit your state Medicaid office.</div>`;
-  else if (csrVariant) html += `<div class="sep-alert sep-open" style="margin-top:10px">💡 CSR-${csrVariant} eligible: Enroll in a Silver plan for dramatically lower deductibles at no extra premium cost.</div>`;
-  el.innerHTML = html;
-}
-
-// ── HOSPITAL NETWORK CHECK ────────────────────────────────────────────────────
-function renderHospitalCards(hospitals, plans, container) {
-  if (!hospitals.length) {
-    container.innerHTML = `<div style="font-size:13px;color:var(--text2);padding:12px 0">No hospitals found for this area.</div>`;
-    return;
-  }
-  container.innerHTML = `<div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">${
-    hospitals.map(h => {
-      const netStatuses = Object.entries(h.network_status || {});
-      const netHtml = netStatuses.length
-        ? netStatuses.map(([pid, net]) => {
-            const pn = (plans.find(p=>p.id===pid)||{}).name || pid;
-            const short = pn.length>22 ? pn.slice(0,20)+'…' : pn;
-            if (net.in_network === false) return `<span class="net-badge net-out">✗ OON: ${short}</span>`;
-            if (net.in_network === true)  return `<span class="net-badge net-in">✓ In-Net: ${short}</span>`;
-            return `<span class="net-badge net-unknown">? Verify: ${short}</span>`;
-          }).join('')
-        : `<span style="font-size:11px;color:var(--text3)">Network status unavailable — confirm with your insurer</span>`;
-      return `<div class="specialist-card">
-        <div class="specialist-name">🏥 ${h.name}</div>
-        <div class="specialist-sub">NPI: ${h.npi||'N/A'} · ${h.city||''}${h.state?', '+h.state:''}</div>
-        ${h.address?`<div class="specialist-sub">${h.address}</div>`:''}
-        ${h.phone?`<div class="specialist-sub">📞 ${h.phone}</div>`:''}
-        <div class="specialist-networks" style="margin-top:8px">${netHtml}</div>
-      </div>`;
-    }).join('')
-  }</div>`;
-}
-
-async function loadNearbyHospitals(zipCode, planIdsCsv) {
-  const el = document.getElementById('hospitalNearby');
-  if (!el || !zipCode) return;
-  try {
-    const qs = planIdsCsv ? `?plan_ids=${encodeURIComponent(planIdsCsv)}` : '';
-    const res = await fetch(`/api/hospitals/nearby/${zipCode}${qs}`);
-    const data = await res.json();
-    const plans = (window._lastResults || {}).plans || [];
-    renderHospitalCards(data.hospitals || [], plans, el);
-  } catch(e) {
-    if (el) el.innerHTML = `<div style="color:var(--red);font-size:13px">Could not load nearby hospitals.</div>`;
-  }
-}
-
-
-async function runHospitalSearch() {
-  const input = document.getElementById('hospitalInput');
-  const name = input.value.trim();
-  if (!name) return;
-  const btn = document.getElementById('hospitalBtn');
-  const resultsEl = document.getElementById('hospitalResults');
-  btn.disabled = true; btn.textContent = 'Searching…';
-  resultsEl.innerHTML = `<div class="intake-msg agent" style="margin-top:8px"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
-  const profile = currentProfile || {};
-  const plans = (window._lastResults || {}).plans || [];
-  const planIds = plans.slice(0, 3).map(p => p.id);
-  try {
-    // Search nationally by name (no state filter) so e.g. "Stanford" finds CA hospitals
-    const res = await fetch('/api/hospital-search', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        user_id: USER_ID, name,
-        state: '',           // no state restriction for named search
-        city: '',
-        zip_code: profile.zip_code || '',
-        plan_ids: planIds
-      })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    renderHospitalCards(data.hospitals || [], plans, resultsEl);
-    if ((data.hospitals || []).length) input.value = '';
-  } catch(e) {
-    resultsEl.innerHTML = `<div style="color:var(--red);font-size:13px">Error searching hospitals. Please try again.</div>`;
-  } finally { btn.disabled = false; btn.textContent = 'Search'; }
-}
 
 // ── MOCK FALLBACK ─────────────────────────────────────────────────────────────
 function getMockResults(profile) {
