@@ -6,6 +6,29 @@ An agentic AI system that helps Americans find their optimal ACA health insuranc
 
 ---
 
+## Business Pitch
+
+**The Problem:** Choosing health insurance is a nightmare. Americans overspend by billions every year because they don't understand how their medications, doctors, subsidies, and deductibles interact. 
+**The User:** Freelancers, gig workers, and individuals buying insurance on the ACA marketplace who are overwhelmed by the choices and hidden costs.
+**Path to Monetization (Freemium):**
+- **Free Tier:** Basic plan comparison (top 3 plans), checking 1 doctor, and 1 medication.
+- **Premium ($19/mo):** Full exhaustive market comparison (all plans), unlimited doctor/medication checks, 5-year HSA tax forecasting, and a 24/7 year-round personalized AI advisor to answer questions about claims or mid-year life events.
+
+---
+
+## Class Concepts Applied
+
+1. **Tool Use / Function Calling:** The agents autonomously call external federal APIs (CMS Marketplace, NPPES NPI Registry, RxNorm) to fetch real-time facts before reasoning, entirely avoiding LLM hallucinations.
+   * *Reference:* `backend/agents/insurance_qa_agent.py` and `backend/tools/gov_apis.py`
+2. **Multi-Agent Orchestration & Parallelization:** To keep latency low, the system orchestrates multiple sub-tasks simultaneously (Wave 1 and Wave 2 data collection) before passing the aggregated context to the final Synthesis Agent.
+   * *Reference:* `backend/agents/adk_orchestrator.py` (`_collect_analysis_data`)
+3. **Agentic Memory:** The system uses `mem0` (backed by ChromaDB) to persist user profiles across sessions, allowing the "Year-Round Advisor" to answer questions with full context of what the user selected months ago.
+   * *Reference:* `backend/memory/mem0_client.py`
+4. **Human-in-the-Loop (HITL):** The system collects data but implements a confirmation gate on the frontend, ensuring the user verifies the extracted medications and doctors before executing the expensive, final LLM decision analysis.
+   * *Reference:* `frontend/index.html` (`showConfirmation()`)
+
+---
+
 ## What It Does
 
 You fill out a short form (ZIP, age, income, household size, medications, doctors). CoverWise runs a parallel multi-agent analysis against six government APIs, then Gemini 2.0 Flash synthesises a plain-English recommendation covering:
