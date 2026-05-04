@@ -318,27 +318,107 @@
 <body>
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
-<!-- Login Screen -->
-<div id="loginScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:var(--bg);color:var(--text);padding:24px;">
-  <div class="logo" style="margin-bottom:48px;">
-    <div class="logo-icon">🛡️</div>
-    <div class="logo-text" style="font-size:32px;">CoverWise</div>
-  </div>
-  
-  <div class="landing-flow" style="width:100%; max-width:800px;">
-    <div class="landing-card" onclick="startFlow(false)">
-      <span class="badge badge-free">No Credit Card</span>
-      <span class="landing-icon">🔍</span>
-      <h3>Find my plan — Free</h3>
-      <p style="color:var(--text3); font-size:12px; margin-top:8px;">One-time plan recommendation.<br>Basic drug & doctor check.</p>
-    </div>
-    <div class="landing-card" onclick="startFlow(true)" style="border-color:var(--accent2); background:rgba(59,130,246,0.05);">
-      <span class="badge badge-premium">Unlimited Access</span>
-      <span class="landing-icon">🪄</span>
-      <h3>Year-round advisor — $19/mo</h3>
-      <p style="color:var(--text3); font-size:12px; margin-top:8px;">Unlimited checks, saved profile,<br>and HSA/CSR deep analysis.</p>
+<!-- Auth / Login Screen -->
+<div id="loginScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);color:var(--text);padding:24px;">
+
+  <div class="logo" style="margin-bottom:36px;flex-direction:column;align-items:center;gap:10px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="logo-icon">🛡️</div>
+      <div>
+        <div class="logo-text" style="font-size:28px;">CoverWise</div>
+        <div class="logo-sub">AI Health Insurance Advisor</div>
+      </div>
     </div>
   </div>
+
+  <!-- Step 1: Auth panel -->
+  <div id="authPanel" style="width:100%;max-width:420px;">
+    <!-- Tabs -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:24px;">
+      <button id="tabSignin" onclick="switchAuthTab('signin')"
+        style="flex:1;padding:11px;font-family:var(--display);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:background .15s;background:var(--accent);color:#fff;">
+        Sign In
+      </button>
+      <button id="tabSignup" onclick="switchAuthTab('signup')"
+        style="flex:1;padding:11px;font-family:var(--display);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:background .15s;background:var(--bg3);color:var(--text2);">
+        Create Account
+      </button>
+    </div>
+
+    <!-- Sign In form -->
+    <div id="formSignin">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">EMAIL</label>
+        <input id="siEmail" type="email" placeholder="you@example.com" autocomplete="email"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignin()">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">PASSWORD</label>
+        <input id="siPassword" type="password" placeholder="••••••••" autocomplete="current-password"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignin()">
+      </div>
+      <div id="siError" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.08);border-radius:var(--radius);border:1px solid rgba(239,68,68,.2);"></div>
+      <button onclick="doSignin()" id="siBtn"
+        style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--display);font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s;">
+        Sign In →
+      </button>
+    </div>
+
+    <!-- Create Account form -->
+    <div id="formSignup" style="display:none;">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">FULL NAME</label>
+        <input id="suName" type="text" placeholder="Your name" autocomplete="name"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">EMAIL</label>
+        <input id="suEmail" type="email" placeholder="you@example.com" autocomplete="email"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="font-size:12px;color:var(--text2);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:6px;">PASSWORD <span style="color:var(--text3)">(min 8 chars)</span></label>
+        <input id="suPassword" type="password" placeholder="Choose a password" autocomplete="new-password"
+          style="width:100%;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--body);outline:none;box-sizing:border-box;"
+          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"
+          onkeydown="if(event.key==='Enter')doSignup()">
+      </div>
+      <div id="suError" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px;padding:10px 12px;background:rgba(239,68,68,.08);border-radius:var(--radius);border:1px solid rgba(239,68,68,.2);"></div>
+      <button onclick="doSignup()" id="suBtn"
+        style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-family:var(--display);font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s;">
+        Create Account →
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 2: Tier selection (shown after auth) -->
+  <div id="tierPanel" style="display:none;width:100%;max-width:680px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <div id="tierWelcome" style="font-family:var(--display);font-size:22px;font-weight:700;margin-bottom:6px;"></div>
+      <div style="font-size:13px;color:var(--text3);">Choose how you'd like to use CoverWise</div>
+    </div>
+    <div class="landing-flow">
+      <div class="landing-card" onclick="startFlow(false)">
+        <span class="badge badge-free">No Credit Card</span>
+        <span class="landing-icon">🔍</span>
+        <h3>Find my plan — Free</h3>
+        <p style="color:var(--text3);font-size:12px;margin-top:8px;">One-time plan recommendation.<br>Basic drug &amp; doctor check.</p>
+      </div>
+      <div class="landing-card" onclick="startFlow(true)" style="border-color:var(--accent2);background:rgba(59,130,246,0.05);">
+        <span class="badge badge-premium">Unlimited Access</span>
+        <span class="landing-icon">🪄</span>
+        <h3>Year-round advisor — $19/mo</h3>
+        <p style="color:var(--text3);font-size:12px;margin-top:8px;">Unlimited checks, saved profile,<br>and HSA/CSR deep analysis.</p>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="app" id="mainApp" style="display:none;">
@@ -352,7 +432,10 @@
         <div class="logo-sub">AI Insurance Advisor</div>
       </div>
     </div>
-    <div class="header-badge">● All APIs Free</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="header-badge">● All APIs Free</div>
+      <div id="headerUser" style="display:flex;align-items:center;"></div>
+    </div>
   </header>
 
   <div class="hero">
@@ -588,16 +671,152 @@
 </style>
 
 <script>
-const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
+// ── Auth state ────────────────────────────────────────────────────────────────
+let USER_ID = null;
+let authUser = null;   // { user_id, email, name, token }
 const SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9);
 let currentProfile = null;
 let pendingProfile = null;
 let isPremium = false;
 
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+function saveAuth(data) {
+  authUser = data;
+  USER_ID  = data.user_id;
+  localStorage.setItem('cw_token',   data.token);
+  localStorage.setItem('cw_user_id', data.user_id);
+  localStorage.setItem('cw_name',    data.name);
+  localStorage.setItem('cw_email',   data.email);
+}
+
+function loadAuthFromStorage() {
+  const token = localStorage.getItem('cw_token');
+  if (!token) return false;
+  authUser = {
+    token:   token,
+    user_id: localStorage.getItem('cw_user_id') || '',
+    name:    localStorage.getItem('cw_name')    || '',
+    email:   localStorage.getItem('cw_email')   || '',
+  };
+  USER_ID = authUser.user_id;
+  return true;
+}
+
+function clearAuth() {
+  authUser = null; USER_ID = null;
+  ['cw_token','cw_user_id','cw_name','cw_email'].forEach(k => localStorage.removeItem(k));
+}
+
+async function verifyStoredToken() {
+  if (!authUser?.token) return false;
+  try {
+    const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + authUser.token } });
+    return r.ok;
+  } catch { return false; }
+}
+
+// ── Auth UI ───────────────────────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  const isSignin = tab === 'signin';
+  document.getElementById('formSignin').style.display = isSignin ? '' : 'none';
+  document.getElementById('formSignup').style.display = isSignin ? 'none' : '';
+  document.getElementById('tabSignin').style.background = isSignin ? 'var(--accent)' : 'var(--bg3)';
+  document.getElementById('tabSignin').style.color      = isSignin ? '#fff' : 'var(--text2)';
+  document.getElementById('tabSignup').style.background = isSignin ? 'var(--bg3)' : 'var(--accent)';
+  document.getElementById('tabSignup').style.color      = isSignin ? 'var(--text2)' : '#fff';
+}
+
+function setAuthError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = msg ? '' : 'none';
+}
+
+async function doSignin() {
+  const email = document.getElementById('siEmail').value.trim();
+  const pass  = document.getElementById('siPassword').value;
+  setAuthError('siError', '');
+  if (!email || !pass) { setAuthError('siError', 'Please enter your email and password.'); return; }
+  const btn = document.getElementById('siBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setAuthError('siError', data.detail || 'Sign in failed.'); return; }
+    saveAuth(data);
+    showTierPanel();
+  } catch(e) { setAuthError('siError', 'Network error — please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Sign In →'; }
+}
+
+async function doSignup() {
+  const name  = document.getElementById('suName').value.trim();
+  const email = document.getElementById('suEmail').value.trim();
+  const pass  = document.getElementById('suPassword').value;
+  setAuthError('suError', '');
+  if (!name)  { setAuthError('suError', 'Please enter your name.'); return; }
+  if (!email) { setAuthError('suError', 'Please enter your email.'); return; }
+  if (pass.length < 8) { setAuthError('suError', 'Password must be at least 8 characters.'); return; }
+  const btn = document.getElementById('suBtn');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+  try {
+    const r = await fetch('/api/auth/signup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: pass, name }),
+    });
+    const data = await r.json();
+    if (!r.ok) { setAuthError('suError', data.detail || 'Sign up failed.'); return; }
+    saveAuth(data);
+    showTierPanel();
+  } catch(e) { setAuthError('suError', 'Network error — please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Create Account →'; }
+}
+
+function showTierPanel() {
+  document.getElementById('authPanel').style.display = 'none';
+  document.getElementById('tierPanel').style.display = '';
+  document.getElementById('tierWelcome').textContent =
+    'Welcome, ' + (authUser?.name?.split(' ')[0] || 'there') + ' 👋';
+}
+
+async function doLogout() {
+  if (authUser?.token) {
+    fetch('/api/auth/logout', { method:'POST', headers:{ Authorization: 'Bearer '+authUser.token } }).catch(()=>{});
+  }
+  clearAuth();
+  localStorage.removeItem('coverwise_profile');
+  localStorage.removeItem('coverwise_results');
+  location.reload();
+}
+
+function updateHeaderUser() {
+  const el = document.getElementById('headerUser');
+  if (!el || !authUser) return;
+  el.innerHTML = `<span style="font-size:13px;color:var(--text2);font-family:var(--mono)">${authUser.name}</span>
+    <button onclick="doLogout()" style="margin-left:10px;font-size:11px;font-family:var(--mono);padding:4px 10px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--text3);cursor:pointer;transition:border-color .15s;" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">Sign out</button>`;
+}
+
+// ── On page load: check for existing session ──────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  if (loadAuthFromStorage()) {
+    const valid = await verifyStoredToken();
+    if (valid) {
+      showTierPanel();
+      updateHeaderUser();
+    } else {
+      clearAuth();
+    }
+  }
+});
+
+// ── Start the app after tier selection ────────────────────────────────────────
 function startFlow(premium) {
   isPremium = premium;
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('mainApp').style.display = 'block';
+  updateHeaderUser();
   if (isPremium) {
     document.querySelector('.header-badge').textContent = '● Premium Advisor';
     document.querySelector('.header-badge').style.color = 'var(--accent2)';

@@ -878,7 +878,7 @@ async def _rank_plans_with_llm(data: dict, profile: dict = None) -> dict:
 
 async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = False) -> str:
     """
-    Call Gemini 2.0 Flash directly with ORCHESTRATOR_INSTRUCTION as system prompt
+    Call Gemini 2.5 Pro (thinking) with ORCHESTRATOR_INSTRUCTION as system prompt
     and the full structured data document as the user turn.
     Falls back to a data-only summary if Vertex AI is unavailable.
     """
@@ -891,11 +891,11 @@ async def _synthesize_with_gemini(synthesis_prompt: str, is_premium: bool = Fals
     try:
         vertexai.init(project=PROJECT_ID, location=REGION)
         model = GenerativeModel(
-            "gemini-2.0-flash-001",
+            "gemini-2.5-pro-preview-05-06",
             system_instruction=ORCHESTRATOR_INSTRUCTION,
             generation_config=GenerationConfig(
-                max_output_tokens=8192,
-                temperature=0.2,
+                max_output_tokens=16384,
+                temperature=1,   # Gemini 2.5 Pro uses temperature=1 for thinking
             ),
         )
         response = await asyncio.to_thread(model.generate_content, synthesis_prompt)
@@ -917,7 +917,7 @@ class ADKOrchestrator:
         if self._runner: return
         agent = Agent(
             name="insurance_expert",
-            model="gemini-2.0-flash",
+            model="gemini-2.5-pro-preview-05-06",
             instruction=ORCHESTRATOR_INSTRUCTION,
             tools=[run_full_analysis_parallel]
         )

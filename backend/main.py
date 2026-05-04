@@ -14,6 +14,8 @@ load_dotenv()
 
 from agents.adk_orchestrator import ADKOrchestrator
 from agents.intake_agent import start_session, send_message as intake_send
+from auth.router import router as auth_router
+from auth.db import init_db
 
 app = FastAPI(title="CoverWise - AI Health Insurance Advisor")
 
@@ -25,7 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 orchestrator = ADKOrchestrator()
+init_db()
 
 FRONTEND_PATH = "frontend" if os.path.exists("frontend") else "../frontend"
 
