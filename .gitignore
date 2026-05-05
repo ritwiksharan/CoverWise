@@ -22,6 +22,9 @@ venv/
 # Data
 *.zip
 *.csv
+*.db
+backend/data/
+analysis_result.json
 
 # IDE
 .vscode/
