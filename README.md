@@ -190,7 +190,6 @@ Runs the full multi-agent pipeline. Returns ranked plans, subsidy figures, drug 
 | `drugs` | string[] | Medication names — e.g. `["Ozempic", "Metformin"]` (optional) |
 | `doctors` | string[] | Doctor names to keep (optional) |
 | `utilization` | string | `rarely` / `sometimes` / `frequently` / `chronic` |
-| `tobacco_use` | bool | Tobacco surcharge flag (default false) |
 | `is_premium` | bool | Free (3 plans, 1 drug, 1 doctor) vs Premium (10 plans, unlimited) |
 
 ### Year-Round Chat Advisor (`POST /api/chat`)
