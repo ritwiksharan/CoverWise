@@ -1075,5 +1075,18 @@ class ADKOrchestrator:
             "and doctor names. Be concise and direct.",
         ])
 
-        reply = await _synthesize_with_gemini(chat_prompt)
+        # Chat uses lower temperature for more focused, less repetitive answers
+        try:
+            import vertexai
+            from vertexai.generative_models import GenerativeModel, GenerationConfig
+            vertexai.init(project=PROJECT_ID, location="us-central1")
+            model = GenerativeModel("gemini-2.0-flash")
+            response = await asyncio.to_thread(
+                model.generate_content,
+                chat_prompt,
+                generation_config=GenerationConfig(temperature=0.7, max_output_tokens=1024)
+            )
+            reply = response.text.replace("*", "")
+        except Exception:
+            reply = await _synthesize_with_gemini(chat_prompt)
         return {"reply": reply, "memory_used": bool(prior_rec)}
