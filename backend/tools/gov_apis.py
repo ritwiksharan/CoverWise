@@ -106,6 +106,11 @@ KNOWN_FIPS = {
     "87101": "35001", "87102": "35001", "87103": "35001", "87104": "35001",
 }
 
+def _params(extra: dict = {}) -> dict:
+    p = {"apikey": CMS_MARKETPLACE_KEY}
+    p.update(extra)
+    return p
+
 def get_state_from_zip(zip_code: str) -> Optional[str]:
     """Get state from ZIP using first 2 digits — works for ALL US ZIPs."""
     prefix2 = str(zip_code).strip().zfill(5)[:2]
