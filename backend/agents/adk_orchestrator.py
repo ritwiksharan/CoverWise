@@ -174,6 +174,23 @@ async def _collect_analysis_data(profile: dict) -> dict:
     Parallel data collection — three waves, no AI involved.
     Returns structured dict consumed by _build_synthesis_prompt.
     """
+    # Check state exchange FIRST before trying CMS
+    from tools.gov_apis import get_state_exchange
+    zip_code_check = str(profile.get("zip_code", "")).strip().zfill(5)
+    state_ex = get_state_exchange(zip_code_check)
+    if state_ex:
+        return {
+            "route": "state_exchange",
+            "state_exchange": {
+                "state": state_ex["state"],
+                "exchange_name": state_ex["exchange_name"],
+                "exchange_url": state_ex["exchange_url"],
+                "message": f"Your ZIP code is in {state_ex['state']}, which runs its own state exchange. Please visit {state_ex['exchange_name']} to find your plan.",
+            },
+            "plans": [], "subsidy": {}, "drugs": {}, "doctors": {},
+            "risks": {"flags": []}, "cache_stats": {}, "fpl_percentage": 0,
+            "recommendation": f"Your state uses {state_ex['exchange_name']} — visit {state_ex['exchange_url']} to compare plans and apply for subsidies.",
+        }
     zip_code  = profile.get("zip_code")
     income    = profile.get("income", 50000)
     age       = profile.get("age", 35)
