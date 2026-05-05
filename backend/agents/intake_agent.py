@@ -321,7 +321,9 @@ async def start_session(user_id: str, session_id: str) -> dict:
     init_msg = Content(role="user", parts=[Part(text="start")])
     reply = await _collect_final_text(user_id, session_id, init_msg)
 
-    return {"session_id": session_id, "message": reply, "status": "started"}
+    # Always show states coverage in welcome message
+    states_intro = ("Hi! I'm CoverWise — I'll find your best health plan in about 90 seconds. I support live plan analysis for 30 federal marketplace states (TX, FL, TN, GA, AZ, IL, OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). For the 20 states with their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, NJ, NM, PA, RI, VT, VA, DC, ID, OR), I'll redirect you to your state exchange. What's your ZIP code?")
+    return {"session_id": session_id, "message": states_intro, "status": "started"}
 
 
 async def send_message(user_id: str, session_id: str, message: str) -> dict:
@@ -385,7 +387,12 @@ def _fallback_start(user_id: str) -> str:
             "Welcome back! I'll pre-fill your profile from last time. "
             "Please confirm or update your details in the form below."
         )
-    return "Hi! I'm CoverWise. Fill out the form below to find your best health insurance plan."
+    return (
+        "Hi! I'm CoverWise — I'll find your best health plan in about 90 seconds. "
+        "I support live plan analysis for 30 federal marketplace states (TX, FL, TN, GA, AZ, IL, OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). "
+        "For the 20 states with their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, NJ, NM, PA, RI, VT, VA, DC, ID, OR), I'll redirect you to your state exchange. "
+        "What's your ZIP code?"
+    )
 
 
 def _fallback_message(message: str) -> str:
