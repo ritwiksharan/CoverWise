@@ -953,6 +953,25 @@ class ADKOrchestrator:
         user_id = profile.get("user_id", "anonymous")
         print(f"[orchestrator] analyze() start — user={user_id} ZIP={profile.get('zip_code')}")
 
+        # ── State exchange check — before any CMS calls ────────────────────
+        from tools.gov_apis import get_state_exchange
+        zip_check = str(profile.get("zip_code", "")).strip().zfill(5)
+        state_ex = get_state_exchange(zip_check)
+        if state_ex:
+            return {
+                "route": "state_exchange",
+                "state_exchange": {
+                    "state": state_ex["state"],
+                    "exchange_name": state_ex["exchange_name"],
+                    "exchange_url": state_ex["exchange_url"],
+                    "message": f"Your ZIP is in {state_ex['state']}, which runs its own exchange.",
+                },
+                "plans": [], "subsidy": {}, "drugs": {}, "doctors": {},
+                "risks": {"flags": [f"📍 {state_ex['state']} uses {state_ex['exchange_name']} — visit {state_ex['exchange_url']}"]},
+                "cache_stats": {}, "fpl_percentage": 0,
+                "recommendation": f"Your state ({state_ex['state']}) runs its own health insurance exchange called {state_ex['exchange_name']}. Visit {state_ex['exchange_url']} to compare plans and apply for subsidies with your state's marketplace.",
+            }
+
         # ── Phase 1: data collection ─────────────────────────────────────────
         data = await _collect_analysis_data(profile)
         print(f"[orchestrator] Phase 1 complete — {len(data.get('plans',[]))} plans collected")
