@@ -85,25 +85,6 @@ _FIPS_STATE_MAP = {
 def _fips_to_state(fips: str) -> str:
     return _FIPS_STATE_MAP.get(fips[:2], "") if fips else ""
 
-def get_state_from_zip(zip_code: str) -> Optional[str]:
-    """Get state from ZIP using first 2 digits — works for ALL US ZIPs."""
-    prefix2 = str(zip_code).strip().zfill(5)[:2]
-    return ZIP2_STATE.get(prefix2)
-
-def get_state_exchange(zip_code: str) -> Optional[dict]:
-    """Return state exchange info if ZIP is in a state-exchange state."""
-    state = get_state_from_zip(zip_code)
-    if state and state in STATE_EXCHANGES:
-        ex = STATE_EXCHANGES[state]
-        return {"state": state, "exchange_name": ex["name"], "exchange_url": ex["url"]}
-    return None
-
-    return None
-
-
-# ---------- ZIP → FIPS ----------
-
-# Known FIPS codes for common ZIPs - performance cache
 KNOWN_FIPS = {
     "77001": "48201", "77002": "48201", "77003": "48201", "77004": "48201",
     "77005": "48201", "77006": "48201", "77007": "48201", "77008": "48201",
@@ -124,6 +105,24 @@ KNOWN_FIPS = {
     "89101": "32003", "89102": "32003", "89103": "32003", "89104": "32003",
     "87101": "35001", "87102": "35001", "87103": "35001", "87104": "35001",
 }
+
+def get_state_from_zip(zip_code: str) -> Optional[str]:
+    """Get state from ZIP using first 2 digits — works for ALL US ZIPs."""
+    prefix2 = str(zip_code).strip().zfill(5)[:2]
+    return ZIP2_STATE.get(prefix2)
+
+def get_state_exchange(zip_code: str) -> Optional[dict]:
+    """Return state exchange info if ZIP is in a state-exchange state."""
+    state = get_state_from_zip(zip_code)
+    if state and state in STATE_EXCHANGES:
+        ex = STATE_EXCHANGES[state]
+        return {"state": state, "exchange_name": ex["name"], "exchange_url": ex["url"]}
+    return None
+
+    return None
+
+
+# ---------- ZIP → FIPS ----------
 
 def get_fips_from_zip(zip_code: str) -> Optional[str]:
     """Get County FIPS from ZIP code. Works for ALL valid US ZIPs."""
