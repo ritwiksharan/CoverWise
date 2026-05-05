@@ -71,6 +71,20 @@ ZIP2_STATE = {
     "97": "OR", "98": "WA", "99": "AK",
 }
 
+_FIPS_STATE_MAP = {
+    "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT",
+    "10": "DE", "12": "FL", "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
+    "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME", "24": "MD", "25": "MA",
+    "26": "MI", "27": "MN", "28": "MS", "29": "MO", "30": "MT", "31": "NE", "32": "NV",
+    "33": "NH", "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND", "39": "OH",
+    "40": "OK", "41": "OR", "42": "PA", "44": "RI", "45": "SC", "46": "SD", "47": "TN",
+    "48": "TX", "49": "UT", "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
+    "56": "WY",
+}
+
+def _fips_to_state(fips: str) -> str:
+    return _FIPS_STATE_MAP.get(fips[:2], "") if fips else ""
+
 def get_state_from_zip(zip_code: str) -> Optional[str]:
     """Get state from ZIP using first 2 digits — works for ALL US ZIPs."""
     prefix2 = str(zip_code).strip().zfill(5)[:2]
