@@ -322,7 +322,10 @@ async def start_session(user_id: str, session_id: str) -> dict:
     reply = await _collect_final_text(user_id, session_id, init_msg)
 
     # Always show states coverage in welcome message
-    states_intro = ("Hi! I'm CoverWise — I'll find your best health plan in about 90 seconds. I support live plan analysis for 30 federal marketplace states (TX, FL, TN, GA, AZ, IL, OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). For the 20 states with their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, NJ, NM, PA, RI, VT, VA, DC, ID, OR), I'll redirect you to your state exchange. What's your ZIP code?")
+    states_intro = ("Hi! I'm CoverWise — I'll find your best health plan in about 90 seconds. "
+        "I support live plan analysis for 30 federal marketplace states (TX, FL, TN, GA, AZ, IL, OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). "
+        "For the 20 states with their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, NJ, NM, PA, RI, VT, VA, DC, ID, OR), I'll redirect you to your state exchange. "
+        "Please use the Quick Form tab on the right to fill in your details and get started!")
     return {"session_id": session_id, "message": states_intro, "status": "started"}
 
 
