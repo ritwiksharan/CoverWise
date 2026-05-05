@@ -6,7 +6,8 @@ CoverWise currently supports live plan analysis for 30 federal marketplace state
 
 **Live URL:** https://coverwise-272387131334.us-central1.run.app/
 
-**Business Document:** [BUSINESS.md](./BUSINESS.md)
+**Business Document:** [BUSINESS.md](./BUSINESS.md)  
+**Slides:** [slides-export.pdf](./slides-export.pdf)
 
 **Demo:** https://drive.google.com/file/d/1n7LG_cTQXodoPw2Q7d2OlBakv7nL0Nh6/view?usp=sharing
 
