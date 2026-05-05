@@ -53,7 +53,7 @@ Every `/api/analyze` runs **one LLM call** (`adk_orchestrator.py`). EV ranking i
 |---|---|---|---|
 | System: `ORCHESTRATOR_INSTRUCTION` (section order, pillar rules, ranking rule) | ~975 | $0.075/1M | $0.000073 |
 | User: full structured data doc — plan tables, 3 scenario tables, drug coverage per plan, doctor NPI data, subsidy, risk flags, Python-computed EV ranking | ~3,025 | $0.075/1M | $0.000227 |
-| Output: full markdown recommendation (Pre-Analysis + EV table + 5 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
+| Output: full markdown recommendation (Pre-Analysis + EV table + 4 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
 | **Phase 2 total** | **~5,500** | | **$0.000750** |
 
 **Total per `/api/analyze` (10 plans, 2 drugs, 1 doctor): ~5,500 tokens → $0.00075**
@@ -123,7 +123,7 @@ Every architectural decision was made to serve the user's core need (accurate, u
 
 ### 1. Google ADK Multi-Agent Framework with Parallel Waves (`adk_orchestrator.py`)
 **User need:** Fast results — the analysis touches 5+ APIs. A sequential pipeline would take 20–30 seconds.  
-**Solution:** Two `asyncio.gather` waves run 3 agents in parallel in Wave 1 (plan search, subsidy calc, doctor check) and 3 more in Wave 2 (drug coverage, risk flags, metal tier scoring). End-to-end latency: ~4–6 seconds.  
+**Solution:** Two `asyncio.gather` waves run in parallel — Wave 1 (plan search, subsidy calculation) and Wave 2 (drug coverage, doctor verification, market risks). End-to-end latency: ~10–15 seconds.  
 **Economic impact:** Parallel execution means the Cloud Run instance handles the request faster, reducing CPU-seconds billed and per-request infrastructure cost.
 
 ### 2. Tool Use / Function Calling Against Live Government APIs (`tools/gov_apis.py`)
@@ -149,6 +149,16 @@ Every architectural decision was made to serve the user's core need (accurate, u
 ### 6. Freemium Tier Enforcement in the Backend
 **Why not just frontend gating?** Any user could call the API directly. The backend checks `is_premium` on every request and enforces plan count (3 vs 10) and drug/doctor limits server-side, making the upgrade path monetizable without complex auth infrastructure.
 
+### 7. RAG Formulary Store (`rag/formulary_store.py`)
+**User need:** Drug tier data from the CMS API is slow and rate-limited. For high-volume issuers, repeated formulary lookups become the bottleneck.  
+**Solution:** At startup, the backend seeds a ChromaDB RAG index from each insurer's Machine-Readable Formulary (MRF) JSON — starting with BCBS IL (issuer 36096), the highest-volume issuer with a working MRF endpoint. Drug tier lookups are served from the index before falling back to the live CMS API.  
+**Economic impact:** Cuts CMS formulary API calls for common issuers to near-zero, reducing latency and eliminating rate-limit risk at scale.
+
+### 8. Conversational Intake Agent (`agents/intake_agent.py`)
+**User need:** The analysis form requires ZIP, age, income, household size, medications, and doctors — which is a lot to ask upfront. Users unfamiliar with health insurance terminology may not know what "utilization level" means or which medications to list.  
+**Solution:** A Google ADK conversational intake agent (`POST /api/intake/start` + `POST /api/intake/message`) collects the profile through a natural-language conversation before handing off to the main analysis pipeline.  
+**Economic impact:** Reduces form abandonment and bad-input retries, which waste LLM synthesis calls at $0.00075 each.
+
 ---
 
 ## Competitive Landscape
@@ -169,6 +179,6 @@ Every architectural decision was made to serve the user's core need (accurate, u
 | Risk | Mitigation |
 |---|---|
 | CMS API availability / rate limits | TTL cache absorbs ~75% of calls; graceful degradation returns data-only results without synthesis |
-| LLM cost spike at scale | Gemini 2.0 Flash is 10× cheaper than GPT-4o at equivalent quality for structured summarization; hard rate limits per user tier |
+| LLM cost spike at scale | Gemini 2.5 Flash pricing; hard per-user-tier rate limits in the API layer |
 | "Not a licensed insurance broker" liability | Explicit disclaimer on every output: "This is informational only. CoverWise is not a licensed insurance broker. Verify all plan details on healthcare.gov." |
 | Open enrollment seasonality | Year-round advisor and mid-year SEP guidance smooth monthly revenue; plan for 70% of annual sign-ups in Nov–Jan |
