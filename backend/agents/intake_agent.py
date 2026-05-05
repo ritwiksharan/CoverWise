@@ -388,12 +388,6 @@ async def _collect_final_text(user_id: str, session_id: str, msg: "Content") -> 
 # ── FALLBACKS (when ADK not installed) ───────────────────────────────────────
 
 def _fallback_start(user_id: str) -> str:
-    memories = get_user_memories(user_id)
-    if memories:
-        return (
-            "Welcome back! I'll pre-fill your profile from last time. "
-            "Please confirm or update your details in the form below."
-        )
     return (
         "Hi! I'm CoverWise — I'll find your best health plan in about 90 seconds. "
         "I support live plan analysis for 30 federal marketplace states (TX, FL, TN, GA, AZ, IL, OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). "
