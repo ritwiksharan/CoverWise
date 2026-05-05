@@ -2,6 +2,8 @@
 
 An agentic AI system that helps Americans find their optimal ACA health insurance plan by analyzing income, medications, and doctors against live government data — personalized, unbiased, and free.
 
+CoverWise currently supports live plan analysis for 30 federal marketplace states including Texas, Florida, Tennessee, Georgia, Arizona, Illinois, Ohio, Michigan, North Carolina, and more. For the remaining 20 states and DC that operate their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, NJ, NM, PA, RI, VT, VA, DC, ID, OR), CoverWise automatically detects the state from the ZIP code and redirects users directly to their state exchange with a direct link.
+
 **Live URL:** https://coverwise-272387131334.us-central1.run.app/
 
 **Business Document:** [BUSINESS.md](./BUSINESS.md)
