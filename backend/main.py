@@ -130,6 +130,24 @@ class PlanProvidersRequest(BaseModel):
 @app.post("/api/analyze")
 async def analyze(profile: UserProfile):
     try:
+        # Check state exchange FIRST — before any CMS calls
+        from tools.gov_apis import get_state_exchange
+        zip_code = str(profile.zip_code).strip().zfill(5)
+        state_ex = get_state_exchange(zip_code)
+        if state_ex:
+            return {
+                "route": "state_exchange",
+                "state_exchange": {
+                    "state": state_ex["state"],
+                    "exchange_name": state_ex["exchange_name"],
+                    "exchange_url": state_ex["exchange_url"],
+                    "message": f"Your ZIP is in {state_ex['state']}, which runs its own exchange.",
+                },
+                "plans": [], "subsidy": {}, "drugs": {}, "doctors": {},
+                "risks": {"flags": [f"📍 {state_ex['state']} uses {state_ex['exchange_name']} — visit {state_ex['exchange_url']}"]},
+                "cache_stats": {}, "fpl_percentage": 0,
+                "recommendation": f"Your state ({state_ex['state']}) runs {state_ex['exchange_name']}. Visit {state_ex['exchange_url']} to compare plans and apply for subsidies.",
+            }
         result = await orchestrator.analyze(profile.dict())
         return result
     except Exception as e:
