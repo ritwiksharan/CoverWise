@@ -327,8 +327,10 @@ async def start_session(user_id: str, session_id: str) -> dict:
         "OH, MI, NC, SC, AL, MS, AR, OK, KS, NE, IA, WI, MO, LA, SD, ND, MT, WY, UT, HI, AK, WV, NH, DE). "
         "For the 20 states with their own exchanges (NY, CA, WA, CO, CT, KY, ME, MD, MA, MN, NV, "
         "NJ, NM, PA, RI, VT, VA, DC, ID, OR), I will redirect you to your state exchange. "
-        "Please use the Quick Form tab to fill in your details and get started!")
-    return {"session_id": session_id, "message": states_intro, "status": "started"}
+        "Please use the Quick Form tab on the right to fill in your details and get started!")
+    # Override ADK reply with our hardcoded states message
+    reply = states_intro
+    return {"session_id": session_id, "message": reply, "status": "started"}
 
 
 async def send_message(user_id: str, session_id: str, message: str) -> dict:
