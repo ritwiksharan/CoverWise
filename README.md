@@ -190,10 +190,14 @@ Runs the full multi-agent pipeline. Returns ranked plans, subsidy figures, drug 
 | `drugs` | string[] | Medication names — e.g. `["Ozempic", "Metformin"]` (optional) |
 | `doctors` | string[] | Doctor names to keep (optional) |
 | `utilization` | string | `rarely` / `sometimes` / `frequently` / `chronic` |
+| `tobacco_use` | bool | Tobacco surcharge flag (default false) |
 | `is_premium` | bool | Free (3 plans, 1 drug, 1 doctor) vs Premium (10 plans, unlimited) |
 
 ### Year-Round Chat Advisor (`POST /api/chat`)
 Gemini 2.5 Flash chat with full plan/drug/doctor context injected from mem0 memory. Ask follow-up questions months after enrollment.
+
+### Conversational Intake (`POST /api/intake/start` · `POST /api/intake/message`)
+Google ADK-powered conversational intake agent. Collects ZIP, age, income, household size, medications, and doctors through a natural-language conversation before handing off to the analysis pipeline.
 
 ### Doctor Lookup (`POST /api/doctor-search`)
 NPPES NPI Registry lookup with MIPS quality score. Returns NPI, specialty, city/state, phone, credential, active status.
@@ -206,6 +210,12 @@ Estimates patient out-of-pocket cost for 20 common procedures across the user's 
 
 ### Hospital Network Check (`POST /api/hospital-search`)
 Finds hospitals by name via NPPES and checks CMS Marketplace network status.
+
+### Nearby Hospitals (`GET /api/hospitals/nearby/{zip_code}`)
+Returns hospitals near a ZIP code without requiring a name search. Checks network status against up to 3 plan IDs.
+
+### Plan Providers (`POST /api/plan-providers`)
+Returns NPPES providers for a given plan ID and specialty near a ZIP code, with a link to the insurer's provider directory for network verification.
 
 ### Health Insurance Q&A (`POST /api/insurance-qa`)
 ADK-powered agent. Restricted to health insurance topics via few-shot prompting. Calls live government APIs at runtime based on question intent.
@@ -248,7 +258,7 @@ Every `/api/analyze` runs **one LLM call**. EV ranking is computed instantly in 
 |---|---|---|---|
 | System: `ORCHESTRATOR_INSTRUCTION` (section order, pillar rules, ranking rule) | ~975 | $0.075/1M | $0.000073 |
 | User: full structured data doc — plan tables, 3 scenario tables, drug coverage per plan, doctor NPI data, subsidy, risk flags, Python EV ranking | ~3,025 | $0.075/1M | $0.000227 |
-| Output: full markdown recommendation (Pre-Analysis + EV table + 5 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
+| Output: full markdown recommendation (Pre-Analysis + EV table + 4 pillars + Summary) | ~1,500 | $0.300/1M | $0.000450 |
 | **Phase 2 total** | **~5,500** | | **$0.000750** |
 
 **Total per `/api/analyze` (10 plans, 2 drugs, 1 doctor): ~5,500 tokens → $0.00075**
@@ -428,7 +438,9 @@ Reduces external API calls by ~75% for overlapping ZIP codes in a session.
 | AI / LLM | Gemini 2.5 Flash via Vertex AI |
 | Agent framework | Google ADK (`google-adk`) |
 | Memory | mem0 + ChromaDB |
+| Formulary RAG | `rag/formulary_store.py` — seeded at startup from insurer MRF JSON |
 | Caching | In-process TTL dict cache |
+| Auth | `auth/router.py` + `auth/db.py` |
 | Frontend | Vanilla JS + HTML/CSS (no framework) |
 | Deployment | Google Cloud Run (4 GiB, 2 vCPU) |
 
@@ -524,11 +536,17 @@ CoverWise/
 │   │   └── gov_apis.py            # All government API calls + TTL caching
 │   ├── cache/
 │   │   └── cache_manager.py       # TTL-based in-memory cache
-│   └── memory/
-│       └── mem0_client.py         # Persistent user memory (mem0 + ChromaDB)
+│   ├── memory/
+│   │   └── mem0_client.py         # Persistent user memory (mem0 + ChromaDB)
+│   ├── rag/
+│   │   └── formulary_store.py     # RAG formulary index seeded from insurer MRF JSON at startup
+│   └── auth/
+│       ├── router.py              # Auth endpoints (/api/auth/*)
+│       └── db.py                  # Auth database
 ├── frontend/
 │   └── index.html                 # Single-page app (vanilla JS, no framework)
 ├── Dockerfile                     # Cloud Run container (ChromaDB ONNX model pre-baked)
 ├── BUSINESS.md                    # Business one-pager
+├── OVERVIEW.md                    # Combined project + business overview
 └── README.md
 ```
