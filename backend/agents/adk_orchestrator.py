@@ -10,7 +10,12 @@ Gemini can apply the 4-pillar analysis, scenario ranking, and Markdown tables co
 import os
 import asyncio
 import traceback
+import time
 from typing import List, Dict, Any, Optional
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import mlflow_tracker
 
 try:
     from google.adk.agents import Agent
@@ -972,25 +977,33 @@ class ADKOrchestrator:
                 "recommendation": f"Your state ({state_ex['state']}) runs its own health insurance exchange called {state_ex['exchange_name']}. Visit {state_ex['exchange_url']} to compare plans and apply for subsidies with your state's marketplace.",
             }
 
-        # ── Phase 1: data collection ─────────────────────────────────────────
-        data = await _collect_analysis_data(profile)
-        print(f"[orchestrator] Phase 1 complete — {len(data.get('plans',[]))} plans collected")
+        with mlflow_tracker.analysis_run(profile) as _mlrun:
+            # ── Phase 1: data collection ─────────────────────────────────────
+            _t0 = time.time()
+            data = await _collect_analysis_data(profile)
+            mlflow_tracker.log_phase1(_mlrun, data, time.time() - _t0)
+            print(f"[orchestrator] Phase 1 complete — {len(data.get('plans',[]))} plans collected")
 
-        # ── Phase 1.5: LLM Ranking Agent ─────────────────────────────────────
-        ranking = await _rank_plans_with_llm(data, profile)
-        if ranking:
-            data["llm_ranking"] = ranking
-            print(f"[orchestrator] Phase 1.5 complete — LLM ranking: {ranking.get('top_recommendation',{}).get('plan_name','n/a')}")
-        else:
-            print("[orchestrator] Phase 1.5 skipped (Vertex AI unavailable or ranking failed)")
+            # ── Phase 1.5: LLM Ranking Agent ─────────────────────────────────
+            _t1 = time.time()
+            ranking = await _rank_plans_with_llm(data, profile)
+            mlflow_tracker.log_phase15(_mlrun, ranking, time.time() - _t1)
+            if ranking:
+                data["llm_ranking"] = ranking
+                print(f"[orchestrator] Phase 1.5 complete — LLM ranking: {ranking.get('top_recommendation',{}).get('plan_name','n/a')}")
+            else:
+                print("[orchestrator] Phase 1.5 skipped (Vertex AI unavailable or ranking failed)")
 
-        # ── Phase 2: synthesis ───────────────────────────────────────────────
-        synthesis_prompt = _build_synthesis_prompt(profile, data, ranking=ranking or None)
-        print(f"[orchestrator] synthesis prompt built ({len(synthesis_prompt)} chars) — calling Gemini")
-        recommendation = await _synthesize_with_gemini(synthesis_prompt, data.get("is_premium", False))
-        print(f"[orchestrator] recommendation received ({len(recommendation)} chars)")
+            # ── Phase 2: synthesis ────────────────────────────────────────────
+            synthesis_prompt = _build_synthesis_prompt(profile, data, ranking=ranking or None)
+            print(f"[orchestrator] synthesis prompt built ({len(synthesis_prompt)} chars) — calling Gemini")
+            _t2 = time.time()
+            recommendation = await _synthesize_with_gemini(synthesis_prompt, data.get("is_premium", False))
+            mlflow_tracker.log_phase2(_mlrun, recommendation, synthesis_prompt, time.time() - _t2)
+            mlflow_tracker.log_cache(_mlrun, data.get("cache_stats", {}))
+            print(f"[orchestrator] recommendation received ({len(recommendation)} chars)")
 
-        data["recommendation"] = recommendation
+            data["recommendation"] = recommendation
 
         # Store in ADK session for chat follow-ups
         if ADK_AVAILABLE and self._session_service:

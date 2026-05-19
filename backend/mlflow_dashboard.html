@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoverWise — MLflow Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #07090f; --bg2: #0d1117; --bg3: #161b22;
+    --border: #21262d; --border2: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --text3: #484f58;
+    --blue: #388bfd; --blue2: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --purple: #bc8cff; --orange: #ffa657;
+    --radius: 8px; --radius-lg: 12px;
+    --mono: 'SFMono-Regular', Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--sans); background:var(--bg); color:var(--text);
+    min-height:100vh; font-size:14px; }
+
+  /* ── LAYOUT ── */
+  .layout { display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
+  .sidebar { background:var(--bg2); border-right:1px solid var(--border);
+    padding:0; position:sticky; top:0; height:100vh; overflow-y:auto;
+    display:flex; flex-direction:column; }
+  .main { overflow:hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar-head { padding:20px; border-bottom:1px solid var(--border); }
+  .sidebar-logo { font-size:15px; font-weight:700; color:var(--text); }
+  .sidebar-sub  { font-size:11px; color:var(--text3); margin-top:3px;
+    font-family:var(--mono); }
+  .sidebar-section { padding:16px 12px 8px; font-size:11px; font-family:var(--mono);
+    color:var(--text3); text-transform:uppercase; letter-spacing:.6px; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-radius:var(--radius); margin:2px 8px; cursor:pointer;
+    font-size:13px; color:var(--text2); transition:background .15s,color .15s; }
+  .nav-item:hover { background:var(--bg3); color:var(--text); }
+  .nav-item.active { background:rgba(56,139,253,.15); color:var(--blue2);
+    border:1px solid rgba(56,139,253,.2); }
+  .nav-icon { width:16px; text-align:center; font-size:13px; }
+
+  .sidebar-runs { flex:1; overflow-y:auto; padding:8px; }
+  .run-item { padding:10px 12px; border-radius:var(--radius); cursor:pointer;
+    border:1px solid transparent; margin-bottom:4px; transition:background .15s; }
+  .run-item:hover { background:var(--bg3); }
+  .run-item.active { background:rgba(56,139,253,.1); border-color:rgba(56,139,253,.25); }
+  .run-item-id { font-family:var(--mono); font-size:11px; color:var(--text3); }
+  .run-item-meta { font-size:12px; color:var(--text2); margin-top:3px; }
+  .run-item-time { font-size:11px; color:var(--text3); margin-top:2px; }
+  .status-dot { display:inline-block; width:6px; height:6px; border-radius:50%;
+    margin-right:5px; }
+  .dot-FINISHED { background:var(--green); }
+  .dot-RUNNING  { background:var(--blue); }
+  .dot-FAILED   { background:var(--red); }
+
+  /* ── TOPBAR ── */
+  .topbar { display:flex; align-items:center; justify-content:space-between;
+    padding:14px 24px; border-bottom:1px solid var(--border);
+    background:var(--bg2); position:sticky; top:0; z-index:10; }
+  .topbar-title { font-size:15px; font-weight:600; }
+  .topbar-actions { display:flex; gap:10px; align-items:center; }
+  .btn { padding:6px 14px; border-radius:var(--radius); border:1px solid var(--border2);
+    background:var(--bg3); color:var(--text2); font-size:13px; cursor:pointer;
+    font-family:var(--sans); transition:background .15s,color .15s; }
+  .btn:hover { background:var(--border2); color:var(--text); }
+  .btn.primary { background:var(--blue); border-color:var(--blue);
+    color:#fff; font-weight:500; }
+  .btn.primary:hover { opacity:.85; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ── CONTENT AREAS ── */
+  .content { padding:24px; }
+  .section { display:none; }
+  .section.active { display:block; }
+
+  /* ── STAT CARDS ── */
+  .stat-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px;
+    margin-bottom:24px; }
+  .stat-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:18px; }
+  .stat-label { font-size:11px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+  .stat-value { font-size:24px; font-weight:700; line-height:1; }
+  .stat-sub { font-size:11px; color:var(--text3); margin-top:6px; }
+  .c-blue   { color:var(--blue2); }
+  .c-green  { color:var(--green); }
+  .c-purple { color:var(--purple); }
+  .c-orange { color:var(--orange); }
+  .c-yellow { color:var(--yellow); }
+
+  /* ── CHARTS ── */
+  .chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px;
+    margin-bottom:24px; }
+  .chart-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:20px; }
+  .chart-title { font-size:13px; font-weight:600; margin-bottom:4px; }
+  .chart-sub { font-size:11px; color:var(--text3); margin-bottom:16px; }
+  .chart-wrap { position:relative; height:200px; }
+
+  /* ── TABLE ── */
+  .table-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); overflow:hidden; margin-bottom:24px; }
+  .table-head { padding:14px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; }
+  .table-head-title { font-size:14px; font-weight:600; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { padding:9px 14px; font-size:10px; font-family:var(--mono);
+    color:var(--text3); text-transform:uppercase; letter-spacing:.4px;
+    text-align:left; border-bottom:1px solid var(--border);
+    background:var(--bg3); white-space:nowrap; }
+  td { padding:10px 14px; border-bottom:1px solid var(--border);
+    vertical-align:middle; white-space:nowrap; }
+  tr:last-child td { border-bottom:none; }
+  tr.clickable:hover td { background:rgba(255,255,255,.025); cursor:pointer; }
+  tr.selected td { background:rgba(56,139,253,.07); }
+
+  .badge { display:inline-block; font-size:10px; font-family:var(--mono);
+    padding:2px 8px; border-radius:10px; border:1px solid; }
+  .badge-green  { color:var(--green);  border-color:rgba(63,185,80,.3);
+    background:rgba(63,185,80,.1); }
+  .badge-blue   { color:var(--blue2);  border-color:rgba(56,139,253,.3);
+    background:rgba(56,139,253,.1); }
+  .badge-red    { color:var(--red);    border-color:rgba(248,81,73,.3);
+    background:rgba(248,81,73,.1); }
+  .badge-purple { color:var(--purple); border-color:rgba(188,140,255,.3);
+    background:rgba(188,140,255,.1); }
+
+  .mono { font-family:var(--mono); }
+  .dim  { color:var(--text3); }
+
+  /* ── LAT BAR ── */
+  .lat-bar { display:flex; gap:2px; align-items:center; }
+  .lb { height:5px; border-radius:2px; min-width:2px; }
+  .lb-1  { background:var(--blue2); }
+  .lb-15 { background:var(--purple); }
+  .lb-2  { background:var(--green); }
+  .lat-total { font-family:var(--mono); font-size:11px; color:var(--text3);
+    margin-left:6px; }
+
+  /* ── RUN DETAIL ── */
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px;
+    margin-bottom:20px; }
+  .detail-card { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:18px; }
+  .detail-title { font-size:12px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; letter-spacing:.5px; margin-bottom:14px;
+    padding-bottom:10px; border-bottom:1px solid var(--border); }
+  .kv-row { display:flex; justify-content:space-between; align-items:center;
+    padding:5px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .kv-row:last-child { border-bottom:none; }
+  .kv-key { color:var(--text3); font-family:var(--mono); }
+  .kv-val { color:var(--text); font-weight:500; text-align:right;
+    max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+  .kv-val.green  { color:var(--green); }
+  .kv-val.blue   { color:var(--blue2); }
+  .kv-val.purple { color:var(--purple); }
+  .kv-val.orange { color:var(--orange); }
+
+  .artifact-tabs { display:flex; gap:0; border:1px solid var(--border);
+    border-radius:var(--radius); overflow:hidden; margin-bottom:14px; }
+  .artifact-tab { padding:7px 16px; font-size:12px; font-family:var(--mono);
+    cursor:pointer; border:none; background:transparent; color:var(--text2);
+    transition:background .15s; }
+  .artifact-tab.active { background:rgba(56,139,253,.15); color:var(--blue2); }
+  .artifact-tab:hover:not(.active) { background:var(--bg3); }
+
+  .artifact-viewer { background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px; font-family:var(--mono);
+    font-size:12px; line-height:1.7; color:var(--text2); overflow-x:auto;
+    white-space:pre-wrap; max-height:480px; overflow-y:auto; }
+
+  .metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+    margin-bottom:16px; }
+  .metric-pill { background:var(--bg3); border:1px solid var(--border);
+    border-radius:var(--radius); padding:12px; }
+  .metric-pill-label { font-size:10px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; margin-bottom:6px; }
+  .metric-pill-val { font-size:18px; font-weight:700; }
+
+  /* ── EMPTY / LOADING ── */
+  .empty { text-align:center; padding:60px; color:var(--text3); font-size:13px; }
+  .spinner-wrap { text-align:center; padding:60px; }
+  .spinner { width:28px; height:28px; border:2px solid var(--border2);
+    border-top-color:var(--blue); border-radius:50%;
+    animation:spin .7s linear infinite; margin:0 auto 12px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .pill-lat { display:inline-flex; gap:8px; font-size:11px;
+    font-family:var(--mono); }
+  .pill-lat span { padding:2px 8px; border-radius:10px; }
+  .p1-pill  { background:rgba(56,139,253,.12);  color:var(--blue2); }
+  .p15-pill { background:rgba(188,140,255,.12); color:var(--purple); }
+  .p2-pill  { background:rgba(63,185,80,.12);   color:var(--green); }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-logo">CoverWise MLflow</div>
+      <div class="sidebar-sub">experiment tracker</div>
+    </div>
+
+    <div style="padding:8px">
+      <div class="nav-item active" id="navOverview" onclick="showSection('overview')">
+        <span class="nav-icon">&#9632;</span> Overview
+      </div>
+      <div class="nav-item" id="navRuns" onclick="showSection('runs')">
+        <span class="nav-icon">&#9776;</span> All Runs
+      </div>
+      <div class="nav-item" id="navCharts" onclick="showSection('charts')">
+        <span class="nav-icon">&#9638;</span> Charts
+      </div>
+    </div>
+
+    <div class="sidebar-section">Recent Runs</div>
+    <div class="sidebar-runs" id="sidebarRuns">
+      <div class="empty" style="padding:20px;font-size:12px">Loading...</div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <span class="topbar-title" id="topbarTitle">Overview</span>
+        <span style="font-size:12px;color:var(--text3);margin-left:12px;font-family:var(--mono)"
+          id="topbarExperiment">coverwise-recommendations</span>
+      </div>
+      <div class="topbar-actions">
+        <span style="font-size:12px;color:var(--text3);font-family:var(--mono)"
+          id="lastRefreshed"></span>
+        <button class="btn primary" id="btnRefresh" onclick="loadAll()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- OVERVIEW -->
+      <div class="section active" id="sectionOverview">
+        <div class="stat-grid" id="statGrid">
+          <div class="stat-card"><div class="stat-label">Total Runs</div>
+            <div class="stat-value c-blue" id="sTotalRuns">—</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Monthly APTC</div>
+            <div class="stat-value c-green" id="sAPTC">—</div>
+            <div class="stat-sub">avg subsidy/mo</div></div>
+          <div class="stat-card"><div class="stat-label">Avg FPL</div>
+            <div class="stat-value c-orange" id="sFPL">—</div>
+            <div class="stat-sub">% federal poverty level</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Total Latency</div>
+            <div class="stat-value c-purple" id="sLatency">—</div>
+            <div class="stat-sub">p1 + ranking + gemini</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Plans Found</div>
+            <div class="stat-value c-yellow" id="sPlans">—</div>
+            <div class="stat-sub">from CMS marketplace</div></div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title">Latency per Run</div>
+            <div class="chart-sub">Phase 1 (data) · Phase 1.5 (ranking) · Phase 2 (Gemini) — seconds</div>
+            <div class="chart-wrap"><canvas id="chartLatency"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Monthly APTC per Run</div>
+            <div class="chart-sub">CMS-calculated subsidy in USD</div>
+            <div class="chart-wrap"><canvas id="chartAPTC"></canvas></div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title">FPL % Distribution</div>
+            <div class="chart-sub">Federal poverty level across runs</div>
+            <div class="chart-wrap"><canvas id="chartFPL"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Plans Found per Run</div>
+            <div class="chart-sub">CMS marketplace plan count</div>
+            <div class="chart-wrap"><canvas id="chartPlans"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ALL RUNS -->
+      <div class="section" id="sectionRuns">
+        <div class="table-card">
+          <div class="table-head">
+            <div class="table-head-title">All Runs</div>
+            <span style="font-size:12px;color:var(--text3)" id="runCount"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Status</th><th>Run ID</th><th>Started</th>
+                <th>ZIP</th><th>Age</th><th>Income</th><th>Utilization</th>
+                <th>FPL %</th><th>APTC /mo</th><th>Plans</th><th>HSA Plans</th>
+                <th>CSR</th><th>Top Plan</th><th>EV Score</th>
+                <th>Phase 1</th><th>Ranking</th><th>Gemini</th><th>Total</th>
+                <th>Prompt chars</th><th>Rec chars</th>
+              </tr></thead>
+              <tbody id="runsTableBody">
+                <tr><td colspan="20" class="empty">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHARTS -->
+      <div class="section" id="sectionCharts">
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title">Phase Latency Breakdown</div>
+            <div class="chart-sub">Stacked: data collection / LLM ranking / Gemini synthesis</div>
+            <div class="chart-wrap"><canvas id="chartStacked"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Income vs APTC</div>
+            <div class="chart-sub">Scatter — income on x-axis, monthly APTC on y-axis</div>
+            <div class="chart-wrap"><canvas id="chartScatter"></canvas></div>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <div class="chart-title">CSR Eligibility</div>
+            <div class="chart-sub">Runs where cost-sharing reduction applied</div>
+            <div class="chart-wrap"><canvas id="chartCSR"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Utilization Mix</div>
+            <div class="chart-sub">Healthcare usage level across all runs</div>
+            <div class="chart-wrap"><canvas id="chartUtil"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RUN DETAIL (shown when a run is clicked) -->
+      <div class="section" id="sectionDetail">
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+          <button class="btn" onclick="showSection('runs')">Back to runs</button>
+          <span class="mono dim" id="detailRunId" style="font-size:12px"></span>
+          <span class="badge badge-green" id="detailStatus"></span>
+        </div>
+
+        <div class="detail-grid">
+          <!-- Params -->
+          <div class="detail-card">
+            <div class="detail-title">User Profile (params)</div>
+            <div id="detailParams"></div>
+          </div>
+          <!-- Metrics -->
+          <div class="detail-card">
+            <div class="detail-title">Metrics</div>
+            <div class="metric-grid" id="detailMetricPills"></div>
+            <div id="detailMetrics"></div>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <!-- Tags -->
+          <div class="detail-card">
+            <div class="detail-title">Tags</div>
+            <div id="detailTags"></div>
+          </div>
+          <!-- Latency breakdown -->
+          <div class="detail-card">
+            <div class="detail-title">Latency Breakdown</div>
+            <div style="margin-bottom:14px">
+              <div class="pill-lat" id="detailLatPills"></div>
+            </div>
+            <div class="chart-wrap" style="height:140px">
+              <canvas id="chartDetailLat"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Artifacts -->
+        <div class="detail-card" style="margin-bottom:20px">
+          <div class="detail-title">Artifacts</div>
+          <div class="artifact-tabs" id="artifactTabs"></div>
+          <div class="artifact-viewer" id="artifactViewer">Select an artifact above.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+let allRuns = [];
+let chartLatency, chartAPTC, chartFPL, chartPlans, chartStacked, chartScatter, chartCSR, chartUtil, chartDetailLat;
+let activeRunId = null;
+let artifactCache = {};
+
+const CHART_DEFAULTS = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
+    y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
+  }
+};
+
+// ── SECTION NAV ─────────────────────────────────────────────────────────────
+function showSection(name) {
+  ['overview','runs','charts','detail'].forEach(s => {
+    document.getElementById('section' + s.charAt(0).toUpperCase() + s.slice(1))
+      .classList.toggle('active', s === name);
+  });
+  ['navOverview','navRuns','navCharts'].forEach(id => {
+    document.getElementById(id).classList.remove('active');
+  });
+  const navMap = { overview:'navOverview', runs:'navRuns', charts:'navCharts', detail:'navRuns' };
+  if (navMap[name]) document.getElementById(navMap[name]).classList.add('active');
+  const titles = { overview:'Overview', runs:'All Runs', charts:'Charts', detail:'Run Detail' };
+  document.getElementById('topbarTitle').textContent = titles[name] || name;
+}
+
+// ── LOAD ALL ─────────────────────────────────────────────────────────────────
+async function loadAll() {
+  document.getElementById('btnRefresh').disabled = true;
+  document.getElementById('btnRefresh').textContent = 'Loading...';
+  try {
+    const res  = await fetch('/api/mlflow/runs?limit=100');
+    const data = await res.json();
+    allRuns = data.runs || [];
+    renderSidebar();
+    renderStats();
+    renderCharts();
+    renderRunsTable();
+    document.getElementById('lastRefreshed').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.error(e);
+  } finally {
+    document.getElementById('btnRefresh').disabled = false;
+    document.getElementById('btnRefresh').textContent = 'Refresh';
+  }
+}
+
+// ── SIDEBAR ──────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const el = document.getElementById('sidebarRuns');
+  if (!allRuns.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px;font-size:12px">No runs yet.</div>';
+    return;
+  }
+  el.innerHTML = allRuns.slice(0, 30).map(r => {
+    const p = r.params || {};
+    const status = r.status || 'FINISHED';
+    const time = r.start_time ? new Date(r.start_time).toLocaleString('en-US',
+      {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+    return `<div class="run-item ${activeRunId === r.run_id ? 'active' : ''}"
+        onclick="openRunDetail('${r.run_id}')">
+      <div class="run-item-id">
+        <span class="status-dot dot-${status}"></span>${r.run_id.slice(0,8)}
+      </div>
+      <div class="run-item-meta">ZIP ${p.zip_code || '—'} · Age ${p.age || '—'} · $${parseInt(p.income||0).toLocaleString()}</div>
+      <div class="run-item-time">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── STATS ────────────────────────────────────────────────────────────────────
+function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function fmtS(v) { return v ? v.toFixed(1) + 's' : '—'; }
+
+function renderStats() {
+  document.getElementById('sTotalRuns').textContent = allRuns.length;
+  document.getElementById('runCount').textContent = allRuns.length + ' runs';
+
+  const aptcVals = allRuns.map(r => parseFloat(r.metrics?.monthly_aptc||0)).filter(v=>v>0);
+  document.getElementById('sAPTC').textContent =
+    aptcVals.length ? '$' + avg(aptcVals).toFixed(0) : '—';
+
+  const fplVals = allRuns.map(r => parseFloat(r.metrics?.fpl_percentage||0)).filter(v=>v>0);
+  document.getElementById('sFPL').textContent =
+    fplVals.length ? avg(fplVals).toFixed(1) + '%' : '—';
+
+  const totLat = allRuns.map(r => {
+    const m = r.metrics || {};
+    return (parseFloat(m.phase1_latency_s||0) +
+            parseFloat(m.phase15_latency_s||0) +
+            parseFloat(m.phase2_latency_s||0));
+  }).filter(v=>v>0);
+  document.getElementById('sLatency').textContent = totLat.length ? fmtS(avg(totLat)) : '—';
+
+  const planVals = allRuns.map(r => parseFloat(r.metrics?.num_plans||0)).filter(v=>v>0);
+  document.getElementById('sPlans').textContent =
+    planVals.length ? avg(planVals).toFixed(1) : '—';
+}
+
+// ── CHARTS ───────────────────────────────────────────────────────────────────
+function destroyChart(ref) { try { if (ref) ref.destroy(); } catch(_){} }
+
+function renderCharts() {
+  const labels = allRuns.map((r,i) => r.run_id.slice(0,6));
+  const p1  = allRuns.map(r => parseFloat(r.metrics?.phase1_latency_s||0));
+  const p15 = allRuns.map(r => parseFloat(r.metrics?.phase15_latency_s||0));
+  const p2  = allRuns.map(r => parseFloat(r.metrics?.phase2_latency_s||0));
+  const aptc = allRuns.map(r => parseFloat(r.metrics?.monthly_aptc||0));
+  const fpl  = allRuns.map(r => parseFloat(r.metrics?.fpl_percentage||0));
+  const plans = allRuns.map(r => parseFloat(r.metrics?.num_plans||0));
+
+  // Latency stacked (overview)
+  destroyChart(chartLatency);
+  chartLatency = new Chart(document.getElementById('chartLatency'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Data (P1)', data: p1,  backgroundColor: 'rgba(56,139,253,.7)',  stack:'lat' },
+        { label: 'Ranking',   data: p15, backgroundColor: 'rgba(188,140,255,.7)', stack:'lat' },
+        { label: 'Gemini',    data: p2,  backgroundColor: 'rgba(63,185,80,.7)',   stack:'lat' },
+      ]
+    },
+    options: { ...CHART_DEFAULTS, plugins: {
+      legend: { display: true, labels: { color: '#8b949e', boxWidth: 10, font: { size: 11 } } }
+    }, scales: {
+      x: { stacked:true, grid:{color:'#21262d'}, ticks:{color:'#8b949e',font:{size:10}} },
+      y: { stacked:true, grid:{color:'#21262d'}, ticks:{color:'#8b949e',font:{size:10}}, title:{display:true,text:'seconds',color:'#484f58',font:{size:10}} }
+    }}
+  });
+
+  // APTC line
+  destroyChart(chartAPTC);
+  chartAPTC = new Chart(document.getElementById('chartAPTC'), {
+    type: 'line',
+    data: { labels, datasets: [{ data: aptc, borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.1)', tension: .3, fill: true, pointRadius: 3 }] },
+    options: { ...CHART_DEFAULTS }
+  });
+
+  // FPL bar
+  destroyChart(chartFPL);
+  chartFPL = new Chart(document.getElementById('chartFPL'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: fpl, backgroundColor: 'rgba(255,166,87,.6)', borderRadius: 4 }] },
+    options: { ...CHART_DEFAULTS }
+  });
+
+  // Plans bar
+  destroyChart(chartPlans);
+  chartPlans = new Chart(document.getElementById('chartPlans'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: plans, backgroundColor: 'rgba(188,140,255,.6)', borderRadius: 4 }] },
+    options: { ...CHART_DEFAULTS }
+  });
+
+  // ── Charts tab ──────────────────────────────────────────────────────────
+  // Stacked latency
+  destroyChart(chartStacked);
+  chartStacked = new Chart(document.getElementById('chartStacked'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'Data collection', data:p1,  backgroundColor:'rgba(56,139,253,.75)', stack:'s' },
+        { label:'LLM ranking',     data:p15, backgroundColor:'rgba(188,140,255,.75)', stack:'s' },
+        { label:'Gemini synthesis',data:p2,  backgroundColor:'rgba(63,185,80,.75)', stack:'s' },
+      ]
+    },
+    options: { ...CHART_DEFAULTS, plugins: {
+      legend: { display:true, labels:{ color:'#8b949e', boxWidth:10, font:{size:11} } }
+    }, scales: {
+      x:{stacked:true,grid:{color:'#21262d'},ticks:{color:'#8b949e',font:{size:10}}},
+      y:{stacked:true,grid:{color:'#21262d'},ticks:{color:'#8b949e',font:{size:10}}}
+    }}
+  });
+
+  // Income vs APTC scatter
+  const scatterData = allRuns.map(r => ({
+    x: parseFloat(r.params?.income || 0),
+    y: parseFloat(r.metrics?.monthly_aptc || 0)
+  })).filter(d => d.x > 0);
+  destroyChart(chartScatter);
+  chartScatter = new Chart(document.getElementById('chartScatter'), {
+    type: 'scatter',
+    data: { datasets: [{ data: scatterData, backgroundColor: 'rgba(56,139,253,.7)', pointRadius: 5 }] },
+    options: { ...CHART_DEFAULTS, scales: {
+      x:{ grid:{color:'#21262d'}, ticks:{color:'#8b949e',font:{size:10}}, title:{display:true,text:'Income ($)',color:'#484f58',font:{size:10}} },
+      y:{ grid:{color:'#21262d'}, ticks:{color:'#8b949e',font:{size:10}}, title:{display:true,text:'APTC/mo ($)',color:'#484f58',font:{size:10}} },
+    }}
+  });
+
+  // CSR donut
+  const csrYes = allRuns.filter(r => r.metrics?.csr_eligible == 1).length;
+  const csrNo  = allRuns.length - csrYes;
+  destroyChart(chartCSR);
+  chartCSR = new Chart(document.getElementById('chartCSR'), {
+    type: 'doughnut',
+    data: { labels:['CSR Eligible','Not Eligible'],
+      datasets:[{ data:[csrYes,csrNo],
+        backgroundColor:['rgba(63,185,80,.7)','rgba(56,139,253,.3)'],
+        borderColor:['#3fb950','#388bfd'], borderWidth:1 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:true, position:'bottom',
+        labels:{ color:'#8b949e', font:{size:11}, boxWidth:10 } } }
+    }
+  });
+
+  // Utilization donut
+  const utilMap = {};
+  allRuns.forEach(r => {
+    const u = r.params?.utilization || 'unknown';
+    utilMap[u] = (utilMap[u]||0)+1;
+  });
+  const utilColors = { rarely:'rgba(255,166,87,.7)', sometimes:'rgba(56,139,253,.7)',
+    frequently:'rgba(188,140,255,.7)', chronic:'rgba(248,81,73,.7)' };
+  destroyChart(chartUtil);
+  chartUtil = new Chart(document.getElementById('chartUtil'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(utilMap),
+      datasets:[{ data: Object.values(utilMap),
+        backgroundColor: Object.keys(utilMap).map(k => utilColors[k]||'#484f58'),
+        borderWidth:1 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:true, position:'bottom',
+        labels:{ color:'#8b949e', font:{size:11}, boxWidth:10 } } }
+    }
+  });
+}
+
+// ── RUNS TABLE ───────────────────────────────────────────────────────────────
+function renderRunsTable() {
+  const body = document.getElementById('runsTableBody');
+  if (!allRuns.length) {
+    body.innerHTML = '<tr><td colspan="20" class="empty">No runs yet. Submit an analysis first.</td></tr>';
+    return;
+  }
+  const fmtDate = ms => ms ? new Date(ms).toLocaleString('en-US',
+    {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+  const fmtLat = v => v ? parseFloat(v).toFixed(2)+'s' : '—';
+
+  body.innerHTML = allRuns.map(r => {
+    const p = r.params  || {};
+    const m = r.metrics || {};
+    const t = r.tags    || {};
+    const status = r.status || 'FINISHED';
+    const p1  = parseFloat(m.phase1_latency_s||0);
+    const p15 = parseFloat(m.phase15_latency_s||0);
+    const p2  = parseFloat(m.phase2_latency_s||0);
+    const tot = p1+p15+p2;
+    const latBar = `<div class="lat-bar">
+      <div class="lb lb-1"  style="width:${tot?(p1/tot*60).toFixed(0):0}px"></div>
+      <div class="lb lb-15" style="width:${tot?(p15/tot*60).toFixed(0):0}px"></div>
+      <div class="lb lb-2"  style="width:${tot?(p2/tot*60).toFixed(0):0}px"></div>
+      <span class="lat-total">${tot?tot.toFixed(1)+'s':'—'}</span>
+    </div>`;
+    const badgeClass = status === 'FINISHED' ? 'badge-green' : status === 'RUNNING' ? 'badge-blue' : 'badge-red';
+    return `<tr class="clickable ${activeRunId===r.run_id?'selected':''}"
+        onclick="openRunDetail('${r.run_id}')">
+      <td><span class="badge ${badgeClass}">${status}</span></td>
+      <td class="mono dim">${r.run_id.slice(0,8)}</td>
+      <td class="dim">${fmtDate(r.start_time)}</td>
+      <td class="mono">${p.zip_code||'—'}</td>
+      <td>${p.age||'—'}</td>
+      <td class="mono">$${parseInt(p.income||0).toLocaleString()}</td>
+      <td class="dim">${p.utilization||'—'}</td>
+      <td class="mono">${parseFloat(m.fpl_percentage||0).toFixed(1)}%</td>
+      <td class="mono" style="color:var(--green)">$${parseFloat(m.monthly_aptc||0).toFixed(0)}</td>
+      <td>${m.num_plans||'—'}</td>
+      <td>${m.num_hsa_plans||'—'}</td>
+      <td><span class="badge ${m.csr_eligible==1?'badge-green':'badge-red'}">${m.csr_eligible==1?'yes':'no'}</span></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;color:var(--text2)">${t.top_plan_name||'—'}</td>
+      <td class="mono dim">${m.top_plan_ev_score?'$'+parseFloat(m.top_plan_ev_score).toLocaleString():'—'}</td>
+      <td class="mono" style="color:var(--blue2)">${fmtLat(m.phase1_latency_s)}</td>
+      <td class="mono" style="color:var(--purple)">${fmtLat(m.phase15_latency_s)}</td>
+      <td class="mono" style="color:var(--green)">${fmtLat(m.phase2_latency_s)}</td>
+      <td>${latBar}</td>
+      <td class="mono dim">${m.synthesis_prompt_chars?parseInt(m.synthesis_prompt_chars).toLocaleString():'—'}</td>
+      <td class="mono dim">${m.recommendation_chars?parseInt(m.recommendation_chars).toLocaleString():'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── RUN DETAIL ───────────────────────────────────────────────────────────────
+async function openRunDetail(runId) {
+  activeRunId = runId;
+  renderSidebar();
+  renderRunsTable();
+  showSection('detail');
+
+  document.getElementById('detailRunId').textContent = runId;
+  document.getElementById('artifactViewer').textContent = 'Loading...';
+  document.getElementById('artifactTabs').innerHTML = '';
+  document.getElementById('detailParams').innerHTML = '';
+  document.getElementById('detailMetrics').innerHTML = '';
+  document.getElementById('detailTags').innerHTML = '';
+  document.getElementById('detailMetricPills').innerHTML = '';
+
+  try {
+    const res  = await fetch('/api/mlflow/runs/' + runId);
+    const data = await res.json();
+    const p = data.params  || {};
+    const m = data.metrics || {};
+    const t = data.tags    || {};
+
+    // Status badge
+    const badgeClass = data.status === 'FINISHED' ? 'badge-green' :
+                       data.status === 'RUNNING'  ? 'badge-blue' : 'badge-red';
+    document.getElementById('detailStatus').className = 'badge ' + badgeClass;
+    document.getElementById('detailStatus').textContent = data.status;
+
+    // Key metric pills
+    const keyMetrics = [
+      { label:'Monthly APTC', val:'$'+parseFloat(m.monthly_aptc||0).toFixed(0), cls:'c-green' },
+      { label:'FPL %',        val:parseFloat(m.fpl_percentage||0).toFixed(1)+'%', cls:'c-orange' },
+      { label:'Plans Found',  val:m.num_plans||'—', cls:'c-blue' },
+      { label:'EV Score',     val:m.top_plan_ev_score?'$'+parseInt(m.top_plan_ev_score).toLocaleString():'—', cls:'c-purple' },
+      { label:'HSA Plans',    val:m.num_hsa_plans||'0', cls:'c-yellow' },
+      { label:'Risk Flags',   val:m.num_risk_flags||'0', cls:'c-orange' },
+    ];
+    document.getElementById('detailMetricPills').innerHTML = keyMetrics.map(k =>
+      `<div class="metric-pill">
+        <div class="metric-pill-label">${k.label}</div>
+        <div class="metric-pill-val ${k.cls}">${k.val}</div>
+      </div>`
+    ).join('');
+
+    // Params KV
+    document.getElementById('detailParams').innerHTML = Object.entries(p).map(([k,v]) =>
+      `<div class="kv-row"><span class="kv-key">${k}</span>
+        <span class="kv-val">${v}</span></div>`
+    ).join('');
+
+    // All metrics KV
+    const skipMetrics = ['fpl_percentage','monthly_aptc','num_plans','num_hsa_plans',
+      'top_plan_ev_score','num_risk_flags'];
+    document.getElementById('detailMetrics').innerHTML = Object.entries(m)
+      .filter(([k]) => !skipMetrics.includes(k))
+      .map(([k,v]) => {
+        let cls = '';
+        if (k.includes('latency')) cls = k.includes('phase1') ? 'blue' : k.includes('phase15') ? 'purple' : 'green';
+        return `<div class="kv-row"><span class="kv-key">${k}</span>
+          <span class="kv-val ${cls}">${typeof v==='number'?v.toLocaleString():v}</span></div>`;
+      }).join('');
+
+    // Tags KV
+    document.getElementById('detailTags').innerHTML = Object.entries(t).map(([k,v]) =>
+      `<div class="kv-row"><span class="kv-key">${k}</span>
+        <span class="kv-val">${v}</span></div>`
+    ).join('') || '<div class="dim" style="font-size:12px;padding:8px 0">No tags recorded.</div>';
+
+    // Latency pills + mini chart
+    const p1  = parseFloat(m.phase1_latency_s||0);
+    const p15 = parseFloat(m.phase15_latency_s||0);
+    const p2  = parseFloat(m.phase2_latency_s||0);
+    document.getElementById('detailLatPills').innerHTML =
+      `<span class="p1-pill">Data ${p1.toFixed(2)}s</span>
+       <span class="p15-pill">Ranking ${p15.toFixed(2)}s</span>
+       <span class="p2-pill">Gemini ${p2.toFixed(2)}s</span>`;
+
+    destroyChart(chartDetailLat);
+    chartDetailLat = new Chart(document.getElementById('chartDetailLat'), {
+      type: 'bar',
+      data: {
+        labels: ['Data Collection', 'LLM Ranking', 'Gemini Synthesis'],
+        datasets: [{ data:[p1,p15,p2],
+          backgroundColor:['rgba(56,139,253,.7)','rgba(188,140,255,.7)','rgba(63,185,80,.7)'],
+          borderRadius:4 }]
+      },
+      options: { ...CHART_DEFAULTS, indexAxis:'y',
+        scales: {
+          x:{grid:{color:'#21262d'},ticks:{color:'#8b949e',font:{size:10}}},
+          y:{grid:{color:'#21262d'},ticks:{color:'#8b949e',font:{size:10}}}
+        }
+      }
+    });
+
+    // Artifacts
+    const artifacts = data.artifacts || [];
+    if (artifacts.length) {
+      document.getElementById('artifactTabs').innerHTML = artifacts.map((a,i) =>
+        `<button class="artifact-tab ${i===0?'active':''}"
+          onclick="loadArtifact('${runId}','${a}',this)">${a}</button>`
+      ).join('');
+      await loadArtifact(runId, artifacts[0], document.querySelector('.artifact-tab'));
+    } else {
+      document.getElementById('artifactViewer').textContent = 'No artifacts for this run.';
+    }
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('artifactViewer').textContent = 'Error loading run: ' + e.message;
+  }
+}
+
+async function loadArtifact(runId, filename, tabEl) {
+  document.querySelectorAll('.artifact-tab').forEach(t => t.classList.remove('active'));
+  if (tabEl) tabEl.classList.add('active');
+  document.getElementById('artifactViewer').textContent = 'Loading...';
+
+  const cacheKey = runId + '/' + filename;
+  if (artifactCache[cacheKey]) {
+    renderArtifact(filename, artifactCache[cacheKey]);
+    return;
+  }
+  try {
+    const res  = await fetch(`/api/mlflow/runs/${runId}/artifacts/${filename}`);
+    const data = await res.json();
+    artifactCache[cacheKey] = data.content;
+    renderArtifact(filename, data.content);
+  } catch(e) {
+    document.getElementById('artifactViewer').textContent = 'Error: ' + e.message;
+  }
+}
+
+function renderArtifact(filename, content) {
+  const viewer = document.getElementById('artifactViewer');
+  if (filename.endsWith('.json')) {
+    try {
+      viewer.textContent = JSON.stringify(JSON.parse(content), null, 2);
+    } catch(_) { viewer.textContent = content; }
+  } else {
+    viewer.textContent = content;
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+loadAll();
+</script>
+</body>
+</html>

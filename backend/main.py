@@ -401,6 +401,88 @@ async def formulary_seed(issuer_id: str):
     return {"status": "seeding_started", "issuer_id": issuer_id}
 
 
+@app.get("/mlflow-dashboard", response_class=FileResponse)
+async def mlflow_dashboard():
+    path = os.path.join(os.path.dirname(__file__), "mlflow_dashboard.html")
+    return FileResponse(path, media_type="text/html")
+
+
+@app.get("/api/mlflow/runs")
+async def mlflow_runs(limit: int = 50):
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        db_uri = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+        client = MlflowClient(tracking_uri=db_uri)
+        experiment = client.get_experiment_by_name(
+            os.getenv("MLFLOW_EXPERIMENT_NAME", "coverwise-recommendations")
+        )
+        if not experiment:
+            return {"runs": []}
+        runs = client.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            max_results=limit,
+            order_by=["start_time DESC"],
+        )
+        return {
+            "runs": [
+                {
+                    "run_id":     r.info.run_id,
+                    "start_time": r.info.start_time,
+                    "end_time":   r.info.end_time,
+                    "status":     r.info.status,
+                    "params":     dict(r.data.params),
+                    "metrics":    dict(r.data.metrics),
+                    "tags":       {k: v for k, v in r.data.tags.items()
+                                   if not k.startswith("mlflow.")},
+                }
+                for r in runs
+            ]
+        }
+    except Exception as e:
+        return {"runs": [], "error": str(e)}
+
+
+@app.get("/api/mlflow/runs/{run_id}")
+async def mlflow_run_detail(run_id: str):
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        db_uri = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+        client = MlflowClient(tracking_uri=db_uri)
+        r = client.get_run(run_id)
+        artifacts = []
+        try:
+            for a in client.list_artifacts(run_id):
+                artifacts.append(a.path)
+        except Exception:
+            pass
+        return {
+            "run_id":     r.info.run_id,
+            "start_time": r.info.start_time,
+            "end_time":   r.info.end_time,
+            "status":     r.info.status,
+            "params":     dict(r.data.params),
+            "metrics":    dict(r.data.metrics),
+            "tags":       {k: v for k, v in r.data.tags.items() if not k.startswith("mlflow.")},
+            "artifacts":  artifacts,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/mlflow/runs/{run_id}/artifacts/{filename}")
+async def mlflow_artifact(run_id: str, filename: str):
+    import pathlib
+    safe = pathlib.Path(filename).name
+    artifact_path = os.path.join("mlruns", "1", run_id, "artifacts", safe)
+    if not os.path.exists(artifact_path):
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    with open(artifact_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"filename": safe, "content": content}
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}

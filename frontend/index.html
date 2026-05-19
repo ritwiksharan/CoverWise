@@ -458,7 +458,7 @@
       💬 Chat Intake <span style="font-size:11px;color:var(--green);margin-left:4px">Recommended</span>
     </button>
     <button class="mode-tab" id="tabForm" onclick="switchTab('form')">
-      📋 Quick Form
+      Quick Form
     </button>
   </div>
 
@@ -540,6 +540,46 @@
     </div>
   </div>
 
+
+  <!-- ── MLFLOW DASHBOARD ── -->
+  <div id="panelMLflow" style="display:none" class="mlflow-panel">
+    <div class="mlflow-header">
+      <div>
+        <div class="mlflow-title">Run Metrics</div>
+        <div class="mlflow-sub">experiment: coverwise-recommendations</div>
+      </div>
+      <button class="btn-refresh" id="btnRefreshMLflow" onclick="loadMLflowDashboard()">Refresh</button>
+    </div>
+
+    <div class="mlflow-stats" id="mlflowStats">
+      <div class="mstat blue">
+        <div class="mstat-label">Total Runs</div>
+        <div class="mstat-value" id="mstatRuns">—</div>
+      </div>
+      <div class="mstat green">
+        <div class="mstat-label">Avg Monthly APTC</div>
+        <div class="mstat-value" id="mstatAPTC">—<span class="mstat-unit">/mo</span></div>
+      </div>
+      <div class="mstat purple">
+        <div class="mstat-label">Avg Phase 1 Latency</div>
+        <div class="mstat-value" id="mstatP1">—<span class="mstat-unit">s</span></div>
+      </div>
+      <div class="mstat gold">
+        <div class="mstat-label">Avg Gemini Latency</div>
+        <div class="mstat-value" id="mstatP2">—<span class="mstat-unit">s</span></div>
+      </div>
+    </div>
+
+    <div class="mlflow-table-wrap">
+      <div class="mlflow-table-head">
+        <div class="mlflow-table-head-title">Recent Runs</div>
+        <div style="font-size:12px;color:var(--text3);font-family:var(--mono)" id="mlflowRunCount"></div>
+      </div>
+      <div id="mlflowTableBody">
+        <div class="mlflow-loading">Loading runs...</div>
+      </div>
+    </div>
+  </div>
 
   <!-- ── LOADING ── -->
   <div class="loading" id="loading">
@@ -668,6 +708,69 @@
     border-radius:8px; background:var(--bg3); margin-top:10px;
     display:inline-block; }
   .qa-data-toggle:hover { border-color:var(--accent); color:var(--accent2); }
+
+  /* ── MLFLOW DASHBOARD ── */
+  .mlflow-panel { animation:fadeIn .4s ease; }
+  .mlflow-header { display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:24px; }
+  .mlflow-title { font-family:var(--display); font-size:22px; font-weight:700; }
+  .mlflow-sub { font-size:12px; color:var(--text3); font-family:var(--mono);
+    margin-top:2px; }
+  .btn-refresh { background:rgba(37,99,235,.12); color:var(--accent2);
+    border:1px solid rgba(91,160,245,.3); border-radius:var(--radius);
+    padding:8px 16px; font-size:13px; font-family:var(--body); font-weight:500;
+    cursor:pointer; transition:background .2s; }
+  .btn-refresh:hover { background:rgba(37,99,235,.22); }
+  .btn-refresh:disabled { opacity:.5; cursor:not-allowed; }
+
+  .mlflow-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:16px;
+    margin-bottom:28px; }
+  .mstat { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:20px; }
+  .mstat-label { font-size:11px; font-family:var(--mono); color:var(--text3);
+    text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+  .mstat-value { font-family:var(--display); font-size:26px; font-weight:700; }
+  .mstat-unit { font-size:12px; color:var(--text3); margin-left:4px; }
+  .mstat.blue .mstat-value  { color:var(--accent2); }
+  .mstat.green .mstat-value { color:var(--green); }
+  .mstat.purple .mstat-value{ color:#a78bfa; }
+  .mstat.gold .mstat-value  { color:var(--gold); }
+
+  .mlflow-table-wrap { background:var(--bg2); border:1px solid var(--border);
+    border-radius:var(--radius-lg); overflow:hidden; }
+  .mlflow-table-head { padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; }
+  .mlflow-table-head-title { font-family:var(--display); font-size:15px; font-weight:600; }
+  .mlflow-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .mlflow-table th { padding:10px 14px; font-size:11px; font-family:var(--mono);
+    color:var(--text3); text-transform:uppercase; letter-spacing:.4px;
+    text-align:left; border-bottom:1px solid var(--border); background:var(--bg3); }
+  .mlflow-table td { padding:12px 14px; border-bottom:1px solid var(--border);
+    vertical-align:middle; }
+  .mlflow-table tr:last-child td { border-bottom:none; }
+  .mlflow-table tr:hover td { background:rgba(255,255,255,.02); }
+  .run-status { display:inline-block; font-size:10px; font-family:var(--mono);
+    padding:2px 8px; border-radius:10px; }
+  .run-status.FINISHED { background:rgba(16,185,129,.12); color:var(--green);
+    border:1px solid rgba(16,185,129,.3); }
+  .run-status.RUNNING  { background:rgba(37,99,235,.12);  color:var(--accent2);
+    border:1px solid rgba(91,160,245,.3); }
+  .run-status.FAILED   { background:rgba(239,68,68,.1);   color:var(--red);
+    border:1px solid rgba(239,68,68,.3); }
+  .latency-bar { display:flex; gap:3px; align-items:center; }
+  .lb-seg { height:6px; border-radius:3px; }
+  .lb-p1  { background:var(--accent2); }
+  .lb-p15 { background:#a78bfa; }
+  .lb-p2  { background:var(--green); }
+  .mlflow-empty { text-align:center; padding:60px 20px; color:var(--text3);
+    font-size:14px; }
+  .mlflow-empty .empty-icon { font-size:40px; margin-bottom:12px; }
+  .mlflow-loading { text-align:center; padding:60px 20px; color:var(--text3); }
+
+  @media(max-width:768px) {
+    .mlflow-stats { grid-template-columns:1fr 1fr; }
+    .mlflow-table th:nth-child(n+5), .mlflow-table td:nth-child(n+5) { display:none; }
+  }
 </style>
 
 <script>
@@ -838,10 +941,13 @@ const AGENT_MESSAGES = [
 
 // ── TAB SWITCHER ──────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.getElementById('panelChat').style.display = tab === 'chat' ? '' : 'none';
-  document.getElementById('panelForm').style.display = tab === 'form' ? '' : 'none';
-  document.getElementById('tabChat').classList.toggle('active', tab === 'chat');
-  document.getElementById('tabForm').classList.toggle('active', tab === 'form');
+  document.getElementById('panelChat').style.display   = tab === 'chat'   ? '' : 'none';
+  document.getElementById('panelForm').style.display   = tab === 'form'   ? '' : 'none';
+  document.getElementById('panelMLflow').style.display = tab === 'mlflow' ? '' : 'none';
+  document.getElementById('tabChat').classList.toggle('active',   tab === 'chat');
+  document.getElementById('tabForm').classList.toggle('active',   tab === 'form');
+  document.getElementById('tabMLflow').classList.toggle('active', tab === 'mlflow');
+  if (tab === 'mlflow') loadMLflowDashboard();
 }
 
 // ── ADK INTAKE ────────────────────────────────────────────────────────────────
@@ -1884,6 +1990,104 @@ function getMockResults(profile) {
     cache_stats:{hits:0,misses:0,total_calls:0,hit_rate_pct:0,cached_entries:0},
     memory_used:false,
   };
+}
+
+// ── MLFLOW DASHBOARD ──────────────────────────────────────────────────────────
+async function loadMLflowDashboard() {
+  const btn = document.getElementById('btnRefreshMLflow');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  document.getElementById('mlflowTableBody').innerHTML =
+    '<div class="mlflow-loading">Loading runs...</div>';
+
+  try {
+    const res  = await fetch('/api/mlflow/runs?limit=50');
+    const data = await res.json();
+    const runs = data.runs || [];
+
+    // ── Summary stats ──────────────────────────────────────────────────────
+    document.getElementById('mstatRuns').textContent = runs.length || '0';
+
+    const aptcVals = runs.map(r => parseFloat(r.metrics?.monthly_aptc || 0)).filter(v => v > 0);
+    document.getElementById('mstatAPTC').innerHTML =
+      (aptcVals.length ? '$' + (aptcVals.reduce((a,b)=>a+b,0)/aptcVals.length).toFixed(0) : '—') +
+      '<span class="mstat-unit">/mo</span>';
+
+    const p1Vals = runs.map(r => parseFloat(r.metrics?.phase1_latency_s || 0)).filter(v => v > 0);
+    document.getElementById('mstatP1').innerHTML =
+      (p1Vals.length ? (p1Vals.reduce((a,b)=>a+b,0)/p1Vals.length).toFixed(1) : '—') +
+      '<span class="mstat-unit">s</span>';
+
+    const p2Vals = runs.map(r => parseFloat(r.metrics?.phase2_latency_s || 0)).filter(v => v > 0);
+    document.getElementById('mstatP2').innerHTML =
+      (p2Vals.length ? (p2Vals.reduce((a,b)=>a+b,0)/p2Vals.length).toFixed(1) : '—') +
+      '<span class="mstat-unit">s</span>';
+
+    document.getElementById('mlflowRunCount').textContent = runs.length + ' run' + (runs.length !== 1 ? 's' : '');
+
+    // ── Table ──────────────────────────────────────────────────────────────
+    if (!runs.length) {
+      document.getElementById('mlflowTableBody').innerHTML =
+        '<div class="mlflow-empty"><div class="empty-icon" style="font-size:36px;margin-bottom:10px">—</div>' +
+        'No runs yet. Submit an analysis to see results here.</div>';
+      return;
+    }
+
+    const fmtDate = ms => ms ? new Date(ms).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+    const fmtLatBar = r => {
+      const p1  = parseFloat(r.metrics?.phase1_latency_s  || 0);
+      const p15 = parseFloat(r.metrics?.phase15_latency_s || 0);
+      const p2  = parseFloat(r.metrics?.phase2_latency_s  || 0);
+      const tot = p1 + p15 + p2 || 1;
+      return `<div class="latency-bar" title="P1: ${p1}s | Ranking: ${p15}s | Gemini: ${p2}s">
+        <div class="lb-seg lb-p1"  style="width:${(p1/tot*80).toFixed(0)}px"></div>
+        <div class="lb-seg lb-p15" style="width:${(p15/tot*80).toFixed(0)}px"></div>
+        <div class="lb-seg lb-p2"  style="width:${(p2/tot*80).toFixed(0)}px"></div>
+        <span style="font-size:11px;color:var(--text3);margin-left:6px;font-family:var(--mono)">${(p1+p15+p2).toFixed(1)}s</span>
+      </div>`;
+    };
+
+    const rows = runs.map(r => {
+      const p  = r.params  || {};
+      const m  = r.metrics || {};
+      const t  = r.tags    || {};
+      const fpl   = parseFloat(m.fpl_percentage || 0).toFixed(1);
+      const aptc  = parseFloat(m.monthly_aptc   || 0).toFixed(0);
+      const plans = m.num_plans || '—';
+      const top   = t.top_plan_name || '—';
+      const status = r.status || 'FINISHED';
+      return `<tr>
+        <td style="color:var(--text3);font-family:var(--mono);font-size:11px">${fmtDate(r.start_time)}</td>
+        <td style="font-family:var(--mono)">${p.zip_code || '—'}</td>
+        <td>${p.age || '—'}</td>
+        <td style="font-family:var(--mono)">$${parseInt(p.income||0).toLocaleString()}</td>
+        <td style="font-family:var(--mono)">${fpl}%</td>
+        <td style="color:var(--green);font-family:var(--mono)">$${aptc}/mo</td>
+        <td>${plans}</td>
+        <td style="color:var(--text2);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${top}</td>
+        <td>${fmtLatBar(r)}</td>
+        <td><span class="run-status ${status}">${status}</span></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('mlflowTableBody').innerHTML = `
+      <table class="mlflow-table">
+        <thead><tr>
+          <th>Time</th><th>ZIP</th><th>Age</th><th>Income</th>
+          <th>FPL</th><th>APTC</th><th>Plans</th><th>Top Plan</th>
+          <th>Latency</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+
+  } catch(e) {
+    document.getElementById('mlflowTableBody').innerHTML =
+      '<div class="mlflow-empty">Could not load runs — is the backend running?<br>' +
+      '<span style="font-size:12px;font-family:var(--mono);color:var(--text3)">' + e.message + '</span></div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+  }
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
