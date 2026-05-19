@@ -1,223 +1,154 @@
-# MLflow Integration — CoverWise
+# MLflow Tracking — CoverWise
 
-## Why MLflow
+## What this branch adds
 
-CoverWise runs a three-phase LLM pipeline for every user analysis:
-
-- **Phase 1** — parallel CMS government API calls (location, subsidy, plans, drugs, doctors)
-- **Phase 1.5** — Gemini in JSON mode ranks plans by expected value across three healthcare scenarios
-- **Phase 2** — Gemini synthesizes a full four-pillar recommendation from structured data
-
-Without observability, this pipeline is a black box. When a recommendation looks wrong, there is no way to answer:
-
-- What inputs did that user provide?
-- What exact prompt did Gemini receive?
-- Which phase was slow — the CMS API calls or Gemini?
-- Did changing the system prompt actually improve recommendations?
-
-MLflow gives every analysis run a permanent, queryable record so these questions can be answered without re-running anything.
+MLflow experiment tracking across the three-phase analysis pipeline in `ADKOrchestrator.analyze()`. Every call to `/api/analyze` is logged as one run. A standalone dashboard is served at `/mlflow-dashboard` with no separate MLflow server required.
 
 ---
 
-## What is tracked
+## Why MLflow specifically
 
-Every call to `/api/analyze` is logged as one MLflow **run** with three phases.
+CoverWise already uses Google ADK, which has built-in cloud tracing via Cloud Trace and Cloud Logging. MLflow was added on top of that for three reasons ADK does not cover:
 
-### Input params (logged once per run)
-Captured from the user profile before the pipeline starts:
+1. **Works locally without GCP.** Cloud Trace requires a live GCP project. MLflow writes to a local SQLite file (`mlflow.db`) — useful during development and for anyone running the project without cloud credentials.
 
-| Param | Description |
-|---|---|
-| `zip_code` | User's ZIP code |
-| `age` | User's age |
-| `income` | Annual household income |
-| `household_size` | Number of people in the household |
-| `utilization` | Healthcare usage level (rarely / sometimes / frequently / chronic) |
-| `tobacco_use` | Tobacco use flag |
-| `is_premium` | Whether the user is on the premium tier |
-| `num_drugs` | Number of medications entered |
-| `num_doctors` | Number of doctors entered |
+2. **Cross-run comparison.** ADK tracing tells you what happened inside a single agent turn. MLflow lets you compare `phase1_latency_s`, `monthly_aptc`, and `top_plan_ev_score` across dozens of runs to spot regressions after a prompt change or a CMS API change.
 
-### Phase 1 metrics
-Logged after the parallel CMS API wave completes:
-
-| Metric | Description |
-|---|---|
-| `phase1_latency_s` | Time taken for all CMS API calls (seconds) |
-| `fpl_percentage` | Federal poverty level as a percentage of the user's income |
-| `monthly_aptc` | Monthly Advance Premium Tax Credit from CMS |
-| `annual_aptc` | Annual APTC (monthly x 12) |
-| `num_plans` | Number of plans returned by CMS Marketplace API |
-| `num_hsa_plans` | Number of HSA-eligible plans in the results |
-| `num_risk_flags` | Number of risk flags raised (subsidy cliff, OOP exposure, etc.) |
-| `csr_eligible` | 1 if the user qualifies for Cost Sharing Reduction, 0 otherwise |
-
-**Tags:** `state`, `csr_variant` (94 / 87 / 73 / none), `is_medicaid`
-
-**Artifact:** `plans_ranked.json` — full ranked plan list with all three scenario costs (healthy year, clinical year, worst case).
-
-### Phase 1.5 metrics
-Logged after the LLM ranking agent completes:
-
-| Metric | Description |
-|---|---|
-| `phase15_latency_s` | Time taken for Gemini JSON-mode ranking call (seconds) |
-| `phase15_plans_ranked` | Number of plans ranked by the LLM |
-| `top_plan_ev_score` | Expected value score of the winning plan (lower is better) |
-| `ranking_red_flags` | Number of red flags raised by the ranking agent |
-
-**Tags:** `top_plan_name`, `csr_override`, `phase15_status`
-
-**Artifact:** `llm_ranking.json` — full ranking output including EV scores, scenario breakdowns, CSR analysis, and red flags.
-
-### Phase 2 metrics
-Logged after the Gemini synthesis call completes:
-
-| Metric | Description |
-|---|---|
-| `phase2_latency_s` | Time taken for the final Gemini synthesis call (seconds) |
-| `recommendation_chars` | Character count of the generated recommendation |
-| `synthesis_prompt_chars` | Character count of the prompt sent to Gemini |
-
-**Artifacts:** `recommendation.md` (full recommendation text), `synthesis_prompt.txt` (exact prompt sent to Gemini).
-
-### Cache metrics
-`cache_hits`, `cache_misses`, and any other values returned by `cache_manager.get_cache_stats()` are logged as `cache_*` metrics.
+3. **Artifact storage per run.** The exact prompt sent to Gemini (`synthesis_prompt.txt`) and the full recommendation text (`recommendation.md`) are saved as files attached to each run. If a recommendation looks wrong, you can open that specific run and read exactly what Gemini received — without re-running the request.
 
 ---
 
-## Key concepts tracked
+## What is logged
 
-### APTC vs CSR
+Every `/api/analyze` request creates one MLflow run. The run captures inputs, outputs, and timing across all three phases.
 
-These are two separate federal benefits that often appear together in runs:
+### Params — user profile inputs
 
-**APTC (Advance Premium Tax Credit)** reduces the monthly premium. It is paid directly to the insurer each month before the user uses any healthcare. The amount depends on income relative to the benchmark Silver plan cost in the user's area.
+Logged once at the start of the run, before any API calls:
 
-**CSR (Cost Sharing Reduction)** reduces out-of-pocket costs — deductibles, copays, and the out-of-pocket maximum. It only applies to Silver plans and only for users between 100–250% FPL:
-
-| CSR Variant | FPL Range | Effective Deductible |
-|---|---|---|
-| CSR-94 | 100–150% FPL | ~$0–500 (Platinum-level) |
-| CSR-87 | 150–200% FPL | ~$500–1,500 (Gold-level) |
-| CSR-73 | 200–250% FPL | ~$1,500–3,000 (enhanced Silver) |
-
-Users with both high APTC and CSR eligibility are getting the maximum benefit from the ACA subsidy system — two simultaneous reductions that Bronze or Gold plans cannot provide.
-
----
-
-## Architecture
-
-### `backend/mlflow_tracker.py`
-
-The tracking module. Uses `MlflowClient` directly rather than MLflow's fluent API (`mlflow.log_metric`, `mlflow.start_run`). This is intentional: the fluent API stores the active run in thread-local state, which is shared across all concurrent async requests in FastAPI. Direct client calls with explicit run IDs keep each request's tracking fully isolated.
-
-```python
-# Each request creates its own run with an explicit run_id
-run = client.create_run(experiment_id=_experiment_id)
-client.log_metric(run.info.run_id, "fpl_percentage", 278.9)
-client.set_terminated(run.info.run_id, "FINISHED")
+```
+zip_code, age, income, household_size, utilization,
+tobacco_use, is_premium, num_drugs, num_doctors
 ```
 
-### `backend/agents/adk_orchestrator.py`
+These are the raw inputs the user submitted. They let you filter runs by profile type (e.g. all users with chronic utilization and 3+ drugs).
 
-The three-phase pipeline is wrapped in a `mlflow_tracker.analysis_run` context manager inside `ADKOrchestrator.analyze()`. Each phase is timed and logged immediately after it completes.
+### Phase 1 — CMS API data collection
 
-### `backend/mlflow_dashboard.html`
+`_collect_analysis_data()` runs three waves of parallel CMS API calls: location lookup, subsidy estimate + plan search, then drug coverage + doctor verification + risk flags. After all three waves finish:
 
-A standalone monitoring dashboard served at `/mlflow-dashboard`. Separate from the main frontend (`/`). Reads data from the FastAPI proxy endpoints rather than connecting to MLflow directly, so no separate MLflow UI server is required.
-
-### `backend/main.py`
-
-Three endpoints added:
-
-| Endpoint | Description |
+| Metric | What it tells you |
 |---|---|
-| `GET /mlflow-dashboard` | Serves the standalone dashboard HTML |
-| `GET /api/mlflow/runs` | Returns all runs with params, metrics, and tags |
-| `GET /api/mlflow/runs/{run_id}` | Returns full detail for one run including artifact list |
-| `GET /api/mlflow/runs/{run_id}/artifacts/{filename}` | Returns artifact file content |
+| `phase1_latency_s` | How long the CMS government APIs took. Spikes here mean CMS is slow, not Gemini. |
+| `fpl_percentage` | The user's income as a % of federal poverty level. Drives subsidy eligibility. |
+| `monthly_aptc` | The monthly premium subsidy CMS calculated for this user. |
+| `annual_aptc` | `monthly_aptc * 12`. |
+| `num_plans` | How many marketplace plans CMS returned for this ZIP/age/income. |
+| `num_hsa_plans` | Plans that are HSA-eligible — relevant to the tax savings flag in risk analysis. |
+| `num_risk_flags` | Flags raised by `risk_gaps_agent`: subsidy cliff, OOP exposure, HSA opportunity, etc. |
+| `csr_eligible` | 1 if FPL is between 100–250%, else 0. Determines whether Silver plan CSR applies. |
+
+Tags logged: `state`, `csr_variant` (94 / 87 / 73 / none), `is_medicaid`.
+
+Artifact saved: `plans_ranked.json` — every plan returned by CMS with its three scenario costs (healthy year = premiums only, clinical year = premiums + drug costs, worst case = premiums + full OOP max).
+
+### Phase 1.5 — LLM ranking agent
+
+`_rank_plans_with_llm()` calls Gemini in JSON mode with utilization-adjusted EV weights to rank all plans. After it returns:
+
+| Metric | What it tells you |
+|---|---|
+| `phase15_latency_s` | How long Gemini took to rank plans in JSON mode. |
+| `phase15_plans_ranked` | How many plans the LLM ranked. Should match `num_plans`. |
+| `top_plan_ev_score` | The expected value score of the winning plan in dollars (lower = cheaper). |
+| `ranking_red_flags` | Specific warnings raised by the ranking agent (e.g. prior auth required on top plan). |
+
+Tags logged: `top_plan_name`, `csr_override` (Silver plan ID if CSR makes it clearly superior), `phase15_status`.
+
+Artifact saved: `llm_ranking.json` — full JSON output from the ranking agent including EV scores for every plan across all three scenarios, CSR analysis, and red flags with dollar amounts.
+
+### Phase 2 — Gemini synthesis
+
+`_synthesize_with_gemini()` calls Gemini with the full structured data document and `ORCHESTRATOR_INSTRUCTION` as the system prompt. After it returns:
+
+| Metric | What it tells you |
+|---|---|
+| `phase2_latency_s` | How long the final Gemini synthesis call took. |
+| `synthesis_prompt_chars` | Size of the prompt sent to Gemini. Grows with plan count and drug/doctor detail. |
+| `recommendation_chars` | Size of the generated recommendation. |
+
+Artifacts saved: `recommendation.md` (the full text shown to the user), `synthesis_prompt.txt` (the exact prompt Gemini received, including all CMS data tables).
+
+### Cache metrics
+
+Whatever `get_cache_stats()` returns is logged as `cache_*` metrics (e.g. `cache_hits`, `cache_misses`). Lets you track CMS API cache effectiveness over time.
+
+---
+
+## Implementation detail — why MlflowClient and not the fluent API
+
+The standard MLflow fluent API (`mlflow.start_run()`, `mlflow.log_metric()`) stores the active run in thread-local state. In a FastAPI async server, all concurrent requests run in the same thread, so concurrent `/api/analyze` calls would share the same "active run" and overwrite each other's metrics.
+
+`mlflow_tracker.py` uses `MlflowClient` directly with explicit run IDs instead:
+
+```python
+# In analysis_run.__enter__():
+run = client.create_run(experiment_id=_experiment_id)
+self._run_id = run.info.run_id  # stored on the instance, not globally
+
+# In log_phase1():
+client.log_metric(run.run_id, "phase1_latency_s", 5.2)
+```
+
+Each request's `analysis_run` instance holds its own `run_id`. No shared state. Safe for concurrent async use.
+
+---
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `backend/mlflow_tracker.py` | New — tracking module with `analysis_run` context manager and per-phase log functions |
+| `backend/mlflow_dashboard.html` | New — standalone dashboard with overview stats, charts, runs table, and artifact viewer |
+| `backend/agents/adk_orchestrator.py` | Modified — `ADKOrchestrator.analyze()` wrapped with `mlflow_tracker.analysis_run` |
+| `backend/main.py` | Modified — added `/mlflow-dashboard`, `/api/mlflow/runs`, `/api/mlflow/runs/{id}`, `/api/mlflow/runs/{id}/artifacts/{file}` |
+| `pyproject.toml` | Modified — added `mlflow>=2.14.0` dependency |
 
 ---
 
 ## Setup
 
-### Install
-
 ```bash
 pip install "mlflow>=2.14.0"
 ```
 
-Or install all project dependencies:
+Optional `.env` overrides:
 
-```bash
-pip install -e ".[dev]"
+```
+MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+MLFLOW_EXPERIMENT_NAME=coverwise-recommendations
 ```
 
-### Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `MLFLOW_TRACKING_URI` | `sqlite:///mlflow.db` | Where MLflow stores run data |
-| `MLFLOW_EXPERIMENT_NAME` | `coverwise-recommendations` | Experiment name in MLflow |
-
-Add these to your `.env` file if you want to override the defaults.
-
-### Running
-
-Start the backend as normal. MLflow tracking is automatic — every `/api/analyze` request is logged.
+Run the backend normally. Tracking is automatic on every `/api/analyze` call:
 
 ```bash
 cd backend
 uvicorn main:app --reload --port 8080
 ```
 
-Then open the dashboard:
+Dashboard: `http://localhost:8080/mlflow-dashboard`
 
-```
-http://localhost:8080/mlflow-dashboard
-```
-
-No separate MLflow server needed. The dashboard reads directly from `mlflow.db` via the FastAPI backend.
-
-### Data location
-
-```
-backend/
-├── mlflow.db                      # SQLite database — params, metrics, tags, run metadata
-└── mlruns/
-    └── 1/
-        └── <run_id>/
-            └── artifacts/
-                ├── recommendation.md       # Full Gemini recommendation
-                ├── synthesis_prompt.txt    # Exact prompt sent to Gemini
-                ├── plans_ranked.json       # All plans with scenario costs
-                └── llm_ranking.json        # EV scores and red flags
-```
+Data is stored in `backend/mlflow.db` (metrics/params/tags) and `backend/mlruns/` (artifact files).
 
 ---
 
-## Dashboard
+## Using the data
 
-The dashboard at `/mlflow-dashboard` has three views:
-
-**Overview** — summary stat cards (total runs, avg APTC, avg FPL%, avg total latency, avg plans found) and four charts (stacked latency per run, APTC trend, FPL% distribution, plans found).
-
-**All Runs** — full table with every logged value: status, run ID, time, ZIP, age, income, utilization, FPL%, APTC, plans found, HSA plans, CSR eligibility, top plan name, EV score, per-phase latency breakdown, prompt size, recommendation size.
-
-**Charts** — stacked latency breakdown, income vs APTC scatter, CSR eligibility donut, utilization mix donut.
-
-**Run detail** — click any run to see full params, all metrics with color coding, all tags, a horizontal latency bar chart per phase, and an artifact viewer for all four artifact files.
-
----
-
-## What you can do with this data
-
-| Question | How to answer it |
+| If you want to... | Look at... |
 |---|---|
-| Why did a user get a bad recommendation? | Open the run, read `synthesis_prompt.txt` to see exactly what Gemini received |
-| Which ZIP codes have the slowest CMS API response? | Filter All Runs by `state` tag, sort by `phase1_latency_s` |
-| Did editing the system prompt improve recommendations? | Compare `recommendation.md` artifacts across runs before and after the change |
-| What is the average subsidy for users we serve? | Aggregate `monthly_aptc` across all runs in the Overview chart |
-| Where is pipeline latency coming from? | The latency bar in All Runs shows the Phase 1 / Ranking / Gemini split per run |
-| Are CSR-eligible users getting Silver recommendations? | Filter by `csr_eligible=1`, check `top_plan_name` tag for Silver plans |
+| Debug a bad recommendation | Open the run, read `synthesis_prompt.txt` — that is exactly what Gemini saw |
+| Find which ZIP codes hit slow CMS APIs | Sort All Runs by `phase1_latency_s` descending |
+| Verify a prompt change improved output quality | Compare `recommendation.md` artifacts across runs before and after the edit |
+| See where total latency is coming from | The latency bar in All Runs splits Phase 1 / Ranking / Gemini per run |
+| Check whether CSR-eligible users got Silver plans | Filter `csr_eligible=1`, read `top_plan_name` tag |
+| Track average subsidy across all users | `monthly_aptc` in the Overview chart |
